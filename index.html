@@ -2538,9 +2538,9 @@ function renderQBRoomSimple() {
                   style="width:100%;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;">
               </td>
               <td style="padding:8px 12px;text-align:right;">
-                <input type="number" value="${room.simpleTotal||0}" min="0" step="0.01" placeholder="0.00"
+                <input type="number" value="${(room.simpleTotal||0).toFixed(2)}" min="0" step="0.01" placeholder="0.00"
                   oninput="window._activeQuoteRooms[${ri}].simpleTotal=parseFloat(this.value)||0;recalcQuote();"
-                  style="width:100px;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;text-align:right;">
+                  style="width:120px;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;text-align:right;">
               </td>
               <td style="padding:8px 12px;">
                 <input type="text" value="${room.notes||''}" placeholder="Optional notes"
@@ -2551,10 +2551,15 @@ function renderQBRoomSimple() {
                 <button class="del-btn" onclick="window._activeQuoteRooms.splice(${ri},1);renderQBRooms();">🗑</button>
               </td>
             </tr>`).join('')}
+          <tr style="background:var(--bg-secondary);font-weight:700;">
+            <td style="padding:8px 12px;">Total</td>
+            <td style="padding:8px 12px;text-align:right;" id="byroom-total">£0.00</td>
+            <td colspan="2"></td>
+          </tr>
         </tbody>
       </table>
     </div>
-    <button class="btn btn-sm btn-secondary" onclick="window._activeQuoteRooms.push({name:'New Area',simpleTotal:0,notes:'',lines:[]});renderQBRooms();">+ Add Room / Area</button>`;
+    <button class="btn btn-sm btn-secondary" onclick="window._activeQuoteRooms.push({name:'New Area',simpleTotal:0,notes:'',lines:[]});renderQBRooms();">+ Add Room / Area</button>\`;
   recalcQuote();
 }
 
@@ -2635,6 +2640,7 @@ function recalcQuote() {
   const bonus = parseFloat(document.getElementById('qb-bonus')?.value)||0;
   const total = subtotal+pmFee+bonus;
   if(document.getElementById('qb-subtotal')) document.getElementById('qb-subtotal').textContent = '£'+subtotal.toFixed(2);
+  if(document.getElementById('byroom-total')) document.getElementById('byroom-total').textContent = '£'+subtotal.toFixed(2);
   if(document.getElementById('qb-total')) document.getElementById('qb-total').textContent = '£'+total.toFixed(2);
 }
 
