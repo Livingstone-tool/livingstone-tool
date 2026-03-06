@@ -1579,14 +1579,15 @@ async function loadFromSupabase() {
 
     db.quotes = quotes.map(q => ({
       id: q.id,
+      number: q.job_ref ? ('LP-0'+q.job_ref.replace('LP','')) : ('Q-'+q.id?.slice(0,4)),
       jobRef: q.job_ref || '',
-      clientName: q.client_name || '',
+      client: q.client_name || '',
       date: q.quote_date || '',
       validDays: q.valid_days || 30,
-      labourMargin: q.labour_margin || 20,
+      labourMargin: q.labour_margin || 10,
       matMargin: q.mat_margin || 10,
-      desc: q.description || '',
-      rooms: q.rooms || [],
+      description: q.description || '',
+      rooms: typeof q.rooms === 'string' ? JSON.parse(q.rooms || '[]') : (q.rooms || []),
       total: parseFloat(q.total) || 0,
       status: q.status || 'Draft'
     }));
@@ -2638,32 +2639,60 @@ function recalcQuote() {
 }
 
 function saveQuote() {
+  const mode = window._quoteMode || 'detailed';
+  const rooms = JSON.parse(JSON.stringify(window._activeQuoteRooms||[]));
+  const pmFee = parseFloat(document.getElementById('qb-pm-fee').value)||0;
+  const bonus = parseFloat(document.getElementById('qb-bonus').value)||0;
+
+  // Calculate subtotal based on mode
+  let subtotal = 0;
+  let saveRooms = rooms;
+  if(mode === 'byroom') {
+    subtotal = rooms.reduce((s,r) => s+(r.simpleTotal||0), 0);
+  } else if(mode === 'bytype') {
+    const d = window._byTypeData||{};
+    subtotal = (d.labour||0)+(d.materials||0)+(d.other||0);
+    // Store bytype data as synthetic rooms for display
+    saveRooms = [
+      {name:'Labour', simpleTotal: d.labour||0, notes: d.labourNotes||'', lines:[]},
+      {name:'Materials', simpleTotal: d.materials||0, notes: d.materialsNotes||'', lines:[]},
+      {name:'Other', simpleTotal: d.other||0, notes: d.otherNotes||'', lines:[]}
+    ];
+  } else {
+    subtotal = rooms.reduce((s,r) => s+r.lines.reduce((ss,l) => ss+(l.withMargin||0),0), 0);
+  }
+
   const q = {
     number: document.getElementById('qb-number').value,
-    jobRef: '',
+    jobRef: document.getElementById('qb-job-ref')?.value || '',
     client: document.getElementById('qb-client').value,
     date: new Date().toISOString().split('T')[0],
-    rooms: JSON.parse(JSON.stringify(window._activeQuoteRooms||[])),
-    pmFee: parseFloat(document.getElementById('qb-pm-fee').value)||0,
-    bonus: parseFloat(document.getElementById('qb-bonus').value)||0,
-    subtotal: 0,
-    total: 0,
-    margin: 10
+    rooms: saveRooms,
+    pmFee, bonus, subtotal,
+    total: subtotal + pmFee + bonus,
+    margin: 10,
+    mode: mode
   };
-  const rooms = q.rooms;
-  q.subtotal = rooms.reduce((s,r)=>s+r.lines.reduce((ss,l)=>ss+(l.withMargin||0),0),0);
-  q.total = q.subtotal + q.pmFee + q.bonus;
+
   const existIdx = db.quotes.findIndex(x=>x.number===q.number);
-  if(existIdx>=0) db.quotes[existIdx]=q;
+  if(existIdx>=0) { q.id = db.quotes[existIdx].id; db.quotes[existIdx]=q; }
   else db.quotes.push(q);
   saveData();
+
   // Sync to Supabase
-  const qData = { job_ref: q.jobRef||'', client_name: q.client||'',
-    quote_date: q.date||null, rooms: q.rooms||[], total: q.total||0, status: 'Draft' };
+  const qData = {
+    job_ref: q.jobRef||'',
+    client_name: q.client||'',
+    quote_date: q.date||null,
+    rooms: JSON.stringify(saveRooms),
+    total: q.total||0,
+    status: 'Draft',
+    description: document.getElementById('qb-desc')?.value||''
+  };
   if (q.id) {
     supa.patch('quotes', q.id, qData).catch(e => console.warn('Quote sync:', e));
   } else {
-    supa.post('quotes', qData).then(res => { if(res&&res[0]) q.id=res[0].id; }).catch(e => console.warn('Quote insert:', e));
+    supa.post('quotes', qData).then(res => { if(res&&res[0]) { q.id=res[0].id; db.quotes[db.quotes.findIndex(x=>x.number===q.number)].id=res[0].id; } }).catch(e => console.warn('Quote insert:', e));
   }
   renderQuotesTable();
   alert('Quote saved: '+q.number+' — £'+q.total.toFixed(2));
