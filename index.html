@@ -1445,7 +1445,7 @@ const supa = {
 };
 
 // ── LOCAL DB (in-memory, loaded from Supabase on startup) ────────────────
-let db = { jobs:[], tasks:[], paymentGates:[], quotes:[], weeklyEntries:[], products:[], subcontractors:[] };
+let db = { jobs:[], tasks:[], paymentGates:[], quotes:[], weeklyEntries:[], products:[], subcontractors:[], subs:[], actionsQ1:[], actionsLT:[], wishlist:[], rooms:[] };
 
 // Legacy localStorage kept for backwards compat with export/import
 const STORE_KEY = 'lp_data_v1';
@@ -1584,9 +1584,14 @@ async function loadFromSupabase() {
       notes: w.notes || ''
     }));
 
-    // Keep products/subs from SEED (not in Supabase yet)
+    // Keep non-Supabase data from SEED
     db.products = SEED.products || [];
     db.subcontractors = SEED.subcontractors || [];
+    db.subs = SEED.subs || [];
+    db.actionsQ1 = SEED.actionsQ1 || [];
+    db.actionsLT = SEED.actionsLT || [];
+    db.wishlist = SEED.wishlist || [];
+    db.rooms = SEED.rooms || [];
 
     saveData(); // backup to localStorage
     return true;
