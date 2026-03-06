@@ -830,6 +830,16 @@
             <textarea id="qb-desc" rows="3"></textarea>
           </div>
 
+          <!-- Quote Mode Selector -->
+          <div style="margin:16px 0 10px;display:flex;align-items:center;gap:12px;">
+            <label style="font-weight:600;font-size:13px;color:var(--text-muted);">Quote Style:</label>
+            <div style="display:flex;gap:6px;">
+              <button id="qmode-detailed" class="btn btn-sm btn-primary" onclick="setQuoteMode('detailed')">Detailed (by line)</button>
+              <button id="qmode-byroom" class="btn btn-sm btn-secondary" onclick="setQuoteMode('byroom')">By Room</button>
+              <button id="qmode-bytype" class="btn btn-sm btn-secondary" onclick="setQuoteMode('bytype')">By Cost Type</button>
+            </div>
+          </div>
+
           <!-- Rooms / Sections -->
           <div id="qb-rooms-container"></div>
 
@@ -2353,7 +2363,9 @@ function newQuoteModal() {
   document.getElementById('qb-title').textContent = 'New Quote';
   document.getElementById('qb-subtitle').textContent = '';
   window._activeQuoteRooms = [];
-  renderQBRooms();
+  window._quoteMode = 'detailed';
+  window._byTypeData = {labour:0,materials:0,other:0,labourNotes:'',materialsNotes:'',otherNotes:''};
+  setQuoteMode('detailed');
   document.getElementById('quote-builder-area').style.display='block';
   document.getElementById('active-quote-card').scrollIntoView({behavior:'smooth'});
 }
@@ -2371,6 +2383,11 @@ function addRoom() {
 }
 
 function renderQBRooms() {
+  const mode = window._quoteMode || 'detailed';
+  if(mode === 'byroom') return renderQBRoomSimple();
+  if(mode === 'bytype') return renderQBRoomByType();
+  // else detailed:
+
   const rooms = window._activeQuoteRooms || [];
   const container = document.getElementById('qb-rooms-container');
   container.innerHTML = rooms.map((room, ri) => {
@@ -2444,9 +2461,132 @@ function removeLine(ri,li) {
   renderQBRooms();
 }
 
-function recalcQuote() {
+function setQuoteMode(mode) {
+  window._quoteMode = mode;
+  // Update button styles
+  ['detailed','byroom','bytype'].forEach(m => {
+    const btn = document.getElementById('qmode-'+m);
+    if(btn) btn.className = 'btn btn-sm ' + (m===mode ? 'btn-primary' : 'btn-secondary');
+  });
+  renderQBRooms();
+}
+
+function renderQBRoomSimple() {
+  // By Room mode - just room name + total price per room
   const rooms = window._activeQuoteRooms || [];
-  const subtotal = rooms.reduce((s,r)=>s+r.lines.reduce((ss,l)=>ss+(l.withMargin||0),0),0);
+  const container = document.getElementById('qb-rooms-container');
+  const margin = parseFloat(document.getElementById('qb-labour-margin')?.value||10)/100;
+  container.innerHTML = `
+    <div style="margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--bg-secondary);">
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border);">Room / Area</th>
+          <th style="padding:8px 12px;text-align:right;border-bottom:2px solid var(--border);">Price (inc. margin)</th>
+          <th style="padding:8px 12px;text-align:right;border-bottom:2px solid var(--border);">Notes</th>
+          <th style="padding:8px;border-bottom:2px solid var(--border);"></th>
+        </tr></thead>
+        <tbody>
+          ${rooms.map((room,ri) => `
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:8px 12px;">
+                <input type="text" value="${room.name}" placeholder="Room / Area name"
+                  oninput="window._activeQuoteRooms[${ri}].name=this.value;recalcQuote();"
+                  style="width:100%;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;">
+              </td>
+              <td style="padding:8px 12px;text-align:right;">
+                <input type="number" value="${room.simpleTotal||0}" min="0" step="0.01" placeholder="0.00"
+                  oninput="window._activeQuoteRooms[${ri}].simpleTotal=parseFloat(this.value)||0;recalcQuote();"
+                  style="width:100px;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;text-align:right;">
+              </td>
+              <td style="padding:8px 12px;">
+                <input type="text" value="${room.notes||''}" placeholder="Optional notes"
+                  oninput="window._activeQuoteRooms[${ri}].notes=this.value;"
+                  style="width:100%;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;">
+              </td>
+              <td style="padding:8px;text-align:center;">
+                <button class="del-btn" onclick="window._activeQuoteRooms.splice(${ri},1);renderQBRooms();">🗑</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <button class="btn btn-sm btn-secondary" onclick="window._activeQuoteRooms.push({name:'New Area',simpleTotal:0,notes:'',lines:[]});renderQBRooms();">+ Add Room / Area</button>`;
+  recalcQuote();
+}
+
+function renderQBRoomByType() {
+  // By Cost Type mode - Labour total, Materials total, Other total
+  const rooms = window._activeQuoteRooms || [];
+  // Ensure we have a bytype structure
+  if(!window._byTypeData) window._byTypeData = {labour:0, materials:0, other:0, notes:''};
+  const d = window._byTypeData;
+  const container = document.getElementById('qb-rooms-container');
+  container.innerHTML = `
+    <div style="margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--bg-secondary);">
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border);">Cost Type</th>
+          <th style="padding:8px 12px;text-align:right;border-bottom:2px solid var(--border);">Amount (inc. margin)</th>
+          <th style="padding:8px 12px;border-bottom:2px solid var(--border);">Notes</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 12px;font-weight:600;">👷 Labour</td>
+            <td style="padding:8px 12px;text-align:right;">
+              <input type="number" value="${d.labour||0}" min="0" step="0.01"
+                oninput="window._byTypeData.labour=parseFloat(this.value)||0;recalcQuote();"
+                style="width:120px;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;text-align:right;">
+            </td>
+            <td style="padding:8px 12px;">
+              <input type="text" value="${d.labourNotes||''}" placeholder="e.g. 12 days @ £200"
+                oninput="window._byTypeData.labourNotes=this.value;"
+                style="width:100%;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;">
+            </td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 12px;font-weight:600;">🧱 Materials</td>
+            <td style="padding:8px 12px;text-align:right;">
+              <input type="number" value="${d.materials||0}" min="0" step="0.01"
+                oninput="window._byTypeData.materials=parseFloat(this.value)||0;recalcQuote();"
+                style="width:120px;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;text-align:right;">
+            </td>
+            <td style="padding:8px 12px;">
+              <input type="text" value="${d.materialsNotes||''}" placeholder="e.g. Plasterboard, paint etc."
+                oninput="window._byTypeData.materialsNotes=this.value;"
+                style="width:100%;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;">
+            </td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 12px;font-weight:600;">📦 Other</td>
+            <td style="padding:8px 12px;text-align:right;">
+              <input type="number" value="${d.other||0}" min="0" step="0.01"
+                oninput="window._byTypeData.other=parseFloat(this.value)||0;recalcQuote();"
+                style="width:120px;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;text-align:right;">
+            </td>
+            <td style="padding:8px 12px;">
+              <input type="text" value="${d.otherNotes||''}" placeholder="e.g. Skip hire, scaffolding"
+                oninput="window._byTypeData.otherNotes=this.value;"
+                style="width:100%;font-size:13px;border:1px solid var(--border);padding:4px 6px;border-radius:4px;">
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  recalcQuote();
+}
+
+function recalcQuote() {
+  const mode = window._quoteMode || 'detailed';
+  const rooms = window._activeQuoteRooms||[];
+  let subtotal = 0;
+  if(mode === 'byroom') {
+    subtotal = rooms.reduce((s,r)=>s+(r.simpleTotal||0),0);
+  } else if(mode === 'bytype') {
+    const d = window._byTypeData||{};
+    subtotal = (d.labour||0)+(d.materials||0)+(d.other||0);
+  } else {
+    subtotal = rooms.reduce((s,r)=>s+r.lines.reduce((ss,l)=>ss+(l.withMargin||0),0),0);
+  }
   const pmFee = parseFloat(document.getElementById('qb-pm-fee')?.value)||0;
   const bonus = parseFloat(document.getElementById('qb-bonus')?.value)||0;
   const total = subtotal+pmFee+bonus;
