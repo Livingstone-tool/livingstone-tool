@@ -1579,14 +1579,14 @@ async function loadFromSupabase() {
 
     db.quotes = quotes.map(q => ({
       id: q.id,
-      number: q.job_ref ? ('LP-0'+q.job_ref.replace('LP','')) : ('Q-'+q.id?.slice(0,4)),
+      number: (() => { const d=q.description||''; const m=d.match(/^NUM:([^|]*)/); return (m&&m[1]) ? m[1] : (q.job_ref ? q.job_ref : 'LP-?'); })(),
       jobRef: q.job_ref || '',
       client: q.client_name || '',
       date: q.quote_date || '',
       validDays: q.valid_days || 30,
       labourMargin: q.labour_margin || 10,
       matMargin: q.mat_margin || 10,
-      description: q.description || '',
+      description: (q.description||'').replace(/^NUM:[^|]*\|/,''),
       rooms: typeof q.rooms === 'string' ? JSON.parse(q.rooms || '[]') : (q.rooms || []),
       total: parseFloat(q.total) || 0,
       status: q.status || 'Draft'
@@ -2693,7 +2693,9 @@ function saveQuote() {
     rooms: JSON.stringify(saveRooms),
     total: q.total||0,
     status: 'Draft',
-    description: document.getElementById('qb-desc')?.value||''
+    description: 'NUM:'+(q.number||'')+'|'+(document.getElementById('qb-desc')?.value||''),
+    labour_margin: parseFloat(document.getElementById('qb-labour-margin')?.value)||10,
+    mat_margin: parseFloat(document.getElementById('qb-mat-margin')?.value)||10
   };
   if (q.id) {
     supa.patch('quotes', q.id, qData).catch(e => console.warn('Quote sync:', e));
@@ -4078,7 +4080,7 @@ function importData(input) {
               valid_days: q.validDays||30,
               labour_margin: q.labourMargin||10,
               mat_margin: q.matMargin||10,
-              description: q.description||'',
+              description: 'NUM:'+(q.number||'')+'|'+(q.description||''),
               rooms: JSON.stringify(q.rooms||[]),
               total: q.total||0,
               status: q.status||'Draft'
