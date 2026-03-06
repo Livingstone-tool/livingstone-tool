@@ -2647,7 +2647,20 @@ function recalcQuote() {
 }
 
 async function syncQuotesToSupabase() {
-  if(!db.quotes||!db.quotes.length) { alert('No quotes to sync.'); return; }
+  // Try loading from localStorage if db.quotes is empty
+  if(!db.quotes||!db.quotes.length) {
+    try {
+      const stored = localStorage.getItem('livingstoneDB');
+      if(stored) {
+        const parsed = JSON.parse(stored);
+        if(parsed.quotes && parsed.quotes.length) {
+          db.quotes = parsed.quotes;
+          console.log('Loaded', db.quotes.length, 'quotes from localStorage');
+        }
+      }
+    } catch(e) { console.warn('localStorage load failed:', e); }
+  }
+  if(!db.quotes||!db.quotes.length) { alert('No quotes found — please import Tom\'s JSON file first.'); return; }
   showGanttToast('⏳ Syncing quotes...', 4000);
   let ok = 0, fail = 0;
   // Delete all existing quotes first
