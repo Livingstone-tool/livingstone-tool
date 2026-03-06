@@ -4143,7 +4143,8 @@ function importData(input) {
           }
           if(quoteErrors.length) console.warn('Quote errors:', quoteErrors);
 
-          // Re-load from Supabase to get fresh IDs
+          // Wait a moment for Supabase to commit all inserts before reloading
+          await new Promise(r => setTimeout(r, 1500));
           await loadFromSupabase();
           const activePage = document.querySelector('.nav-item.active');
           if (activePage) activePage.click();
