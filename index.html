@@ -765,6 +765,7 @@
     <div class="card" style="margin-bottom:20px;">
       <div class="card-header">
         <div class="card-title">Existing Quotes</div>
+        <button class="btn btn-sm btn-secondary" onclick="syncQuotesToSupabase()" title="Push all local quotes up to Supabase">↑ Sync to DB</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -2645,6 +2646,37 @@ function recalcQuote() {
   if(document.getElementById('qb-total')) document.getElementById('qb-total').textContent = '£'+total.toFixed(2);
 }
 
+async function syncQuotesToSupabase() {
+  if(!db.quotes||!db.quotes.length) { alert('No quotes to sync.'); return; }
+  showGanttToast('⏳ Syncing quotes...', 4000);
+  let ok = 0, fail = 0;
+  // Delete all existing quotes first
+  await supa.deleteAll('quotes').catch(e => console.warn('delete quotes:', e));
+  for(const q of db.quotes) {
+    try {
+      await supa.post('quotes', {
+        job_ref: q.jobRef||q.job_ref||'',
+        client_name: q.client||q.clientName||q.client_name||'',
+        quote_date: q.date||q.quote_date||new Date().toISOString().split('T')[0],
+        valid_days: q.validDays||30,
+        labour_margin: parseFloat(q.labourMargin||q.margin||10),
+        mat_margin: parseFloat(q.matMargin||q.margin||10),
+        description: 'NUM:'+(q.number||'')+'|'+(q.description||q.desc||''),
+        rooms: JSON.stringify(q.rooms||[]),
+        total: parseFloat(q.total)||0,
+        status: q.status||'Draft'
+      });
+      ok++;
+    } catch(e) {
+      console.error('Quote sync failed:', q.number, e.message);
+      fail++;
+    }
+  }
+  showGanttToast(fail ? '⚠ Synced '+ok+', failed '+fail+' — check console' : '✓ All '+ok+' quotes synced to Supabase', 4000);
+  await loadFromSupabase();
+  renderQuotesTable();
+}
+
 function saveQuote() {
   const mode = window._quoteMode || 'detailed';
   const rooms = JSON.parse(JSON.stringify(window._activeQuoteRooms||[]));
@@ -4072,22 +4104,31 @@ function importData(input) {
           }
 
           // 4. Insert quotes
+          let quoteErrors = [];
           for(let i=0; i<(db.quotes||[]).length; i++) {
             const q = db.quotes[i];
-            console.log('Inserting quote', q.number, q.client);
-            await supa.post('quotes', {
-              job_ref: q.jobRef||q.job_ref||'',
-              client_name: q.client||q.client_name||'',
-              quote_date: q.date||q.quote_date||new Date().toISOString().split('T')[0],
-              valid_days: q.validDays||30,
-              labour_margin: q.labourMargin||q.margin||10,
-              mat_margin: q.matMargin||q.margin||10,
-              description: 'NUM:'+(q.number||'')+'|'+(q.description||''),
-              rooms: JSON.stringify(q.rooms||[]),
-              total: q.total||0,
-              status: q.status||'Draft'
-            });
+            console.log('Inserting quote', i, q.number, q.client||q.clientName);
+            try {
+              const roomsStr = JSON.stringify(q.rooms||[]);
+              await supa.post('quotes', {
+                job_ref: q.jobRef||q.job_ref||'',
+                client_name: q.client||q.clientName||q.client_name||'',
+                quote_date: q.date||q.quote_date||new Date().toISOString().split('T')[0],
+                valid_days: q.validDays||30,
+                labour_margin: parseFloat(q.labourMargin||q.margin||10),
+                mat_margin: parseFloat(q.matMargin||q.margin||10),
+                description: 'NUM:'+(q.number||'')+'|'+(q.description||q.desc||''),
+                rooms: roomsStr,
+                total: parseFloat(q.total)||0,
+                status: q.status||'Draft'
+              });
+              console.log('Quote inserted OK:', q.number);
+            } catch(qErr) {
+              console.error('Quote insert failed:', q.number, qErr.message);
+              quoteErrors.push(q.number + ': ' + qErr.message);
+            }
           }
+          if(quoteErrors.length) console.warn('Quote errors:', quoteErrors);
 
           // Re-load from Supabase to get fresh IDs
           await loadFromSupabase();
