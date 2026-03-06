@@ -4038,11 +4038,11 @@ function importData(input) {
       // Sync everything to Supabase
       (async () => {
         try {
-          // 1. Delete all existing Supabase data
-          await supa.deleteAll('tasks');
-          await supa.deleteAll('payment_gates');
-          await supa.deleteAll('quotes');
-          await supa.deleteAll('jobs');
+          // 1. Delete all existing Supabase data (ignore errors)
+          await supa.deleteAll('tasks').catch(e => console.warn('delete tasks:', e));
+          await supa.deleteAll('payment_gates').catch(e => console.warn('delete gates:', e));
+          await supa.deleteAll('quotes').catch(e => console.warn('delete quotes:', e));
+          await supa.deleteAll('jobs').catch(e => console.warn('delete jobs:', e));
 
           // 2. Insert jobs
           for(let i=0; i<db.jobs.length; i++) {
@@ -4073,6 +4073,7 @@ function importData(input) {
           // 4. Insert quotes
           for(let i=0; i<(db.quotes||[]).length; i++) {
             const q = db.quotes[i];
+            console.log('Inserting quote', q.number, q.client);
             await supa.post('quotes', {
               job_ref: q.jobRef||q.job_ref||'',
               client_name: q.client||q.client_name||'',
