@@ -2467,8 +2467,46 @@ function removeLine(ri,li) {
 }
 
 function setQuoteMode(mode) {
+  const rooms = window._activeQuoteRooms || [];
+
+  // When switching TO byroom - pre-populate simpleTotal from detailed line totals
+  if(mode === 'byroom') {
+    rooms.forEach(r => {
+      if(!r.simpleTotal || r.simpleTotal === 0) {
+        r.simpleTotal = r.lines ? r.lines.reduce((s,l) => s+(l.withMargin||0), 0) : 0;
+      }
+    });
+    // If no rooms yet, add a blank one
+    if(rooms.length === 0) {
+      window._activeQuoteRooms = [{name:'Area 1', simpleTotal:0, notes:'', lines:[]}];
+    }
+  }
+
+  // When switching TO bytype - pre-populate from detailed line totals by type
+  if(mode === 'bytype') {
+    let labour = 0, materials = 0, other = 0;
+    rooms.forEach(r => {
+      (r.lines||[]).forEach(l => {
+        if(l.type === 'Labour') labour += (l.withMargin||0);
+        else if(l.type === 'Material') materials += (l.withMargin||0);
+        else other += (l.withMargin||0);
+      });
+    });
+    // Only overwrite if all zeros (i.e. first time switching)
+    const d = window._byTypeData || {};
+    if(!d.labour && !d.materials && !d.other) {
+      window._byTypeData = {
+        labour: Math.round(labour*100)/100,
+        materials: Math.round(materials*100)/100,
+        other: Math.round(other*100)/100,
+        labourNotes: d.labourNotes||'',
+        materialsNotes: d.materialsNotes||'',
+        otherNotes: d.otherNotes||''
+      };
+    }
+  }
+
   window._quoteMode = mode;
-  // Update button styles
   ['detailed','byroom','bytype'].forEach(m => {
     const btn = document.getElementById('qmode-'+m);
     if(btn) btn.className = 'btn btn-sm ' + (m===mode ? 'btn-primary' : 'btn-secondary');
