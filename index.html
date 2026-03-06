@@ -4173,29 +4173,78 @@ function exportQuotePDF() {
   const validEl = document.getElementById('qb-valid-days');
   const validDays = validEl?.value || '30';
 
-  // Build HTML for print
-  const lineRows = rooms.map(room => {
-    const roomLines = room.lines.map(l => `
-      <tr>
-        <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;">${l.desc || ''}</td>
-        <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;color:#6b7e8e;">${l.supplier || ''}</td>
-        <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;text-align:center;">${l.qty || ''}</td>
-        <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;text-align:right;">£${(l.rate||0).toFixed(2)}</td>
-        <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${(l.withMargin||0).toFixed(2)}</td>
-      </tr>`).join('');
-    const roomTotal = room.lines.reduce((s,l)=>s+(l.withMargin||0),0);
-    return `
-      <tr>
-        <td colspan="5" style="padding:10px 10px 6px;background:#F5F0E8;font-weight:700;font-size:13px;color:#1a2530;border-top:2px solid #B87333;">
-          ${room.name}
-        </td>
-      </tr>
-      ${roomLines}
-      <tr>
-        <td colspan="4" style="padding:7px 10px;text-align:right;font-weight:600;font-size:12px;color:#6b7e8e;">Section Total:</td>
-        <td style="padding:7px 10px;text-align:right;font-weight:700;color:#B87333;">£${roomTotal.toFixed(2)}</td>
+  // Build HTML for print - respect quote mode
+  const mode = window._quoteMode || 'detailed';
+  let lineRows = '';
+  let tableHeaders = '';
+  let tableColspan = 5;
+
+  if (mode === 'byroom') {
+    tableColspan = 3;
+    tableHeaders = `<tr>
+        <th style="width:50%;text-align:left;">Room / Area</th>
+        <th style="width:35%;text-align:left;">Notes</th>
+        <th style="width:15%;text-align:right;">Total</th>
       </tr>`;
-  }).join('');
+    lineRows = rooms.map(room => `
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;font-weight:600;">${room.name}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;color:#6b7e8e;">${room.notes||''}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${(room.simpleTotal||0).toFixed(2)}</td>
+      </tr>`).join('');
+
+  } else if (mode === 'bytype') {
+    tableColspan = 3;
+    const d = window._byTypeData || {};
+    tableHeaders = `<tr>
+        <th style="width:40%;text-align:left;">Cost Type</th>
+        <th style="width:40%;text-align:left;">Notes</th>
+        <th style="width:20%;text-align:right;">Total</th>
+      </tr>`;
+    const typeRows = [
+      {label:'Labour',   amount: d.labour||0,    notes: d.labourNotes||''},
+      {label:'Materials',amount: d.materials||0,  notes: d.materialsNotes||''},
+      {label:'Other',    amount: d.other||0,      notes: d.otherNotes||''}
+    ].filter(r => r.amount > 0);
+    lineRows = typeRows.map(r => `
+      <tr>
+        <td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;font-weight:600;">${r.label}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;color:#6b7e8e;">${r.notes}</td>
+        <td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${r.amount.toFixed(2)}</td>
+      </tr>`).join('');
+
+  } else {
+    // Detailed
+    tableHeaders = `<tr>
+        <th style="width:35%;text-align:left;">Description</th>
+        <th style="width:20%;text-align:left;">Supplier / Sub</th>
+        <th style="width:10%;text-align:center;">Qty</th>
+        <th style="width:12%;text-align:right;">Rate £</th>
+        <th style="width:12%;text-align:right;">Total £</th>
+      </tr>`;
+    lineRows = rooms.map(room => {
+      const roomLines = room.lines.map(l => `
+        <tr>
+          <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;">${l.desc || ''}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;color:#6b7e8e;">${l.supplier || ''}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;text-align:center;">${l.qty || ''}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;text-align:right;">£${(l.rate||0).toFixed(2)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${(l.withMargin||0).toFixed(2)}</td>
+        </tr>`).join('');
+      const roomTotal = room.lines.reduce((s,l)=>s+(l.withMargin||0),0);
+      return `
+        <tr>
+          <td colspan="5" style="padding:10px 10px 6px;background:#F5F0E8;font-weight:700;font-size:13px;color:#1a2530;border-top:2px solid #B87333;">
+            ${room.name}
+          </td>
+        </tr>
+        ${roomLines}
+        <tr>
+          <td colspan="4" style="padding:7px 10px;text-align:right;font-weight:600;font-size:12px;color:#6b7e8e;">Section Total:</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:700;color:#B87333;">£${roomTotal.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+  }
 
   const html = `<!DOCTYPE html>
 <html>
@@ -4252,18 +4301,12 @@ function exportQuotePDF() {
 
   <table>
     <thead>
-      <tr>
-        <th style="width:35%;">Description</th>
-        <th style="width:20%;">Supplier / Sub</th>
-        <th style="width:10%;text-align:center;">Qty</th>
-        <th style="width:12%;text-align:right;">Rate £</th>
-        <th style="width:12%;text-align:right;">Total £</th>
-      </tr>
+      ${tableHeaders}
     </thead>
     <tbody>
       ${lineRows}
       <tr class="total-row">
-        <td colspan="4" style="text-align:right;letter-spacing:0.04em;">TOTAL (inc. VAT where applicable)</td>
+        <td colspan="${tableColspan-1}" style="text-align:right;letter-spacing:0.04em;">TOTAL (inc. VAT where applicable)</td>
         <td style="text-align:right;">${grandTotal}</td>
       </tr>
     </tbody>
