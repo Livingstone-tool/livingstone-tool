@@ -2333,7 +2333,7 @@ function renderQuotesTable() {
       <td>${q.client}</td>
       <td>${q.date}</td>
       <td><strong>£${q.total.toLocaleString()}</strong></td>
-      <td>${q.margin}%</td>
+      <td>${q.labourMargin||q.margin||10}%</td>
       <td><span class="badge badge-quoted">Quoted</span></td>
       <td>
         <button class="btn btn-sm btn-secondary" onclick="viewQuote(${i})">View</button>
