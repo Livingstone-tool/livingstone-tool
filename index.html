@@ -2719,12 +2719,8 @@ function saveQuote() {
   } else if(mode === 'bytype') {
     const d = window._byTypeData||{};
     subtotal = (d.labour||0)+(d.materials||0)+(d.other||0);
-    // Store bytype data as synthetic rooms for display
-    saveRooms = [
-      {name:'Labour', simpleTotal: d.labour||0, notes: d.labourNotes||'', lines:[]},
-      {name:'Materials', simpleTotal: d.materials||0, notes: d.materialsNotes||'', lines:[]},
-      {name:'Other', simpleTotal: d.other||0, notes: d.otherNotes||'', lines:[]}
-    ];
+    // Keep original rooms intact - bytype data stored separately in byTypeData field
+    saveRooms = rooms;
   } else {
     subtotal = rooms.reduce((s,r) => s+r.lines.reduce((ss,l) => ss+(l.withMargin||0),0), 0);
   }
