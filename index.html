@@ -1662,6 +1662,7 @@ async function loadFromSupabase() {
       margin: q.labour_margin || 10,
       description: (q.description||'').replace(/^NUM:[^|]*\|/,''),
       rooms: typeof q.rooms === 'string' ? JSON.parse(q.rooms || '[]') : (q.rooms || []),
+      pmFee: parseFloat(q.pm_fee)||0,
       total: parseFloat(q.total) || 0,
       status: q.status || 'Draft'
     }));
@@ -2426,7 +2427,7 @@ function viewQuote(idx) {
   document.getElementById('qb-labour-margin').value = q.labourMargin||q.margin||10;
   document.getElementById('qb-mat-margin').value = q.matMargin||q.margin||10;
   document.getElementById('qb-payment').value = q.paymentTerms||'25% at 4 stages';
-  document.getElementById('qb-pm-fee').value = q.pmFee||0;
+  document.getElementById('qb-pm-fee').value = q.pmFee||q.pm_fee||0;
   document.getElementById('qb-bonus').value = q.bonus;
   document.getElementById('qb-title').textContent = q.number + ' — ' + q.client;
   document.getElementById('qb-subtitle').textContent = 'Quote Date: '+q.date;
@@ -2873,7 +2874,9 @@ function saveQuote() {
     status: 'Quoted',
     description: 'NUM:'+(q.number||'')+'|'+(document.getElementById('qb-desc')?.value||''),
     labour_margin: parseFloat(document.getElementById('qb-labour-margin')?.value)||10,
-    mat_margin: parseFloat(document.getElementById('qb-mat_margin')?.value)||10
+    mat_margin: parseFloat(document.getElementById('qb-mat-margin')?.value)||10,
+    valid_days: parseInt(document.getElementById('qb-valid-days')?.value)||30,
+    pm_fee: parseFloat(document.getElementById('qb-pm-fee')?.value)||0
   };
   if (q.id) {
     // We have the Supabase ID - do a direct patch
