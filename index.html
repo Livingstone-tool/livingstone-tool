@@ -552,6 +552,7 @@
       <div class="nav-label">Business</div>
       <div class="nav-item" onclick="showPage('actions')"><span class="icon">🎯</span> Action Tracker</div>
       <div class="nav-item" onclick="showPage('finance')"><span class="icon">£</span> Finance</div>
+    <div class="nav-item" onclick="showPage('costs')"><span class="icon">💰</span> Cost Tracker</div>
     </div>
   </div>
   <div class="sidebar-footer">Adam Hemming · Tom<br>© 2026 Livingstone Projects</div>
@@ -817,11 +818,11 @@
               </div>
               <div class="form-group">
                 <label>Labour Margin %</label>
-                <input type="number" id="qb-labour-margin" value="10" min="0" max="100">
+                <input type="number" id="qb-labour-margin" value="10" min="0" max="100" oninput="recalcAllLines()">
               </div>
               <div class="form-group">
                 <label>Materials Margin %</label>
-                <input type="number" id="qb-mat-margin" value="10" min="0" max="100">
+                <input type="number" id="qb-mat-margin" value="10" min="0" max="100" oninput="recalcAllLines()">
               </div>
             </div>
           </div>
@@ -1073,7 +1074,59 @@
 
 
   <!-- PLANNING PAGE -->
-  <div id="page-planning" class="page content">
+  <div id="page-costs" class="page-section" style="display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <h2 style="font-size:20px;font-weight:700;">💰 Cost Tracker</h2>
+  </div>
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header"><div class="card-title">Log a Cost</div></div>
+    <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 2fr 1fr auto;gap:12px;align-items:end;padding:16px;">
+      <div class="form-group" style="margin:0;">
+        <label>Job</label>
+        <select id="ct-job" style="width:100%;"></select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Date</label>
+        <input type="date" id="ct-date" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Type</label>
+        <select id="ct-type" style="width:100%;">
+          <option value="Labour">Labour</option>
+          <option value="Material">Material</option>
+          <option value="Subcontractor">Subcontractor</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Description</label>
+        <input type="text" id="ct-desc" placeholder="e.g. Bobby full day, 10x cement bags" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label>Amount £</label>
+        <input type="number" id="ct-amount" min="0" step="0.01" placeholder="0.00" style="width:100%;">
+      </div>
+      <button class="btn btn-primary" onclick="addCostEntry()" style="height:38px;white-space:nowrap;">+ Add</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Cost Log</div>
+      <select id="ct-filter-job" onchange="renderCostLog()" style="font-size:13px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
+        <option value="">All Jobs</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Job</th><th>Type</th><th>Description</th><th style="text-align:right;">Amount</th><th></th></tr></thead>
+        <tbody id="cost-log-body"></tbody>
+      </table>
+    </div>
+    <div id="cost-summary" style="padding:16px;border-top:1px solid var(--border);display:flex;gap:32px;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+<div id="page-planning" class="page content">
     <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;">
       <div class="tab active" onclick="switchPlanningTab('gantt',this)">Master Gantt</div>
       <div class="tab" onclick="switchPlanningTab('jobplan',this)">Job Project Plans</div>
@@ -1392,20 +1445,27 @@
 
 <!-- WISHLIST MODAL -->
 <div id="wishlist-modal" class="modal-overlay" style="display:none;" onclick="closeOnOverlay(event,'wishlist-modal')">
-  <div class="modal" style="max-width:560px;">
+  <div class="modal" style="max-width:620px;">
     <div class="modal-header">
       <div>
         <div class="modal-title">💡 Feature Wishlist</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Track ideas for future app improvements</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Track ideas and fixes for future improvements</div>
       </div>
       <button class="modal-close" onclick="closeModal('wishlist-modal')">×</button>
     </div>
     <div class="modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
-        <input type="text" id="wish-input" placeholder="Describe a feature idea..." style="flex:1;" onkeydown="if(event.key==='Enter')addWish()">
+      <div style="display:flex;gap:8px;margin-bottom:20px;">
+        <input type="text" id="wish-input" placeholder="Describe idea or fix..." style="flex:1;" onkeydown="if(event.key==='Enter')addWish()">
+        <select id="wish-type" style="font-size:13px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
+          <option value="feature">✨ New Feature</option>
+          <option value="fix">🔧 Fix</option>
+        </select>
         <button class="btn btn-primary" onclick="addWish()">Add</button>
       </div>
-      <div id="wishlist-items"></div>
+      <div style="margin-bottom:8px;font-weight:700;font-size:13px;color:var(--copper);">✨ New Features</div>
+      <div id="wishlist-items-feature"></div>
+      <div style="margin:16px 0 8px;font-weight:700;font-size:13px;color:#4a90d9;">🔧 Fixes</div>
+      <div id="wishlist-items-fix"></div>
     </div>
   </div>
 </div>
@@ -1468,7 +1528,7 @@ const STORE_KEY = 'lp_data_v1';
 
 function saveData() {
   // Save to localStorage as backup + sync key changes to Supabase
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch(e) {}
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); localStorage.setItem('livingstoneCosts', JSON.stringify(db.costs||[])); } catch(e) {}
 }
 
 async function syncJobToSupabase(ref) {
@@ -2092,6 +2152,7 @@ function renderPage(id) {
   else if(id==='products') renderProducts();
   else if(id==='actions') renderActions();
   else if(id==='planning') renderPlanning();
+  else if(id==='costs') initCostTracker();
 }
 
 // ============================================================
@@ -2428,7 +2489,7 @@ function renderQBRooms() {
         </select>
         <input type="number" value="${l.qty||1}" min="0" step="0.5" oninput="updateLine(${ri},${li},'qty',parseFloat(this.value)||0)" style="font-size:12.5px;">
         <input type="number" value="${l.rate||0}" min="0" step="0.01" oninput="updateLine(${ri},${li},'rate',parseFloat(this.value)||0)" style="font-size:12.5px;">
-        <span style="font-size:12.5px;font-weight:600;">£${((l.withMargin)||0).toFixed(2)}</span>
+        <span data-linetotal style="font-size:12.5px;font-weight:600;">£${((l.withMargin)||0).toFixed(2)}</span>
         <button class="del-btn" onclick="removeLine(${ri},${li})">🗑</button>
       </div>`).join('');
 
@@ -2452,6 +2513,19 @@ function renderQBRooms() {
   setTimeout(initQBDrag, 30);
 }
 
+function recalcAllLines() {
+  const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
+  const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
+  (window._activeQuoteRooms||[]).forEach(r => {
+    (r.lines||[]).forEach(l => {
+      const margin = (l.type==='Labour') ? labourMargin : matMargin;
+      l.subtotal = (l.qty||0)*(l.rate||0);
+      l.withMargin = l.subtotal * (1 + margin/100);
+    });
+  });
+  renderQBRooms();
+}
+
 function updateLine(ri, li, field, val) {
   const line = window._activeQuoteRooms[ri].lines[li];
   line[field] = val;
@@ -2459,19 +2533,24 @@ function updateLine(ri, li, field, val) {
     const prod = db.products.find(p=>p.name===val);
     if(prod) { line.rate = prod.rate; line.type = prod.type; }
   }
-  if(field==='qty'||field==='rate'||field==='supplier') {
-    const margin = parseInt(document.getElementById('qb-labour-margin').value)||10;
+  if(field==='qty'||field==='rate'||field==='supplier'||field==='type') {
+    const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
+    const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
+    const margin = (line.type==='Labour') ? labourMargin : matMargin;
     line.subtotal = (line.qty||0)*(line.rate||0);
     line.withMargin = line.subtotal * (1 + margin/100);
   }
   recalcQuote();
-  // Re-render room total without full re-render to avoid losing focus
+  // Re-render room totals and line total without full re-render
   const roomTotals = document.querySelectorAll('.qb-room-header .qb-room-total');
   const rooms = window._activeQuoteRooms;
   rooms.forEach((r,i) => {
     const rt = r.lines.reduce((s,l)=>s+(l.withMargin||0),0);
     if(roomTotals[i]) roomTotals[i].textContent = '£'+rt.toFixed(2);
   });
+  // Update individual line total display
+  const lineTotal = document.querySelector(`.qb-line[data-ri="${ri}"][data-li="${li}"] span[data-linetotal]`);
+  if(lineTotal) lineTotal.textContent = '£'+(line.withMargin||0).toFixed(2);
 }
 
 function addLine(ri) {
@@ -2761,6 +2840,14 @@ function saveQuote() {
     supa.patch('quotes', q.id, qData).catch(e => console.warn('Quote sync:', e));
   } else {
     supa.post('quotes', qData).then(res => { if(res&&res[0]) { q.id=res[0].id; db.quotes[db.quotes.findIndex(x=>x.number===q.number)].id=res[0].id; } }).catch(e => console.warn('Quote insert:', e));
+  }
+  // Update job quoteValue if jobRef is set
+  if(q.jobRef) {
+    const job = db.jobs.find(j=>j.ref===q.jobRef);
+    if(job) {
+      job.quoteValue = q.total;
+      saveJob(job);
+    }
   }
   renderQuotesTable();
   alert('Quote saved: '+q.number+' — £'+q.total.toFixed(2));
@@ -3123,41 +3210,51 @@ function openWishlist() {
 
 function renderWishlist() {
   const sorted = [...db.wishlist].sort((a,b)=>b.votes-a.votes);
-  document.getElementById('wishlist-items').innerHTML = sorted.map((w,i) => `
-    <div class="wish-item">
+  const features = sorted.filter(w => !w.type || w.type==='feature');
+  const fixes = sorted.filter(w => w.type==='fix');
+  const empty = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">None yet</div>';
+
+  const renderItems = (items, offset) => items.map((w, i) => {
+    const origIdx = db.wishlist.indexOf(w);
+    return `<div class="wish-item">
       <div class="wish-vote">
-        <button class="wish-vote-btn" onclick="voteWish(${i},1)">▲</button>
+        <button class="wish-vote-btn" onclick="voteWish(${origIdx},1)">▲</button>
         <div class="wish-vote-count">${w.votes}</div>
-        <button class="wish-vote-btn" onclick="voteWish(${i},-1)">▼</button>
+        <button class="wish-vote-btn" onclick="voteWish(${origIdx},-1)">▼</button>
       </div>
       <div style="flex:1;">
         <div class="wish-item-title">${w.text}</div>
       </div>
-      <button class="del-btn" onclick="deleteWish(${i})">🗑</button>
-    </div>`).join('') || '<div style="color:var(--text-muted);text-align:center;padding:20px;">No ideas yet. Add one above!</div>';
+      <button class="del-btn" onclick="deleteWish(${origIdx})">🗑</button>
+    </div>`;
+  }).join('') || empty;
+
+  const featureEl = document.getElementById('wishlist-items-feature');
+  const fixEl = document.getElementById('wishlist-items-fix');
+  const legacyEl = document.getElementById('wishlist-items');
+  if(featureEl) featureEl.innerHTML = renderItems(features);
+  if(fixEl) fixEl.innerHTML = renderItems(fixes);
+  if(legacyEl) legacyEl.innerHTML = renderItems(sorted);
 }
 
 function addWish() {
   const val = document.getElementById('wish-input').value.trim();
+  const type = document.getElementById('wish-type')?.value || 'feature';
   if(!val) return;
-  db.wishlist.push({text:val,votes:1});
+  db.wishlist.push({text:val, votes:1, type});
   saveData();
   document.getElementById('wish-input').value='';
   renderWishlist();
 }
 
 function voteWish(i, delta) {
-  const sorted = [...db.wishlist].sort((a,b)=>b.votes-a.votes);
-  const original = db.wishlist.indexOf(sorted[i]);
-  db.wishlist[original].votes = Math.max(0, db.wishlist[original].votes+delta);
+  if(db.wishlist[i]) db.wishlist[i].votes = Math.max(0, db.wishlist[i].votes+delta);
   saveData();
   renderWishlist();
 }
 
 function deleteWish(i) {
-  const sorted = [...db.wishlist].sort((a,b)=>b.votes-a.votes);
-  const original = db.wishlist.indexOf(sorted[i]);
-  db.wishlist.splice(original,1);
+  db.wishlist.splice(i, 1);
   saveData();
   renderWishlist();
 }
@@ -4232,7 +4329,7 @@ function initQBDrag() {
 // ── PDF EXPORT ────────────────────────────────────────────────────────────
 function exportQuotePDF() {
   const rooms = window._activeQuoteRooms || [];
-  const jobRef = document.getElementById('qb-job-ref')?.value || '';
+  const jobRef = document.getElementById('qb-number')?.value || document.getElementById('qb-job-ref')?.value || '';
   const jobName = document.getElementById('qb-job-name')?.value || '';
   const client = document.getElementById('qb-client')?.value || '';
   const dateEl = document.getElementById('qb-date');
