@@ -2350,13 +2350,26 @@ function viewQuote(idx) {
   document.getElementById('qb-client').value = q.client;
   document.getElementById('qb-address').value = '';
   document.getElementById('qb-payment').value = '25% at 4 stages';
-  document.getElementById('qb-labour-margin').value = 10;
-  document.getElementById('qb-mat-margin').value = 10;
-  document.getElementById('qb-pm-fee').value = q.pmFee;
+  document.getElementById('qb-labour-margin').value = q.labourMargin||q.margin||10;
+  document.getElementById('qb-mat-margin').value = q.matMargin||q.margin||10;
+  document.getElementById('qb-payment').value = q.paymentTerms||'25% at 4 stages';
+  document.getElementById('qb-pm-fee').value = q.pmFee||0;
   document.getElementById('qb-bonus').value = q.bonus;
   document.getElementById('qb-title').textContent = q.number + ' — ' + q.client;
   document.getElementById('qb-subtitle').textContent = 'Quote Date: '+q.date;
   window._activeQuoteRooms = JSON.parse(JSON.stringify(q.rooms||[]));
+  // Recalculate withMargin on all lines in case it wasn't stored
+  const lMargin = (q.labourMargin||q.margin||10)/100;
+  const mMargin = (q.matMargin||q.margin||10)/100;
+  window._activeQuoteRooms.forEach(r => {
+    (r.lines||[]).forEach(l => {
+      if(!l.withMargin && (l.qty||l.rate)) {
+        l.subtotal = (l.qty||0)*(l.rate||0);
+        const m = l.type==='Labour' ? lMargin : mMargin;
+        l.withMargin = l.subtotal * (1+m);
+      }
+    });
+  });
   window._quoteMode = q.mode || 'detailed';
   window._byTypeData = q.byTypeData || {labour:0,materials:0,other:0,labourNotes:'',materialsNotes:'',otherNotes:''};
   setQuoteMode(window._quoteMode);
@@ -2724,7 +2737,9 @@ function saveQuote() {
     rooms: saveRooms,
     pmFee, bonus, subtotal,
     total: subtotal + pmFee + bonus,
-    margin: 10,
+    labourMargin: parseFloat(document.getElementById('qb-labour-margin')?.value)||10,
+    matMargin: parseFloat(document.getElementById('qb-mat-margin')?.value)||10,
+    paymentTerms: document.getElementById('qb-payment')?.value || '25% at 4 stages',
     mode: mode,
     byTypeData: mode === 'bytype' ? JSON.parse(JSON.stringify(window._byTypeData||{})) : null
   };
@@ -4378,7 +4393,7 @@ function exportQuotePDF() {
   <div class="footer">
     <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#B87333;margin-bottom:10px;">Terms &amp; Conditions</h3>
     <p><strong>1. Quotation Validity:</strong> This quotation is valid for ${validDays} days from the date above. After this period, prices may be subject to change.</p>
-    <p><strong>2. Payment Terms:</strong> A deposit of 25% is required before works commence. Further stage payments will be agreed prior to the start of works. Final payment is due upon completion.</p>
+    <p><strong>2. Payment Terms:</strong> ${document.getElementById('qb-payment')?.value || '25% at 4 stages'}. Further stage payments will be agreed prior to the start of works. Final payment is due upon completion.</p>
     <p><strong>3. Variations:</strong> Any variations or additional works requested by the client that are outside the agreed scope will be charged accordingly and confirmed in writing before proceeding.</p>
     <p><strong>4. Materials:</strong> All materials supplied by Livingstone Projects remain the property of Livingstone Projects until payment is received in full.</p>
     <p><strong>5. Access &amp; Facilities:</strong> The client agrees to provide reasonable access to the property and basic welfare facilities (water, electricity) for the duration of the works.</p>
