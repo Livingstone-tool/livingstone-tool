@@ -1613,8 +1613,9 @@ async function loadFromSupabase() {
       lead: j.lead || 'A',
       scale: j.scale || 5,
       quoteValue: (() => {
-        // Use quote total as source of truth, fall back to jobs table value
-        const q = (quotes||[]).find(q => (q.job_ref||'') === j.ref || (q.description||'').includes('NUM:'+j.ref));
+        // Normalise ref for matching: LP001 <-> LP-001
+        const norm = r => (r||'').replace('-','').toUpperCase();
+        const q = (quotes||[]).find(q => norm(q.job_ref) === norm(j.ref));
         return q ? parseFloat(q.total)||0 : parseFloat(j.quote_value)||0;
       })(),
       estCost: parseFloat(j.est_cost) || 0,
@@ -2850,7 +2851,9 @@ function saveQuote() {
     byTypeData: mode === 'bytype' ? JSON.parse(JSON.stringify(window._byTypeData||{})) : null
   };
 
-  const existIdx = db.quotes.findIndex(x=>x.number===q.number);
+  // Normalise for matching: LP-003 == LP003
+  const norm = r => (r||'').replace('-','').toUpperCase();
+  const existIdx = db.quotes.findIndex(x => norm(x.number) === norm(q.number) || norm(x.jobRef) === norm(q.number));
   if(existIdx>=0) { q.id = db.quotes[existIdx].id; db.quotes[existIdx]=q; }
   else db.quotes.push(q);
   saveData();
@@ -2862,15 +2865,36 @@ function saveQuote() {
     quote_date: q.date||null,
     rooms: JSON.stringify(saveRooms),
     total: q.total||0,
-    status: 'Draft',
+    status: 'Quoted',
     description: 'NUM:'+(q.number||'')+'|'+(document.getElementById('qb-desc')?.value||''),
     labour_margin: parseFloat(document.getElementById('qb-labour-margin')?.value)||10,
-    mat_margin: parseFloat(document.getElementById('qb-mat-margin')?.value)||10
+    mat_margin: parseFloat(document.getElementById('qb-mat_margin')?.value)||10
   };
   if (q.id) {
+    // Update existing quote
     supa.patch('quotes', q.id, qData).catch(e => console.warn('Quote sync:', e));
   } else {
-    supa.post('quotes', qData).then(res => { if(res&&res[0]) { q.id=res[0].id; db.quotes[db.quotes.findIndex(x=>x.number===q.number)].id=res[0].id; } }).catch(e => console.warn('Quote insert:', e));
+    // Check Supabase for existing quote with same job_ref before inserting
+    supa.get('quotes', 'job_ref=eq.'+norm(q.number)+'&limit=1').then(existing => {
+      if(existing && existing.length > 0) {
+        // Found existing in Supabase - update it and store ID
+        q.id = existing[0].id;
+        const idx = db.quotes.findIndex(x => norm(x.number) === norm(q.number));
+        if(idx>=0) db.quotes[idx].id = q.id;
+        supa.patch('quotes', q.id, qData).catch(e => console.warn('Quote update:', e));
+      } else {
+        // Truly new - insert
+        supa.post('quotes', qData).then(res => {
+          if(res&&res[0]) {
+            q.id = res[0].id;
+            const idx = db.quotes.findIndex(x => norm(x.number) === norm(q.number));
+            if(idx>=0) db.quotes[idx].id = res[0].id;
+          }
+        }).catch(e => console.warn('Quote insert:', e));
+      }
+    }).catch(() => {
+      supa.post('quotes', qData).then(res => { if(res&&res[0]) q.id=res[0].id; }).catch(e => console.warn('Quote insert:', e));
+    });
   }
   // Update job quoteValue using the LP reference
   const jobRef = q.number || q.jobRef;
