@@ -1612,7 +1612,11 @@ async function loadFromSupabase() {
       status: j.status || 'Initial Enquiry',
       lead: j.lead || 'A',
       scale: j.scale || 5,
-      quoteValue: parseFloat(j.quote_value) || 0,
+      quoteValue: (() => {
+        // Use quote total as source of truth, fall back to jobs table value
+        const q = (quotes||[]).find(q => (q.job_ref||'') === j.ref || (q.description||'').includes('NUM:'+j.ref));
+        return q ? parseFloat(q.total)||0 : parseFloat(j.quote_value)||0;
+      })(),
       estCost: parseFloat(j.est_cost) || 0,
       startDate: j.start_date || '',
       endDate: j.end_date || '',
@@ -2874,7 +2878,9 @@ function saveQuote() {
     const job = db.jobs.find(j=>j.ref===jobRef);
     if(job) {
       job.quoteValue = q.total;
-      saveJob(job);
+      // Patch just the quote_value column in Supabase jobs table
+      supa.patchByRef('jobs', jobRef, { quote_value: q.total })
+        .catch(e => console.warn('Failed to update job quote_value:', e));
     }
   }
   renderQuotesTable();
