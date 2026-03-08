@@ -2515,7 +2515,6 @@ function renderQBRooms() {
 
 function recalcAllLines() {
   const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
-  console.log('recalcAllLines called, labourMargin='+labourMargin, 'rooms=', (window._activeQuoteRooms||[]).length);
   const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
   (window._activeQuoteRooms||[]).forEach(r => {
     (r.lines||[]).forEach(l => {
