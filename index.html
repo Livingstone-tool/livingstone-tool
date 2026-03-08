@@ -818,11 +818,11 @@
               </div>
               <div class="form-group">
                 <label>Labour Margin %</label>
-                <input type="number" id="qb-labour-margin" value="10" min="0" max="100" oninput="recalcAllLines()">
+                <input type="number" id="qb-labour-margin" value="10" min="0" max="100" oninput="recalcAllLines()" onchange="recalcAllLines()">
               </div>
               <div class="form-group">
                 <label>Materials Margin %</label>
-                <input type="number" id="qb-mat-margin" value="10" min="0" max="100" oninput="recalcAllLines()">
+                <input type="number" id="qb-mat-margin" value="10" min="0" max="100" oninput="recalcAllLines()" onchange="recalcAllLines()">
               </div>
             </div>
           </div>
@@ -2515,15 +2515,24 @@ function renderQBRooms() {
 
 function recalcAllLines() {
   const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
+  console.log('recalcAllLines called, labourMargin='+labourMargin, 'rooms=', (window._activeQuoteRooms||[]).length);
   const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
   (window._activeQuoteRooms||[]).forEach(r => {
     (r.lines||[]).forEach(l => {
-      const margin = (l.type==='Labour') ? labourMargin : matMargin;
+      const isLabour = !l.type || l.type==='Labour';
+      const margin = isLabour ? labourMargin : matMargin;
       l.subtotal = (l.qty||0)*(l.rate||0);
       l.withMargin = l.subtotal * (1 + margin/100);
     });
   });
   renderQBRooms();
+}
+
+function applyMarginToLine(l, labourMargin, matMargin) {
+  const isLabour = !l.type || l.type==='Labour';
+  const margin = isLabour ? labourMargin : matMargin;
+  l.subtotal = (l.qty||0)*(l.rate||0);
+  l.withMargin = l.subtotal * (1 + margin/100);
 }
 
 function updateLine(ri, li, field, val) {
