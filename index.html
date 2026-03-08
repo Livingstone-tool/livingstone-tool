@@ -4234,7 +4234,7 @@ function exportQuotePDF() {
   const rooms = window._activeQuoteRooms || [];
   const jobRef = document.getElementById('qb-job-ref')?.value || '';
   const jobName = document.getElementById('qb-job-name')?.value || '';
-  const client = document.getElementById('qb-client-name')?.value || '';
+  const client = document.getElementById('qb-client')?.value || '';
   const dateEl = document.getElementById('qb-date');
   const quoteDate = dateEl?.value ? new Date(dateEl.value).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) : new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
   const desc = document.getElementById('qb-desc')?.value || '';
