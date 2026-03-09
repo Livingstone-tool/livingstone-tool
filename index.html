@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.45 -->
+<!-- Livingstone v2.46 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1745,7 +1745,13 @@ async function loadFromSupabase() {
       notes: j.notes || ''
     }));
     db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
-    db.jobs = db.jobs.filter((j, i, arr) => arr.findIndex(x => x.ref === j.ref) === i);
+    // Deduplicate: normalise refs (LP001 == LP-001), prefer hyphenated version
+    const seen = {};
+    db.jobs.forEach(j => {
+      const norm = j.ref.replace(/-/g, '').toUpperCase();
+      if (!seen[norm] || j.ref.includes('-')) seen[norm] = j;
+    });
+    db.jobs = Object.values(seen);
     // If Supabase returned no jobs, fall back to localStorage
     if (db.jobs.length === 0) {
       try {
@@ -1820,6 +1826,20 @@ async function loadFromSupabase() {
     db.rooms = SEED.rooms || [];
 
     saveData(); // backup to localStorage
+
+    // One-time cleanup: delete non-hyphenated duplicate refs (e.g. LP001 when LP-001 exists)
+    try {
+      const allRefs = jobs.map(j => j.ref);
+      const toDelete = jobs.filter(j => {
+        if (j.ref.includes('-')) return false; // keep hyphenated
+        const hyphenated = j.ref.replace(/^(LP)(\d+)$/i, '$1-$2');
+        return allRefs.includes(hyphenated); // delete only if hyphenated version exists
+      });
+      for (const j of toDelete) {
+        try { await supa.delete('jobs', j.id); console.log('Cleaned up duplicate:', j.ref); } catch(e) {}
+      }
+    } catch(e) { console.warn('Duplicate cleanup skipped:', e); }
+
     // Remove loading overlay
     const _ol = document.getElementById('supabase-loading');
     if (_ol) _ol.remove();
