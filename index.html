@@ -523,7 +523,6 @@
 
   #wish-input { flex:1 !important; width:auto !important; min-width:0 !important; }
   /* JOB ROW TOOLTIP */
-  tr.clickable-row:hover td:first-child .job-row-tip { display: block; }
   .job-row-tip {
     display: none;
     position: absolute;
@@ -2269,7 +2268,7 @@ function renderJobsTable() {
       + _value + (_cost ? '  ·  ' + _cost : '') + '<br>'
       + (_notes ? _notes : '')
       + '</div>';
-    return `<tr class="clickable-row" onclick="openJob('${j.ref}')">
+    return `<tr class="clickable-row" onclick="openJob('${j.ref}')" onmouseenter="this.querySelector('.job-row-tip').style.display='block'" onmouseleave="this.querySelector('.job-row-tip').style.display='none'">
       <td style="position:relative;"><strong>${j.ref}</strong>${_tip}</td>
       <td>${j.name}</td>
       <td>${j.client?.name||''}</td>
