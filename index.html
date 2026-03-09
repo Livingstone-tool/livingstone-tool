@@ -1391,6 +1391,8 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('job-modal')">Cancel</button>
+      <button class="btn btn-danger" id="job-modal-archive-btn" onclick="archiveJob()" style="display:none;">Archive</button>
+      <button class="btn btn-danger" id="job-modal-delete-btn" onclick="deleteJob()" style="display:none;background:#c0392b;">Delete</button>
       <button class="btn btn-primary" onclick="saveJob()">Save Job</button>
     </div>
   </div>
@@ -2409,6 +2411,8 @@ function newJobModal() {
   ['job-quote-value','job-est-cost'].forEach(id=>document.getElementById(id).value='');
   ['job-start','job-end'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('job-modal').style.display='flex';
+  document.getElementById('job-modal-archive-btn').style.display='none';
+  document.getElementById('job-modal-delete-btn').style.display='none';
 }
 
 function editJobByRef(ref) {
@@ -2431,6 +2435,8 @@ function editJobByRef(ref) {
   document.getElementById('job-desc').value = j.desc||'';
   document.getElementById('job-notes').value = j.notes||'';
   document.getElementById('job-modal').style.display='flex';
+  document.getElementById('job-modal-archive-btn').style.display='inline-flex';
+  document.getElementById('job-modal-delete-btn').style.display='inline-flex';
 }
 
 function saveJob() {
@@ -2461,7 +2467,11 @@ function saveJob() {
     }
     syncJobToSupabase(job.ref);
   } else {
-    // New job - insert into Supabase
+    // New job - prevent duplicate refs
+    if (db.jobs.some(j => j.ref === job.ref)) {
+      alert('A job with ref ' + job.ref + ' already exists. Please use a different ref.');
+      return;
+    }
     db.jobs.push(job);
     supa.post('jobs', {
       ref: job.ref, name: job.name, description: job.desc||'',
@@ -2480,6 +2490,40 @@ function saveJob() {
   renderJobsTable();
   renderPipeline();
 }
+
+function archiveJob() {
+  const ref = document.getElementById('job-edit-ref').value;
+  if (!ref) return;
+  if (!confirm('Archive ' + ref + '? It will be hidden from the main list but kept in Supabase.')) return;
+  const job = db.jobs.find(j => j.ref === ref);
+  if (job) {
+    job.status = 'Archived';
+    syncJobToSupabase(ref);
+    db.jobs = db.jobs.filter(j => j.ref !== ref);
+    saveData();
+  }
+  closeModal('job-modal');
+  renderJobsTable();
+  renderPipeline();
+  renderDashboard();
+}
+
+function deleteJob() {
+  const ref = document.getElementById('job-edit-ref').value;
+  if (!ref) return;
+  if (!confirm('Permanently delete ' + ref + '? This cannot be undone.')) return;
+  const job = db.jobs.find(j => j.ref === ref);
+  if (job && job.id) {
+    supa.delete('jobs', job.id).catch(e => console.warn('Delete failed:', e));
+  }
+  db.jobs = db.jobs.filter(j => j.ref !== ref);
+  saveData();
+  closeModal('job-modal');
+  renderJobsTable();
+  renderPipeline();
+  renderDashboard();
+}
+
 
 function openJob(ref) {
   const j = db.jobs.find(x=>x.ref===ref);
