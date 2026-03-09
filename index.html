@@ -2261,11 +2261,13 @@ function renderJobsTable() {
     const _value = j.quoteValue ? '£' + j.quoteValue.toLocaleString() + ' quoted' : j.estimate ? '~£' + j.estimate.toLocaleString() + ' est.' : 'No value yet';
     const _cost = j.estCost ? '£' + j.estCost.toLocaleString() + ' est. cost' : '';
     const _notes = j.notes ? j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '';
+    const _pipeVal = j.quoteValue || j.estimate || 0;
+    const _margin = (_pipeVal && j.estCost) ? Math.round((_pipeVal - j.estCost) / _pipeVal * 100) + '%' : null;
     const _tip = '<div class="job-row-tip">'
       + '<strong>' + j.ref + ' – ' + j.name + '</strong><br>'
       + (_client ? _client + '<br>' : '')
       + (_dates ? _dates + '<br>' : '')
-      + _value + (_cost ? '  ·  ' + _cost : '') + '<br>'
+      + _value + (_cost ? '  ·  ' + _cost : '') + (_margin ? '  ·  <strong>' + _margin + ' margin</strong>' : '') + '<br>'
       + (_notes ? _notes : '')
       + '</div>';
     return `<tr class="clickable-row" onclick="openJob('${j.ref}')" onmouseenter="this.querySelector('.job-row-tip').style.display='block'" onmouseleave="this.querySelector('.job-row-tip').style.display='none'">
