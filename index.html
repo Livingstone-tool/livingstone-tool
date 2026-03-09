@@ -2262,13 +2262,14 @@ function renderJobsTable() {
     const _cost = j.estCost ? '£' + j.estCost.toLocaleString() + ' est. cost' : '';
     const _notes = j.notes ? j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '';
     const _pipeVal = j.quoteValue || j.estimate || 0;
-    const _margin = (_pipeVal && j.estCost) ? Math.round((_pipeVal - j.estCost) / _pipeVal * 100) + '%' : null;
+    const _margin = (_pipeVal && j.estCost) ? Math.round((_pipeVal - j.estCost) / _pipeVal * 100) + '% margin' : 'margin: n/a';
     const _tip = '<div class="job-row-tip">'
       + '<strong>' + j.ref + ' – ' + j.name + '</strong><br>'
       + (_client ? _client + '<br>' : '')
       + (_dates ? _dates + '<br>' : '')
-      + _value + (_cost ? '  ·  ' + _cost : '') + (_margin ? '  ·  <strong>' + _margin + ' margin</strong>' : '') + '<br>'
-      + (_notes ? _notes : '')
+      + _value + (_cost ? '  ·  ' + _cost : '') + '<br>'
+      + '<strong>' + _margin + '</strong>'
+      + (_notes ? '<br>' + _notes : '')
       + '</div>';
     return `<tr class="clickable-row" onclick="openJob('${j.ref}')" onmouseenter="this.querySelector('.job-row-tip').style.display='block'" onmouseleave="this.querySelector('.job-row-tip').style.display='none'">
       <td style="position:relative;"><strong>${j.ref}</strong>${_tip}</td>
