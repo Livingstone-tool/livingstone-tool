@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.53 -->
+<!-- Livingstone v2.54 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -4324,7 +4324,10 @@ function renderJobPlan() {
       <div class="card">
         <div class="card-header">
           <div class="card-title">Tasks (${done}/${total} complete)</div>
-          <button class="btn btn-sm btn-primary" onclick="addTaskToSelectedJob()">+ Add</button>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm btn-danger" id="bulk-delete-tasks-btn" style="display:none;" onclick="bulkDeleteTasks()">🗑 Delete Selected</button>
+            <button class="btn btn-sm btn-primary" onclick="addTaskToSelectedJob()">+ Add</button>
+          </div>
         </div>
         <div style="padding:0 16px 8px;">
           <div style="margin:12px 0 6px;display:flex;justify-content:space-between;font-size:12px;">
@@ -4333,11 +4336,17 @@ function renderJobPlan() {
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;"></div></div>
         </div>
         ${total > 0 ? `<div style="padding:0;">
+          <div style="padding:6px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+            <label style="font-size:11px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:4px;">
+              <input type="checkbox" onchange="toggleAllTaskCheckboxes(this.checked)"> Select all
+            </label>
+          </div>
           <table style="font-size:12.5px;width:100%;">
-            <thead><tr><th>Task</th><th>Who</th><th>End</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th style="width:30px;"></th><th>Task</th><th>Who</th><th>End</th><th>Status</th><th></th></tr></thead>
             <tbody>${tasks.map((t,i) => {
               const realIdx = db.tasks.indexOf(t);
               return `<tr>
+                <td style="text-align:center;"><input type="checkbox" class="task-check" data-idx="${realIdx}" onchange="updateBulkDeleteBtn()"></td>
                 <td>${t.desc}</td>
                 <td style="color:var(--text-muted);">${t.responsible||''}</td>
                 <td style="color:var(--text-muted);">${t.end||'—'}</td>
@@ -4515,6 +4524,40 @@ function getBadgeClass(s) {
   return map[s]||'badge-enquiry';
 }
 
+function toggleAllTaskCheckboxes(checked) {
+  document.querySelectorAll('.task-check').forEach(cb => cb.checked = checked);
+  updateBulkDeleteBtn();
+}
+
+function updateBulkDeleteBtn() {
+  const checked = document.querySelectorAll('.task-check:checked').length;
+  const btn = document.getElementById('bulk-delete-tasks-btn');
+  if (btn) {
+    btn.style.display = checked > 0 ? '' : 'none';
+    btn.textContent = '🗑 Delete ' + checked + ' selected';
+  }
+}
+
+async function bulkDeleteTasks() {
+  const checkboxes = document.querySelectorAll('.task-check:checked');
+  const indices = Array.from(checkboxes).map(cb => parseInt(cb.dataset.idx)).sort((a,b) => b - a); // reverse order for safe splicing
+  if (!indices.length) return;
+  if (!confirm('Delete ' + indices.length + ' selected task(s)? This cannot be undone.')) return;
+
+  for (const idx of indices) {
+    const task = db.tasks[idx];
+    if (task && task.id) {
+      try { await supa.delete('tasks', task.id); } catch(e) { console.warn('Delete failed:', e); }
+    }
+    db.tasks.splice(idx, 1);
+  }
+
+  saveData();
+  renderJobPlan();
+  renderGantt();
+  renderTasksTable();
+}
+
 function updateTaskStatus(idx, val) {
   db.tasks[idx].status = val;
   saveData();
@@ -4562,11 +4605,11 @@ async function generatePlanFromQuote() {
     return;
   }
 
-  // Gather all line items across rooms
+  // Gather all line items across rooms (skip materials — only labour/activity tasks)
   const allLines = [];
   quote.rooms.forEach(room => {
     (room.lines || []).forEach(l => {
-      if (l.desc && l.desc.trim()) {
+      if (l.desc && l.desc.trim() && l.type !== 'Material') {
         allLines.push({
           room: room.name,
           desc: l.desc.trim(),
