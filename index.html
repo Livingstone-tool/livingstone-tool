@@ -301,7 +301,7 @@
   .tab-content.active { display: block; }
   /* FAB */
   .fab-wishlist {
-    position: fixed; bottom: 80px; right: 24px;
+    position: fixed !important; bottom: 80px !important; right: 24px !important;
     background: var(--slate-dark);
     color: white;
     border: none;
@@ -313,7 +313,7 @@
     cursor: pointer;
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     transition: all 0.2s;
-    z-index: 90;
+    z-index: 500;
   }
   .fab-wishlist:hover { background: var(--slate); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
   /* PROGRESS BAR */
@@ -1349,7 +1349,7 @@
 </div>
 
 <!-- WISHLIST FAB -->
-<button class="fab-wishlist" onclick="openWishlist()">
+<button class="fab-wishlist" onclick="openWishlist()" style="position:fixed;bottom:80px;right:24px;z-index:1000;">
   💡 Feature Wishlist
 </button>
 
