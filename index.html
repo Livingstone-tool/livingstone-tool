@@ -670,32 +670,7 @@
         <div class="card-body" style="padding:0;">
           <table>
             <thead><tr><th>Job</th><th>Client</th><th>Value</th><th>Status</th></tr></thead>
-            <tbody>
-              <tr class="clickable-row" onclick="openJob('LP001')">
-                <td><strong>LP001</strong><br><span style="color:var(--text-muted);font-size:12px;">Yarlet Music Academy</span></td>
-                <td>Yarlet Trust</td>
-                <td><strong>£104,307</strong></td>
-                <td><span class="badge badge-quoted">Quoted</span></td>
-              </tr>
-              <tr class="clickable-row" onclick="openJob('LP006')">
-                <td><strong>LP006</strong><br><span style="color:var(--text-muted);font-size:12px;">Keates Ph.2</span></td>
-                <td>Keates</td>
-                <td><strong>£45,000</strong></td>
-                <td><span class="badge badge-quoted">Quoted</span></td>
-              </tr>
-              <tr class="clickable-row" onclick="openJob('LP002')">
-                <td><strong>LP002</strong><br><span style="color:var(--text-muted);font-size:12px;">Yarlet Reception</span></td>
-                <td>Yarlet Trust</td>
-                <td><strong>£23,300</strong></td>
-                <td><span class="badge badge-quoted">Quoted</span></td>
-              </tr>
-              <tr class="clickable-row" onclick="openJob('LP003')">
-                <td><strong>LP003</strong><br><span style="color:var(--text-muted);font-size:12px;">Oak House Ph.1</span></td>
-                <td>Oak House</td>
-                <td><strong>£18,282</strong></td>
-                <td><span class="badge badge-preparing">Preparing</span></td>
-              </tr>
-            </tbody>
+            <tbody id="dash-high-value-body"></tbody>
           </table>
         </div>
       </div>
@@ -2212,6 +2187,25 @@ function renderDashboard() {
   set('dash-confirmed-sub', quotedJobs.length + ' quoted, pending');
   set('dash-quotes-value', quotedVal ? '£' + Math.round(quotedVal).toLocaleString() : '—');
   set('dash-quotes-sub', quotedJobs.length + ' quotes outstanding');
+
+  // High value jobs
+  const hvBody = document.getElementById('dash-high-value-body');
+  if (hvBody) {
+    const sorted = [...db.jobs]
+      .filter(j => (j.quoteValue || j.estimate || 0) > 0)
+      .sort((a,b) => (b.quoteValue||b.estimate||0) - (a.quoteValue||a.estimate||0))
+      .slice(0, 5);
+    hvBody.innerHTML = sorted.map(j => {
+      const val = j.quoteValue || j.estimate || 0;
+      const valLabel = j.quoteValue ? '£' + Math.round(val).toLocaleString() : '~£' + Math.round(val).toLocaleString();
+      return `<tr class="clickable-row" onclick="openJob('${j.ref}')">
+        <td><strong>${j.ref}</strong><br><span style="color:var(--text-muted);font-size:12px;">${j.name}</span></td>
+        <td>${j.client?.name||'—'}</td>
+        <td><strong>${valLabel}</strong></td>
+        <td>${statusBadge(j.status)}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">No jobs with values yet</td></tr>';
+  }
 
   renderPipeline();
   renderJobsTable();
