@@ -1539,7 +1539,11 @@ const STORE_KEY = 'lp_data_v1';
 
 function saveData() {
   // Save to localStorage as backup + sync key changes to Supabase
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); localStorage.setItem('livingstoneCosts', JSON.stringify(db.costs||[])); } catch(e) {}
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    localStorage.setItem('livingstoneCosts', JSON.stringify(db.costs||[]));
+    localStorage.setItem('livingstoneWishlist', JSON.stringify(db.wishlist||[]));
+  } catch(e) {}
 }
 
 async function syncJobToSupabase(ref) {
@@ -2181,7 +2185,8 @@ function renderDashboard() {
   const activeStatuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold'];
   const activeJobs = db.jobs.filter(j => activeStatuses.includes(j.status));
   const pipelineVal = activeJobs.reduce((s,j) => s + (j.quoteValue || j.estimate || 0), 0);
-  const totalCost = activeJobs.reduce((s,j) => s + (j.estCost || 0), 0);
+  // Only count est cost for jobs that have a pipeline value (quote or estimate)
+  const totalCost = activeJobs.reduce((s,j) => (j.quoteValue || j.estimate) ? s + (j.estCost || 0) : s, 0);
   const totalMargin = pipelineVal - totalCost;
   const marginPct = pipelineVal ? (totalMargin/pipelineVal*100).toFixed(1) : 0;
   const confirmedJobs = db.jobs.filter(j => j.status === 'Confirmed' || j.status === 'In Progress');
@@ -3445,6 +3450,12 @@ window.addEventListener('load', async () => {
   if (app) app.style.opacity = '0';
   
   await loadFromSupabase();
+
+  // Restore wishlist from localStorage (not stored in Supabase)
+  try {
+    const wl = localStorage.getItem('livingstoneWishlist');
+    if (wl) db.wishlist = JSON.parse(wl);
+  } catch(e) {}
   
   // Remove loading overlay
   const overlay = document.getElementById('loading-overlay');
