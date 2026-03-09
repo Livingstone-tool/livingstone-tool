@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.50 -->
+<!-- Livingstone v2.51 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -319,6 +319,9 @@
   /* PROGRESS BAR */
   .progress-bar { background: var(--limestone-dark); border-radius: 4px; height: 6px; overflow: hidden; }
   .progress-fill { height: 100%; border-radius: 4px; background: var(--copper); transition: width 0.3s; }
+  .gantt-task-bar:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important; }
+  .gantt-task-bar:active { cursor: grabbing !important; }
+  .gantt-resize-handle:hover { background: rgba(255,255,255,0.3); }
   /* DIVIDER */
   .divider { height: 1px; background: var(--border); margin: 20px 0; }
   /* PIPELINE KANBAN */
@@ -4214,35 +4217,65 @@ function renderJobPlan() {
     'Completed': 'var(--success)', 'Blocked': 'var(--danger)'
   };
 
-  // Build mini gantt for this job's tasks
+  // Build interactive task timeline with draggable bars
   let miniGantt = '';
   const datedTasks = tasks.filter(t => t.start && t.end);
   if (datedTasks.length > 0) {
-    const allDates = datedTasks.flatMap(t => [new Date(t.start), new Date(t.end)]);
+    const jobS = job.startDate ? new Date(job.startDate) : new Date(Math.min(...datedTasks.map(t=>new Date(t.start))));
+    const jobE = job.endDate ? new Date(job.endDate) : new Date(Math.max(...datedTasks.map(t=>new Date(t.end))));
+    const allDates = [jobS, jobE, ...datedTasks.flatMap(t => [new Date(t.start), new Date(t.end)])];
     const minD = new Date(Math.min(...allDates));
     const maxD = new Date(Math.max(...allDates));
     const spanDays = Math.max(1, (maxD - minD) / 86400000) + 2;
-    const BAR_TOTAL = 400;
+    const BAR_TOTAL = 500;
+    const fmtShort = d => new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
 
-    miniGantt = `<div style="margin:16px 0;overflow-x:auto;">
-      <div style="min-width:${BAR_TOTAL + 160}px;">
-        ${datedTasks.map(t => {
-          const ts = new Date(t.start); const te = new Date(t.end);
-          const left = ((ts - minD) / 86400000 / spanDays) * BAR_TOTAL;
-          const w = Math.max(8, ((te - ts) / 86400000 + 1) / spanDays * BAR_TOTAL);
-          const color = statusColors[t.status] || '#adb5bd';
-          return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px;">
-            <div style="width:150px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);">${t.desc}</div>
-            <div style="position:relative;height:22px;flex:1;background:var(--limestone);border-radius:3px;overflow:hidden;">
-              <div style="position:absolute;left:${left}px;width:${w}px;height:100%;background:${color};border-radius:3px;opacity:0.8;display:flex;align-items:center;padding-left:4px;">
-                <span style="font-size:10px;color:white;white-space:nowrap;">${t.responsible||''}</span>
-              </div>
-            </div>
-            <div style="width:80px;font-size:11px;color:var(--text-muted);flex-shrink:0;">${t.end||''}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
+    // Week markers
+    let weekMarkers = '';
+    const wk = new Date(minD);
+    wk.setDate(wk.getDate() - wk.getDay() + 1); // Monday
+    while (wk <= maxD) {
+      const wkLeft = ((wk - minD) / 86400000 / spanDays) * BAR_TOTAL;
+      if (wkLeft >= 0 && wkLeft <= BAR_TOTAL) {
+        weekMarkers += '<div style="position:absolute;left:' + wkLeft.toFixed(1) + 'px;top:0;bottom:0;width:1px;background:var(--border);z-index:0;"></div>';
+        weekMarkers += '<div style="position:absolute;left:' + (wkLeft+2).toFixed(1) + 'px;top:-16px;font-size:9px;color:var(--text-muted);white-space:nowrap;">' + fmtShort(wk) + '</div>';
+      }
+      wk.setDate(wk.getDate() + 7);
+    }
+
+    // Today marker
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayLeft = ((today - minD) / 86400000 / spanDays) * BAR_TOTAL;
+    let todayMarker = '';
+    if (todayLeft >= 0 && todayLeft <= BAR_TOTAL) {
+      todayMarker = '<div style="position:absolute;left:' + todayLeft.toFixed(1) + 'px;top:0;bottom:0;width:2px;background:var(--danger);z-index:1;opacity:0.6;" title="Today"></div>';
+    }
+
+    miniGantt = '<div style="margin:16px 0;overflow-x:auto;">' +
+      '<div style="min-width:' + (BAR_TOTAL + 220) + 'px;padding-top:20px;">' +
+      datedTasks.map((t, ti) => {
+        const realIdx = db.tasks.indexOf(t);
+        const ts = new Date(t.start); const te = new Date(t.end);
+        const left = ((ts - minD) / 86400000 / spanDays) * BAR_TOTAL;
+        const w = Math.max(8, ((te - ts) / 86400000 + 1) / spanDays * BAR_TOTAL);
+        const color = statusColors[t.status] || '#adb5bd';
+        const days = Math.round((te - ts) / 86400000) + 1;
+        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:12px;height:28px;">' +
+          '<div style="width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-size:11.5px;" title="' + (t.desc||'') + '">' + (t.desc||'') + '</div>' +
+          '<div style="position:relative;height:24px;flex:1;min-width:' + BAR_TOTAL + 'px;" data-gantt-track="1">' +
+          weekMarkers + todayMarker +
+          '<div class="gantt-task-bar" data-task-idx="' + realIdx + '" ' +
+          'style="position:absolute;left:' + left.toFixed(1) + 'px;width:' + w.toFixed(1) + 'px;height:100%;background:' + color + ';border-radius:4px;cursor:grab;z-index:2;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.15);transition:box-shadow 0.15s;" ' +
+          'title="' + fmtShort(t.start) + ' → ' + fmtShort(t.end) + ' (' + days + 'd)\nDrag to move · Drag edges to resize">' +
+          '<div class="gantt-resize-handle gantt-resize-left" style="position:absolute;left:0;top:0;bottom:0;width:6px;cursor:ew-resize;border-radius:4px 0 0 4px;z-index:3;"></div>' +
+          '<span style="font-size:10px;color:white;white-space:nowrap;pointer-events:none;padding:0 8px;overflow:hidden;text-overflow:ellipsis;">' + days + 'd</span>' +
+          '<div class="gantt-resize-handle gantt-resize-right" style="position:absolute;right:0;top:0;bottom:0;width:6px;cursor:ew-resize;border-radius:0 4px 4px 0;z-index:3;"></div>' +
+          '</div></div>' +
+          '<div style="width:100px;font-size:10px;color:var(--text-muted);flex-shrink:0;text-align:right;">' + fmtShort(t.start) + ' – ' + fmtShort(t.end) + '</div>' +
+          '</div>';
+      }).join('') +
+      '</div></div>';
+  }
   }
 
   // Task status counts
@@ -4353,6 +4386,113 @@ function renderJobPlan() {
   `;
 }
 
+// ── Interactive Task Timeline Drag Handlers ──────────────────────────────
+(function() {
+  let dragState = null;
+
+  document.addEventListener('mousedown', function(e) {
+    const bar = e.target.closest('.gantt-task-bar');
+    if (!bar) return;
+    const track = bar.parentElement;
+    if (!track) return;
+
+    const taskIdx = parseInt(bar.dataset.taskIdx);
+    const task = db.tasks[taskIdx];
+    if (!task) return;
+
+    const trackRect = track.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+
+    // Find the job to get the date span
+    const ref = task.jobRef;
+    const job = db.jobs.find(j => j.ref === ref);
+    const jobTasks = db.tasks.filter(t => t.jobRef === ref && t.start && t.end);
+    const jobS = job && job.startDate ? new Date(job.startDate) : new Date(Math.min(...jobTasks.map(t=>new Date(t.start))));
+    const jobE = job && job.endDate ? new Date(job.endDate) : new Date(Math.max(...jobTasks.map(t=>new Date(t.end))));
+    const allDates = [jobS, jobE, ...jobTasks.flatMap(t => [new Date(t.start), new Date(t.end)])];
+    const minD = new Date(Math.min(...allDates));
+    const maxD = new Date(Math.max(...allDates));
+    const spanDays = Math.max(1, (maxD - minD) / 86400000) + 2;
+    const trackW = track.offsetWidth || 500;
+
+    const isLeftResize = e.target.classList.contains('gantt-resize-left');
+    const isRightResize = e.target.classList.contains('gantt-resize-right');
+    const mode = isLeftResize ? 'resize-left' : isRightResize ? 'resize-right' : 'move';
+
+    dragState = {
+      taskIdx, bar, track, trackW, minD, spanDays, mode,
+      startX: e.clientX,
+      origStart: new Date(task.start),
+      origEnd: new Date(task.end),
+      origLeft: parseFloat(bar.style.left),
+      origWidth: parseFloat(bar.style.width)
+    };
+
+    bar.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+    bar.style.zIndex = '10';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!dragState) return;
+    const { bar, trackW, minD, spanDays, mode, startX, origStart, origEnd, origLeft, origWidth } = dragState;
+    const dx = e.clientX - startX;
+    const daysPx = trackW / spanDays;
+    const daysDelta = Math.round(dx / daysPx);
+
+    if (mode === 'move') {
+      const newLeft = origLeft + daysDelta * daysPx;
+      bar.style.left = newLeft.toFixed(1) + 'px';
+    } else if (mode === 'resize-left') {
+      const newLeft = origLeft + daysDelta * daysPx;
+      const newWidth = origWidth - daysDelta * daysPx;
+      if (newWidth >= daysPx) {
+        bar.style.left = newLeft.toFixed(1) + 'px';
+        bar.style.width = newWidth.toFixed(1) + 'px';
+      }
+    } else if (mode === 'resize-right') {
+      const newWidth = origWidth + daysDelta * daysPx;
+      if (newWidth >= daysPx) {
+        bar.style.width = newWidth.toFixed(1) + 'px';
+      }
+    }
+  });
+
+  document.addEventListener('mouseup', function(e) {
+    if (!dragState) return;
+    const { taskIdx, bar, trackW, minD, spanDays, mode, startX, origStart, origEnd } = dragState;
+    const dx = e.clientX - startX;
+    const daysPx = trackW / spanDays;
+    const daysDelta = Math.round(dx / daysPx);
+
+    bar.style.boxShadow = '';
+    bar.style.zIndex = '2';
+
+    if (daysDelta !== 0) {
+      const task = db.tasks[taskIdx];
+      const fmtDate = d => d.toISOString().split('T')[0];
+
+      if (mode === 'move') {
+        task.start = fmtDate(new Date(origStart.getTime() + daysDelta * 86400000));
+        task.end = fmtDate(new Date(origEnd.getTime() + daysDelta * 86400000));
+      } else if (mode === 'resize-left') {
+        const newStart = new Date(origStart.getTime() + daysDelta * 86400000);
+        if (newStart < new Date(task.end)) task.start = fmtDate(newStart);
+      } else if (mode === 'resize-right') {
+        const newEnd = new Date(origEnd.getTime() + daysDelta * 86400000);
+        if (newEnd > new Date(task.start)) task.end = fmtDate(newEnd);
+      }
+
+      saveData();
+      syncTaskToSupabase(task);
+      // Re-render to update labels and positions
+      renderJobPlan();
+    }
+
+    dragState = null;
+  });
+})();
+
 function statusBadge(s) {
   const cls = getBadgeClass(s);
   return '<span class="badge ' + cls + '">' + (s||'Unknown') + '</span>';
@@ -4381,7 +4521,7 @@ async function generatePlanFromQuote() {
   const job = db.jobs.find(j => j.ref === ref);
   if (!job) { alert('Job not found.'); return; }
 
-  // Find matching quote — normalise refs
+  // Find matching quote
   const norm = r => (r||'').replace(/-/g,'').toUpperCase();
   const quote = db.quotes.find(q => norm(q.number) === norm(ref) || norm(q.jobRef) === norm(ref));
   if (!quote || !quote.rooms || !quote.rooms.length) {
@@ -4389,69 +4529,70 @@ async function generatePlanFromQuote() {
     return;
   }
 
+  // Gather all line items across rooms
+  const allLines = [];
+  quote.rooms.forEach(room => {
+    (room.lines || []).forEach(l => {
+      if (l.desc && l.desc.trim()) {
+        allLines.push({
+          room: room.name,
+          desc: l.desc.trim(),
+          value: l.withMargin || l.subtotal || (l.qty||0)*(l.rate||0) || 0,
+          type: l.type || 'Labour',
+          qty: l.qty || 0
+        });
+      }
+    });
+  });
+
+  if (!allLines.length) { alert('Quote has no line items.'); return; }
+
   // Check for existing tasks
   const existingTasks = db.tasks.filter(t => t.jobRef === ref);
   if (existingTasks.length > 0) {
-    if (!confirm(ref + ' already has ' + existingTasks.length + ' task(s). Generate additional tasks from quote? (Existing tasks won\'t be removed)')) return;
+    if (!confirm(ref + ' already has ' + existingTasks.length + ' task(s). Generate additional tasks from quote?\n(Existing tasks won\'t be removed)')) return;
   } else {
-    if (!confirm('Generate project plan for ' + ref + ' — ' + job.name + ' from its quote (' + quote.rooms.length + ' rooms)?')) return;
+    if (!confirm('Generate ' + allLines.length + ' tasks for ' + ref + ' — ' + job.name + '?')) return;
   }
 
-  // Build tasks: one task per room, grouping lines into the description
-  const rooms = quote.rooms.filter(r => r.lines && r.lines.length > 0);
-  if (!rooms.length) { alert('Quote has no line items to generate tasks from.'); return; }
-
-  // Calculate sequential dates across the job span
+  // Sequential dates, weighted by value
   const jobStart = job.startDate ? new Date(job.startDate) : new Date();
   const jobEnd = job.endDate ? new Date(job.endDate) : new Date(jobStart.getTime() + 30 * 86400000);
-  const totalDays = Math.max(1, Math.round((jobEnd - jobStart) / 86400000));
-
-  // Weight each room by its total value to allocate days proportionally
-  const roomTotals = rooms.map(r => r.lines.reduce((s, l) => s + (l.withMargin || l.subtotal || (l.qty||0)*(l.rate||0) || 0), 0));
-  const grandTotal = roomTotals.reduce((s, v) => s + v, 0) || 1;
-
+  const totalDays = Math.max(allLines.length, Math.round((jobEnd - jobStart) / 86400000));
+  const grandTotal = allLines.reduce((s, l) => s + l.value, 0) || 1;
   const leadName = job.lead === 'A' ? 'Adam Hemming' : 'Tom';
   const fmtDate = d => d.toISOString().split('T')[0];
 
   let cursor = new Date(jobStart);
   const newTasks = [];
 
-  for (let i = 0; i < rooms.length; i++) {
-    const room = rooms[i];
-    // Proportional duration based on value, minimum 1 day
-    const proportion = roomTotals[i] / grandTotal;
-    const days = Math.max(1, Math.round(proportion * totalDays));
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i];
+    // Days proportional to value, min 1, or use qty (days) for labour
+    let days;
+    if (line.type === 'Labour' && line.qty >= 1) {
+      days = Math.max(1, Math.round(line.qty));
+    } else {
+      days = Math.max(1, Math.round((line.value / grandTotal) * totalDays));
+    }
 
     const taskStart = new Date(cursor);
     const taskEnd = new Date(cursor.getTime() + (days - 1) * 86400000);
-    // Don't exceed job end
     if (taskEnd > jobEnd) taskEnd.setTime(jobEnd.getTime());
 
-    // Build description from line items
-    const lineDescs = room.lines
-      .filter(l => l.desc && l.desc.trim())
-      .map(l => l.desc.trim());
-    const desc = room.name + (lineDescs.length ? ': ' + lineDescs.join(', ') : '');
-
-    const task = {
+    newTasks.push({
       jobRef: ref,
-      desc: desc,
+      desc: line.room + ': ' + line.desc,
       responsible: leadName,
       start: fmtDate(taskStart),
       end: fmtDate(taskEnd),
       status: 'Not Started'
-    };
+    });
 
-    newTasks.push(task);
-    // Next task starts day after this one ends
     cursor = new Date(taskEnd.getTime() + 86400000);
   }
 
-  // Preview before committing
-  const preview = newTasks.map((t, i) => (i+1) + '. ' + t.desc.substring(0, 60) + (t.desc.length > 60 ? '...' : '') + ' (' + t.start + ' → ' + t.end + ')').join('\n');
-  if (!confirm('About to create ' + newTasks.length + ' tasks:\n\n' + preview + '\n\nProceed?')) return;
-
-  // Add tasks to db and sync
+  // Add to db and sync
   for (const task of newTasks) {
     db.tasks.push(task);
     try { await syncTaskToSupabase(task); } catch(e) { console.warn('Task sync failed:', e); }
@@ -4461,7 +4602,7 @@ async function generatePlanFromQuote() {
   renderJobPlan();
   renderGantt();
   renderTasksTable();
-  alert('Done! ' + newTasks.length + ' tasks created for ' + ref + '.');
+  alert('Done! ' + newTasks.length + ' tasks created for ' + ref + '. Drag the bars to adjust dates.');
 }
 
 function addTaskToSelectedJob() {
