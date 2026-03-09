@@ -2218,7 +2218,7 @@ function renderDashboard() {
   const st = document.getElementById('sub-preview-table');
   st.innerHTML = db.subs.slice(0,6).map(s => {
     const avg = s.reliability&&s.quality ? ((s.reliability+s.quality+s.costScore)/3).toFixed(1) : '–';
-    return `<tr><td>${s.name}</td><td>${s.trade}</td><td>£${s.dayRate}/day</td><td>${avg!='–'?'⭐'+avg:'–'}</td></tr>`;
+    return `<tr><td>${s.name}</td><td>${s.trade}</td><td>£${s.dayRate}/day</td><td>${avg!='–'?'\u2B50'+avg:'–'}</td></tr>`;
   }).join('');
 }
 
@@ -2236,24 +2236,20 @@ function renderPipeline() {
     const total = colJobs.reduce((s,j)=>s+(j.quoteValue||j.estimate||0),0);
     const cards = colJobs.map(j=>{
       const displayVal = j.quoteValue || j.estimate || 0;
-      const valLabel = j.quoteValue ? '£'+j.quoteValue.toLocaleString() : j.estimate ? '~£'+j.estimate.toLocaleString() : 'TBC';
-      return `
-      <div class="pipeline-card" onclick="openJob('${j.ref}')">
-        <div class="job-ref">${j.ref}</div>
-        <div class="job-name">${j.name}</div>
-        <div class="job-value">${valLabel} · ${j.lead==='A'?'Adam':'Tom'}</div>
-      </div>`;
+      const valLabel = j.quoteValue ? '\u00a3'+j.quoteValue.toLocaleString() : j.estimate ? '~\u00a3'+j.estimate.toLocaleString() : 'TBC';
+      const cardHtml = '<div class="pipeline-card" onclick="openJob(\'' + j.ref + '\')">'
+        + '<div class="job-ref">' + j.ref + '</div>'
+        + '<div class="job-name">' + j.name + '</div>'
+        + '<div class="job-value">' + valLabel + ' \u00b7 ' + (j.lead==='A'?'Adam':'Tom') + '</div>'
+        + '</div>';
+      return cardHtml;
     }).join('');
-    return `<div class="pipeline-col">
-      <div class="pipeline-col-header">
-        ${status}
-        <span style="font-size:11px;color:rgba(255,255,255,0.5);">${colJobs.length}</span>
-      </div>
-      <div class="pipeline-cards">
-        ${cards || '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">Empty</div>'}
-        ${total > 0 ? `<div style="text-align:right;font-size:11px;color:var(--text-muted);padding:4px 6px 0;">Total: <strong>£${total.toLocaleString()}</strong></div>` : ''}
-      </div>
-    </div>`;
+    const emptyHtml = colJobs.length === 0 ? '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">Empty</div>' : '';
+    const totalHtml = total > 0 ? '<div style="text-align:right;font-size:11px;color:var(--text-muted);padding:4px 6px 0;">Total: <strong>\u00a3' + total.toLocaleString() + '</strong></div>' : '';
+    return '<div class="pipeline-col">'
+      + '<div class="pipeline-col-header">' + status + '<span style="font-size:11px;color:rgba(255,255,255,0.5);">' + colJobs.length + '</span></div>'
+      + '<div class="pipeline-cards">' + (cards || emptyHtml) + totalHtml + '</div>'
+      + '</div>';
   }).join('');
 }
 
@@ -2418,7 +2414,7 @@ function openJob(ref) {
   const margin = j.quoteValue && j.estCost ? j.quoteValue-j.estCost : 0;
   const marginPct = j.quoteValue ? (margin/j.quoteValue*100).toFixed(1)+'%' : '—';
   const dur = j.startDate&&j.endDate ? Math.round((new Date(j.endDate)-new Date(j.startDate))/(1000*60*60*24))+' days' : '—';
-  document.getElementById('jd-scale').textContent = j.scale ? '⭐'.repeat(Math.min(j.scale,10))+' ('+j.scale+'/10)' : '—';
+  document.getElementById('jd-scale').textContent = j.scale ? '\u2B50'.repeat(Math.min(j.scale,10))+' ('+j.scale+'/10)' : '—';
   document.getElementById('jd-lead').innerHTML = j.lead==='A' ? '<span class="chip chip-a">Adam</span>' : '<span class="chip chip-t">Tom</span>';
   document.getElementById('jd-start').textContent = j.startDate||'—';
   document.getElementById('jd-end').textContent = j.endDate||'—';
@@ -2591,7 +2587,7 @@ function renderQBRooms() {
     const roomTotal = room.lines.reduce((s,l)=>s+(l.withMargin||0),0);
     const lines = room.lines.map((l, li) => `
       <div class="qb-line" draggable="true" data-ri="${ri}" data-li="${li}" style="cursor:grab;">
-        <span class="drag-handle" style="cursor:grab;color:var(--text-muted);font-size:16px;padding:0 4px;user-select:none;" title="Drag to reorder">⠿</span>
+        <span class="drag-handle" style="cursor:grab;color:var(--text-muted);font-size:16px;padding:0 4px;user-select:none;" title="Drag to reorder">&#x28FF;</span>
         <input type="text" value="${l.desc||''}" placeholder="Description" oninput="updateLine(${ri},${li},'desc',this.value)" style="font-size:12.5px;">
         <select onchange="updateLine(${ri},${li},'supplier',this.value)" style="font-size:12px;">
           ${db.products.map(p=>`<option ${p.name===l.supplier?'selected':''}>${p.name}</option>`).join('')}
@@ -2603,9 +2599,9 @@ function renderQBRooms() {
         <input type="number" value="${l.qty||1}" min="0" step="0.5" oninput="updateLine(${ri},${li},'qty',parseFloat(this.value)||0)" style="font-size:12.5px;">
         <input type="number" value="${l.rate||0}" min="0" step="0.01" oninput="updateLine(${ri},${li},'rate',parseFloat(this.value)||0)" style="font-size:12.5px;">
         <span data-linetotal style="font-size:12.5px;font-weight:600;">£${((l.withMargin)||0).toFixed(2)}</span>
-        <button class="del-btn" onclick="removeLine(${ri},${li})">🗑</button>
-      </div>`;
-    }).join('');
+        <button class="del-btn" onclick="removeLine(${ri},${li})">&#x1F5D1;</button>
+      </div>`
+    ).join('');
 
     return `<div class="qb-room-section">
       <div class="qb-room-header">
@@ -3089,7 +3085,7 @@ function renderSubs() {
   const container = document.getElementById('subs-cards-container');
   container.innerHTML = db.subs.map((s,i) => {
     const avg = (s.reliability&&s.quality&&s.costScore) ? ((s.reliability+s.quality+s.costScore)/3).toFixed(1) : null;
-    const stars = avg ? '⭐'.repeat(Math.round(avg/2)) : '';
+    const stars = avg ? '\u2B50'.repeat(Math.round(avg/2)) : '';
     return `<div class="card" style="margin-bottom:12px;">
       <div class="card-body">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
