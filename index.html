@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.49 -->
+<!-- Livingstone v2.50 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1238,6 +1238,7 @@
         </select>
         <button class="btn btn-primary" onclick="addTaskToSelectedJob()">+ Add Task</button>
         <button class="btn btn-secondary" onclick="addPaymentGateModal()">+ Payment Gate</button>
+        <button class="btn btn-secondary" onclick="generatePlanFromQuote()" style="background:var(--copper);color:white;">📋 Generate Plan from Quote</button>
       </div>
       <div id="jobplan-area">
         <div class="empty-state"><div class="icon" style="font-size:40px;opacity:0.4;margin-bottom:12px;">clipboard</div><p>Select a job above to see its project plan</p></div>
@@ -4371,6 +4372,96 @@ function updateTaskStatus(idx, val) {
   saveData();
   syncTaskToSupabase(db.tasks[idx]);
   renderJobPlan();
+}
+
+async function generatePlanFromQuote() {
+  const ref = document.getElementById('jobplan-select') ? document.getElementById('jobplan-select').value : '';
+  if (!ref) { alert('Please select a job first.'); return; }
+
+  const job = db.jobs.find(j => j.ref === ref);
+  if (!job) { alert('Job not found.'); return; }
+
+  // Find matching quote — normalise refs
+  const norm = r => (r||'').replace(/-/g,'').toUpperCase();
+  const quote = db.quotes.find(q => norm(q.number) === norm(ref) || norm(q.jobRef) === norm(ref));
+  if (!quote || !quote.rooms || !quote.rooms.length) {
+    alert('No quote found for ' + ref + ', or the quote has no rooms/line items.');
+    return;
+  }
+
+  // Check for existing tasks
+  const existingTasks = db.tasks.filter(t => t.jobRef === ref);
+  if (existingTasks.length > 0) {
+    if (!confirm(ref + ' already has ' + existingTasks.length + ' task(s). Generate additional tasks from quote? (Existing tasks won\'t be removed)')) return;
+  } else {
+    if (!confirm('Generate project plan for ' + ref + ' — ' + job.name + ' from its quote (' + quote.rooms.length + ' rooms)?')) return;
+  }
+
+  // Build tasks: one task per room, grouping lines into the description
+  const rooms = quote.rooms.filter(r => r.lines && r.lines.length > 0);
+  if (!rooms.length) { alert('Quote has no line items to generate tasks from.'); return; }
+
+  // Calculate sequential dates across the job span
+  const jobStart = job.startDate ? new Date(job.startDate) : new Date();
+  const jobEnd = job.endDate ? new Date(job.endDate) : new Date(jobStart.getTime() + 30 * 86400000);
+  const totalDays = Math.max(1, Math.round((jobEnd - jobStart) / 86400000));
+
+  // Weight each room by its total value to allocate days proportionally
+  const roomTotals = rooms.map(r => r.lines.reduce((s, l) => s + (l.withMargin || l.subtotal || (l.qty||0)*(l.rate||0) || 0), 0));
+  const grandTotal = roomTotals.reduce((s, v) => s + v, 0) || 1;
+
+  const leadName = job.lead === 'A' ? 'Adam Hemming' : 'Tom';
+  const fmtDate = d => d.toISOString().split('T')[0];
+
+  let cursor = new Date(jobStart);
+  const newTasks = [];
+
+  for (let i = 0; i < rooms.length; i++) {
+    const room = rooms[i];
+    // Proportional duration based on value, minimum 1 day
+    const proportion = roomTotals[i] / grandTotal;
+    const days = Math.max(1, Math.round(proportion * totalDays));
+
+    const taskStart = new Date(cursor);
+    const taskEnd = new Date(cursor.getTime() + (days - 1) * 86400000);
+    // Don't exceed job end
+    if (taskEnd > jobEnd) taskEnd.setTime(jobEnd.getTime());
+
+    // Build description from line items
+    const lineDescs = room.lines
+      .filter(l => l.desc && l.desc.trim())
+      .map(l => l.desc.trim());
+    const desc = room.name + (lineDescs.length ? ': ' + lineDescs.join(', ') : '');
+
+    const task = {
+      jobRef: ref,
+      desc: desc,
+      responsible: leadName,
+      start: fmtDate(taskStart),
+      end: fmtDate(taskEnd),
+      status: 'Not Started'
+    };
+
+    newTasks.push(task);
+    // Next task starts day after this one ends
+    cursor = new Date(taskEnd.getTime() + 86400000);
+  }
+
+  // Preview before committing
+  const preview = newTasks.map((t, i) => (i+1) + '. ' + t.desc.substring(0, 60) + (t.desc.length > 60 ? '...' : '') + ' (' + t.start + ' → ' + t.end + ')').join('\n');
+  if (!confirm('About to create ' + newTasks.length + ' tasks:\n\n' + preview + '\n\nProceed?')) return;
+
+  // Add tasks to db and sync
+  for (const task of newTasks) {
+    db.tasks.push(task);
+    try { await syncTaskToSupabase(task); } catch(e) { console.warn('Task sync failed:', e); }
+  }
+
+  saveData();
+  renderJobPlan();
+  renderGantt();
+  renderTasksTable();
+  alert('Done! ' + newTasks.length + ' tasks created for ' + ref + '.');
 }
 
 function addTaskToSelectedJob() {
