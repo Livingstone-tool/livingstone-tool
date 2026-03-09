@@ -4703,13 +4703,13 @@ function renderCostAllocations() {
     var placeholderVal = a.mode === '%' ? '100' : '0.00';
 
     html += '<div style="display:flex;gap:8px;align-items:center;background:var(--limestone);border-radius:7px;padding:10px 12px;">';
-    html += '<select onchange="updateAlloc(' + i + ','jobRef',this.value)" style="flex:2;font-size:13px;">' + jobOpts + '</select>';
-    html += '<select onchange="updateAlloc(' + i + ','mode',this.value)" style="width:60px;font-size:13px;">';
+    html += '<select onchange="updateAlloc(' + i + ',\'jobRef\',this.value)" style="flex:2;font-size:13px;">' + jobOpts + '</select>';
+    html += '<select onchange="updateAlloc(' + i + ',\'mode\',this.value)" style="width:60px;font-size:13px;">';
     html += '<option value="£"' + modeSelected_gbp + '>£</option>';
     html += '<option value="%"' + modeSelected_pct + '>%</option>';
     html += '</select>';
-    html += '<input type="number" min="0" step="' + stepVal + '" value="' + currentVal + '" placeholder="' + placeholderVal + '" style="width:90px;font-size:13px;text-align:right;" oninput="updateAlloc(' + i + ','value',parseFloat(this.value)||0)">';
-    html += '<button class="btn btn-sm btn-danger" onclick="removeCostAllocation(' + i + ')" style="flex-shrink:0;">X</button>';
+    html += '<input type="number" min="0" step="' + stepVal + '" value="' + currentVal + '" placeholder="' + placeholderVal + '" style="width:90px;font-size:13px;text-align:right;" oninput="updateAlloc(' + i + ',\'value\',parseFloat(this.value)||0)">';
+    html += '<button class="btn btn-sm btn-danger" onclick="removeCostAllocation(' + i + ')" style="flex-shrink:0;">&#x2715;</button>';
     html += '</div>';
   });
   container.innerHTML = html;
