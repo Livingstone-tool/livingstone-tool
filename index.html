@@ -763,7 +763,7 @@
         </select>
       </div>
       <button class="btn btn-primary" onclick="newJobModal()">+ New Job</button>
-      <button class="btn btn-secondary" onclick="purgeNoRefJobs()" style="background:#e74c3c;color:white;font-size:12px;" title="Delete all jobs with no LP ref">🗑 Purge NO REF jobs</button>
+      <button class="btn btn-secondary" onclick="reseedJobsFromBackup()" style="background:#e67e22;color:white;font-size:12px;">⚠ Restore Jobs from Backup</button>
     </div>
     <div class="card">
       <div class="table-wrap">
@@ -1746,6 +1746,16 @@ async function loadFromSupabase() {
     }));
     db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
     db.jobs = db.jobs.filter((j, i, arr) => arr.findIndex(x => x.ref === j.ref) === i);
+    // If Supabase returned no jobs, fall back to localStorage
+    if (db.jobs.length === 0) {
+      try {
+        const cached = JSON.parse(localStorage.getItem('livingstoneDB'));
+        if (cached && cached.jobs && cached.jobs.length > 0) {
+          db.jobs = cached.jobs;
+          console.warn('Supabase returned 0 jobs - using localStorage cache');
+        }
+      } catch(e) {}
+    }
 
     db.tasks = tasks.map(t => ({
       id: t.id,
@@ -2344,199 +2354,47 @@ function renderPipeline() {
 // ============================================================
 // JOBS TABLE
 // ============================================================
-function renderJobsTable() {
-  const statusF = document.getElementById('job-filter-status').value;
-  const leadF = document.getElementById('job-filter-lead').value;
-  const jobs = db.jobs.filter(j =>
-    (!statusF || j.status===statusF) &&
-    (!leadF || j.lead===leadF)
-  );
-  const tbody = document.getElementById('jobs-table-body');
-  tbody.innerHTML = jobs.map(j => {
-    const _client = j.client?.name || '';
-    const _dates = j.startDate ? j.startDate + (j.endDate ? ' → ' + j.endDate : '') : '';
-    const _value = j.quoteValue ? '£' + j.quoteValue.toLocaleString() + ' quoted' : j.estimate ? '~£' + j.estimate.toLocaleString() + ' est.' : 'No value yet';
-    const _cost = j.estCost ? '£' + j.estCost.toLocaleString() + ' est. cost' : '';
-    const _notes = j.notes ? j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '';
-    const _tip = '<div class="job-row-tip">'
-      + '<strong>' + j.ref + ' – ' + j.name + '</strong><br>'
-      + (_client ? _client + '<br>' : '')
-      + (_dates ? _dates + '<br>' : '')
-      + _value + (_cost ? '  ·  ' + _cost : '') + '<br>'
-      + (_notes ? _notes : '')
-      + '</div>';
-    return `<tr class="clickable-row" onclick="openJob('${j.ref}')">
-      <td style="position:relative;"><strong>${j.ref || '<span style="color:#e74c3c;font-size:11px;font-weight:600;">⚠ NO REF</span>'}</strong>${_tip}</td>
-      <td>${j.name}</td>
-      <td>${j.client?.name||''}</td>
-      <td>${statusBadge(j.status)}</td>
-      <td><span class="chip chip-${j.lead==='A'?'a':'t'}">${j.lead==='A'?'Adam':'Tom'}</span></td>
-      <td onclick="event.stopPropagation()" style="padding:4px 8px;">
-        <input type="number" id="est-${j.ref}" value="${j.estimate||''}" placeholder="--"
-          style="width:90px;border:1px solid transparent;background:transparent;text-align:right;font-size:13px;cursor:pointer;"
-          onfocus="this.style.border='1px solid var(--copper)';this.style.background='#fff';"
-          onblur="this.style.border='1px solid transparent';this.style.background='transparent';saveInlineEstimate('${j.ref}',this.value)"
-          onclick="this.select()"
-        />
-      </td>
-      <td style="text-align:right">${j.quoteValue ? '£'+j.quoteValue.toLocaleString() : '—'}</td>
-      <td style="text-align:right">${j.estCost ? '£'+j.estCost.toLocaleString() : '—'}</td>
-      <td>${j.startDate||'—'}</td>
-      <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editJobByRef('${j.ref}', ${i})">Edit</button></td>
-    </tr>`;
-  }).join('');
 }
 
-function saveInlineEstimate(ref, val) {
-  const job = db.jobs.find(j => j.ref === ref);
-  if (!job) return;
-  job.estimate = parseFloat(val) || 0;
-  supa.patchByRef('jobs', ref, { estimate: job.estimate }).catch(e => console.warn('Estimate save failed:', e));
-  renderDashboard();
-  renderPipeline();
-}
-
-
-function statusBadge(s) {
-  const map = {
-    'Initial Enquiry':'badge-enquiry','Preparing Quote':'badge-preparing',
-    'Quoted':'badge-quoted','Confirmed':'badge-confirmed','In Progress':'badge-progress',
-    'On Hold':'badge-hold','Completed':'badge-completed','Snagging':'badge-snagging'
-  };
-  return `<span class="badge ${map[s]||''}">${s}</span>`;
-}
-
-// ============================================================
-// JOB MODAL
-// ============================================================
-function newJobModal() {
-  document.getElementById('job-edit-ref').value = '';
-  document.getElementById('job-modal-title').textContent = 'New Job';
-  ['job-name','job-client-name','job-client-phone','job-client-email','job-desc','job-notes'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('job-ref').value = nextLPRef();
-  document.getElementById('job-status').value='Initial Enquiry';
-  document.getElementById('job-lead').value='A';
-  document.getElementById('job-scale').value='5';
-  ['job-quote-value','job-est-cost'].forEach(id=>document.getElementById(id).value='');
-  ['job-start','job-end'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('job-modal').style.display='flex';
-  document.getElementById('job-modal-archive-btn').style.display='none';
-  document.getElementById('job-modal-delete-btn').style.display='none';
-}
-
-function editJobByRef(ref, idx) {
-  const j = ref ? db.jobs.find(x=>x.ref===ref) : db.jobs[idx];
-  if(!j) return;
-  ref = j.ref || '';
-  document.getElementById('job-edit-ref').value = ref;
-  document.getElementById('job-edit-idx').value = idx ?? db.jobs.findIndex(j => j.ref === ref);
-  document.getElementById('job-modal-title').textContent = 'Edit Job – '+ref;
-  document.getElementById('job-ref').value = j.ref;
-  document.getElementById('job-name').value = j.name;
-  document.getElementById('job-status').value = j.status;
-  document.getElementById('job-lead').value = j.lead;
-  document.getElementById('job-scale').value = j.scale||5;
-  document.getElementById('job-client-name').value = j.client?.name||'';
-  document.getElementById('job-client-phone').value = j.client?.phone||'';
-  document.getElementById('job-client-email').value = j.client?.email||'';
-  document.getElementById('job-quote-value').value = j.quoteValue||'';
-  document.getElementById('job-est-cost').value = j.estCost||'';
-  document.getElementById('job-start').value = j.startDate||'';
-  document.getElementById('job-end').value = j.endDate||'';
-  document.getElementById('job-desc').value = j.desc||'';
-  document.getElementById('job-notes').value = j.notes||'';
-  document.getElementById('job-modal').style.display='flex';
-  document.getElementById('job-modal-archive-btn').style.display='inline-flex';
-  document.getElementById('job-modal-delete-btn').style.display='inline-flex';
-}
-
-function saveJob() {
-  const editRef = document.getElementById('job-edit-ref').value;
-  const job = {
-    ref: document.getElementById('job-ref').value,
-    name: document.getElementById('job-name').value,
-    status: document.getElementById('job-status').value,
-    lead: document.getElementById('job-lead').value,
-    scale: parseInt(document.getElementById('job-scale').value)||5,
-    client: {
-      name: document.getElementById('job-client-name').value,
-      phone: document.getElementById('job-client-phone').value,
-      email: document.getElementById('job-client-email').value
-    },
-    quoteValue: parseFloat(document.getElementById('job-quote-value').value)||0,
-    estCost: parseFloat(document.getElementById('job-est-cost').value)||0,
-    startDate: document.getElementById('job-start').value,
-    endDate: document.getElementById('job-end').value,
-    desc: document.getElementById('job-desc').value,
-    notes: document.getElementById('job-notes').value
-  };
-  if(editRef) {
-    const idx = db.jobs.findIndex(j=>j.ref===editRef);
-    if(idx>=0) { 
-      job.id = db.jobs[idx].id; // preserve Supabase id
-      db.jobs[idx]=job; 
+async function reseedJobsFromBackup() {
+  if (!confirm('Re-insert all LP-001 to LP-021 into Supabase from Excel backup? Only use if jobs are missing.')) return;
+  const jobs = [
+    { ref:'LP-001', name:'Yarlet 1 - Music Academy', description:'Renewal of Yarlet Music Academy', client_name:'Yarlet Trust - Kirsty Nixon', client_phone:'', client_email:'kirtsy.nixon@yarletschool.org', status:'Quoted', lead:'A', scale:8, quote_value:102000, est_cost:87240, start_date:'2026-04-06', end_date:'2026-06-30', notes:'Need to submit quote before 10th Feb', sort_order:0 },
+    { ref:'LP-002', name:'Yarlet 2 - Reception', description:'Moving Yarlet reception', client_name:'Yarlet Trust - Kirsty Nixon', client_phone:'', client_email:'kirtsy.nixon@yarletschool.org', status:'Quoted', lead:'A', scale:7, quote_value:23340, est_cost:19000, start_date:'2026-03-23', end_date:'2026-05-01', notes:'2 separate bathrooms', sort_order:1 },
+    { ref:'LP-003', name:'Oak House Ph.1', description:'Rewiring, bedroom 1, bathroom refit', client_name:'Khine and Myat', client_phone:'+44 7720 845317', client_email:'', status:'Preparing Quote', lead:'A', scale:4, quote_value:18282, est_cost:14500, start_date:'2026-04-15', end_date:'2026-05-31', notes:'Electrics, bathroom, master bedroom', sort_order:2 },
+    { ref:'LP-004', name:'Oak House Ph.2', description:'Renovate remainder', client_name:'Khine and Myat', client_phone:'+44 7720 845317', client_email:'', status:'Preparing Quote', lead:'A', scale:9, quote_value:0, est_cost:135000, start_date:'2026-06-01', end_date:'2026-06-30', notes:'Remaining bedrooms, lounge etc', sort_order:3 },
+    { ref:'LP-005', name:'Keates Ph.1', description:'Footings (Dig and pour)', client_name:'Jim Keates', client_phone:'', client_email:'', status:'Quoted', lead:'T', scale:8, quote_value:7400, est_cost:3700, start_date:'2026-03-02', end_date:'2026-03-10', notes:'', sort_order:4 },
+    { ref:'LP-006', name:'Keates Ph.2', description:'Double garage, balcony, basement', client_name:'Jim Keates', client_phone:'', client_email:'', status:'Quoted', lead:'T', scale:4, quote_value:45000, est_cost:36000, start_date:'2026-09-01', end_date:'2026-12-31', notes:'', sort_order:5 },
+    { ref:'LP-007', name:'Howes', description:'Patio + Wall', client_name:'Mills Howe', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'T', scale:3, quote_value:0, est_cost:600, start_date:'2026-04-07', end_date:'2026-04-28', notes:'', sort_order:6 },
+    { ref:'LP-008', name:'Follwells', description:'Kitchen', client_name:'Lou Follwell', client_phone:'', client_email:'', status:'Preparing Quote', lead:'T', scale:6, quote_value:0, est_cost:0, start_date:'2026-06-08', end_date:'2026-07-03', notes:'', sort_order:7 },
+    { ref:'LP-009', name:'Harrisons', description:'Garden work, returf, raised bed', client_name:'Sarah Harrison', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'A', scale:3, quote_value:0, est_cost:0, start_date:'2026-04-15', end_date:'2026-04-19', notes:'', sort_order:8 },
+    { ref:'LP-010', name:'Whitby-Samways 3', description:'En-suite bathroom (7th Apr deadline)', client_name:'Kate Whitby Samways', client_phone:'', client_email:'', status:'Preparing Quote', lead:'T', scale:6, quote_value:0, est_cost:0, start_date:'2026-03-03', end_date:'2026-04-06', notes:'', sort_order:9 },
+    { ref:'LP-011', name:'Pippa Gee', description:'Various', client_name:'Pippa Gee', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'T', scale:3, quote_value:0, est_cost:0, start_date:'2026-03-14', end_date:'2026-03-15', notes:'', sort_order:10 },
+    { ref:'LP-012', name:'Halls (Outdoor)', description:'Outdoor area', client_name:'Ali Hall', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'A', scale:5, quote_value:0, est_cost:0, start_date:'2026-06-01', end_date:'2026-06-12', notes:'', sort_order:11 },
+    { ref:'LP-013', name:'Busbys', description:'Partition wall', client_name:'Lindsey Busby', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'T', scale:5, quote_value:0, est_cost:0, start_date:'2026-04-27', end_date:'2026-05-08', notes:'', sort_order:12 },
+    { ref:'LP-014', name:'Lloyds 1', description:'Patio', client_name:'Fiona Lloyd', client_phone:'+44 7917 018142', client_email:'', status:'Initial Enquiry', lead:'A', scale:3, quote_value:0, est_cost:0, start_date:'2026-03-30', end_date:'2026-04-10', notes:'', sort_order:13 },
+    { ref:'LP-015', name:'Lloyds 2', description:'Lounge - flatpack', client_name:'Fiona Lloyd', client_phone:'+44 7917 018142', client_email:'', status:'Initial Enquiry', lead:'A', scale:3, quote_value:0, est_cost:0, start_date:'2026-04-20', end_date:'2026-04-23', notes:'', sort_order:14 },
+    { ref:'LP-016', name:'Pickerings', description:'Repointing patio', client_name:'Lou Pickering', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'A', scale:4, quote_value:0, est_cost:0, start_date:'2026-04-18', end_date:'2026-04-20', notes:'', sort_order:15 },
+    { ref:'LP-017', name:'Halls (Bed)', description:'Custom made bed', client_name:'Ali Hall', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'A', scale:4, quote_value:0, est_cost:0, start_date:'2026-03-02', end_date:'2026-03-13', notes:'', sort_order:16 },
+    { ref:'LP-018', name:'Jackie Cummings', description:'Bathroom refit', client_name:'Jackie Cummings', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'T', scale:6, quote_value:0, est_cost:0, start_date:'2026-04-27', end_date:'2026-05-22', notes:'', sort_order:17 },
+    { ref:'LP-019', name:'Whitby-Samways 4', description:'Garage gym', client_name:'Greg Whitby-Samways', client_phone:'+44 7973 149204', client_email:'', status:'Initial Enquiry', lead:'T', scale:4, quote_value:0, est_cost:0, start_date:'2026-08-01', end_date:'2026-08-22', notes:'', sort_order:18 },
+    { ref:'LP-020', name:'Lloyds - Study', description:'Paint study & Replace doors and top', client_name:'Fiona Lloyd', client_phone:'+44 7917 018142', client_email:'', status:'In Progress', lead:'A', scale:3, quote_value:2590, est_cost:1900, start_date:'2026-02-10', end_date:'2026-03-10', notes:'', sort_order:19 },
+    { ref:'LP-021', name:"Westy's Extension (Phase 1 - footings)", description:'Phase 1 footings', client_name:'Daniel West', client_phone:'', client_email:'', status:'Initial Enquiry', lead:'T', scale:5, quote_value:0, est_cost:6000, start_date:'2026-05-18', end_date:null, notes:'', sort_order:20 }
+  ];
+  let ok = 0, fail = 0;
+  for (const job of jobs) {
+    try {
+      await supa.post('jobs', job);
+      ok++;
+    } catch(e) {
+      console.warn('Failed:', job.ref, e.message);
+      fail++;
     }
-    syncJobToSupabase(job.ref);
-  } else {
-    // New job - prevent duplicate refs
-    if (db.jobs.some(j => j.ref === job.ref)) {
-      alert('A job with ref ' + job.ref + ' already exists. Please use a different ref.');
-      return;
-    }
-    db.jobs.push(job);
-    supa.post('jobs', {
-      ref: job.ref, name: job.name, description: job.desc||'',
-      client_name: job.client?.name||'', client_phone: job.client?.phone||'',
-      client_email: job.client?.email||'', status: job.status,
-      lead: job.lead, scale: job.scale, quote_value: job.quoteValue||0,
-      est_cost: job.estCost||0, start_date: job.startDate||null,
-      end_date: job.endDate||null, notes: job.notes||'',
-      sort_order: db.jobs.length - 1
-    }).then(res => {
-      if (res && res[0]) job.id = res[0].id;
-    }).catch(e => console.warn('Job insert failed:', e));
   }
-  saveData();
-  closeModal('job-modal');
+  alert('Done! ' + ok + ' inserted, ' + fail + ' failed. Reloading...');
+  await loadFromSupabase();
   renderJobsTable();
-  renderPipeline();
-}
-
-function archiveJob() {
-  const ref = document.getElementById('job-edit-ref').value;
-  if (!ref) return;
-  if (!confirm('Archive ' + ref + '? It will be hidden from the main list but kept in Supabase.')) return;
-  const job = db.jobs.find(j => j.ref === ref);
-  if (job) {
-    job.status = 'Archived';
-    syncJobToSupabase(ref);
-    db.jobs = ref ? db.jobs.filter(j => j.ref !== ref) : db.jobs.filter(j => j !== job);
-    saveData();
-  }
-  closeModal('job-modal');
-  renderJobsTable();
-  renderPipeline();
   renderDashboard();
-}
-
-async function purgeNoRefJobs() {
-  if (!confirm('This will permanently delete all jobs with no LP ref from Supabase and local storage. Continue?')) return;
-  try {
-    // Delete from Supabase where ref is null or empty
-    await supa.deleteWhere('jobs', 'ref=is.null');
-    console.log('Deleted null refs from Supabase');
-  } catch(e) { console.warn('null ref delete:', e); }
-  try {
-    await supa.deleteWhere('jobs', 'ref=eq.');
-    console.log('Deleted empty refs from Supabase');
-  } catch(e) { console.warn('empty ref delete:', e); }
-  // Also clean locally
-  db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
-  saveData();
-  renderJobsTable();
-  renderPipeline();
-  renderDashboard();
-  alert('Done - no-ref jobs purged.');
 }
 
 async function deleteJob() {
