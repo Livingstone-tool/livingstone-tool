@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.42 -->
+<!-- Livingstone v2.45 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -763,7 +763,7 @@
         </select>
       </div>
       <button class="btn btn-primary" onclick="newJobModal()">+ New Job</button>
-      <button class="btn btn-secondary" onclick="reseedJobsFromBackup()" style="background:#e67e22;color:white;font-size:12px;">⚠ Restore Jobs from Backup</button>
+      
     </div>
     <div class="card">
       <div class="table-wrap">
@@ -771,7 +771,7 @@
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th><th title="Your estimate to the client (editable)">Estimate to Client</th><th title="From quote builder">Quote</th><th title="Estimated job cost">Est. Cost</th>
+              <th>Lead</th><th>Estimate to Client <span title="Your estimate to the client (editable)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Quote <span title="From quote builder" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Est. Cost <span title="Estimated job cost" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th>
               <th>Start</th><th></th>
             </tr>
           </thead>
@@ -2421,7 +2421,7 @@ async function reseedJobsFromBackup() {
   let ok = 0, fail = 0;
   for (const job of jobs) {
     try {
-      const r = await fetch(SUPABASE_URL + '/rest/v1/jobs', {
+      const r = await fetch(SUPABASE_URL + '/rest/v1/jobs?on_conflict=ref', {
         method: 'POST',
         headers: {
           'apikey': SUPABASE_KEY,
@@ -2442,6 +2442,120 @@ async function reseedJobsFromBackup() {
   await loadFromSupabase();
   renderJobsTable();
   renderDashboard();
+}
+
+function newJobModal() {
+  document.getElementById('job-modal-title').textContent = 'New Job';
+  document.getElementById('job-edit-ref').value = '';
+  document.getElementById('job-ref').value = '';
+  document.getElementById('job-ref').disabled = false;
+  document.getElementById('job-name').value = '';
+  document.getElementById('job-status').value = 'Initial Enquiry';
+  document.getElementById('job-lead').value = 'A';
+  document.getElementById('job-client-name').value = '';
+  document.getElementById('job-client-phone').value = '';
+  document.getElementById('job-client-email').value = '';
+  document.getElementById('job-scale').value = '';
+  document.getElementById('job-quote-value').value = '';
+  document.getElementById('job-est-cost').value = '';
+  document.getElementById('job-start').value = '';
+  document.getElementById('job-end').value = '';
+  document.getElementById('job-desc').value = '';
+  document.getElementById('job-notes').value = '';
+  document.getElementById('job-modal-delete-btn').style.display = 'none';
+  document.getElementById('job-modal-archive-btn').style.display = 'none';
+  document.getElementById('job-modal').style.display = 'flex';
+}
+
+function editJobByRef(ref) {
+  const j = db.jobs.find(x => x.ref === ref);
+  if (!j) { alert('Job not found: ' + ref); return; }
+  document.getElementById('job-modal-title').textContent = 'Edit ' + ref;
+  document.getElementById('job-edit-ref').value = ref;
+  document.getElementById('job-ref').value = ref;
+  document.getElementById('job-ref').disabled = true;
+  document.getElementById('job-name').value = j.name || '';
+  document.getElementById('job-status').value = j.status || 'Initial Enquiry';
+  document.getElementById('job-lead').value = j.lead || 'A';
+  document.getElementById('job-client-name').value = j.client?.name || '';
+  document.getElementById('job-client-phone').value = j.client?.phone || '';
+  document.getElementById('job-client-email').value = j.client?.email || '';
+  document.getElementById('job-scale').value = j.scale || '';
+  document.getElementById('job-quote-value').value = j.quoteValue || '';
+  document.getElementById('job-est-cost').value = j.estCost || '';
+  document.getElementById('job-start').value = j.startDate || '';
+  document.getElementById('job-end').value = j.endDate || '';
+  document.getElementById('job-desc').value = j.desc || '';
+  document.getElementById('job-notes').value = j.notes || '';
+  document.getElementById('job-modal-delete-btn').style.display = '';
+  document.getElementById('job-modal-archive-btn').style.display = '';
+  document.getElementById('job-modal').style.display = 'flex';
+}
+
+async function saveJob() {
+  const editRef = document.getElementById('job-edit-ref').value;
+  const ref = document.getElementById('job-ref').value.trim();
+  if (!ref) { alert('Job reference is required.'); return; }
+  const jobData = {
+    ref: ref,
+    name: document.getElementById('job-name').value.trim(),
+    desc: document.getElementById('job-desc').value.trim(),
+    client: {
+      name: document.getElementById('job-client-name').value.trim(),
+      phone: document.getElementById('job-client-phone').value.trim(),
+      email: document.getElementById('job-client-email').value.trim()
+    },
+    status: document.getElementById('job-status').value,
+    lead: document.getElementById('job-lead').value,
+    scale: parseInt(document.getElementById('job-scale').value) || 5,
+    quoteValue: parseFloat(document.getElementById('job-quote-value').value) || 0,
+    estCost: parseFloat(document.getElementById('job-est-cost').value) || 0,
+    startDate: document.getElementById('job-start').value || '',
+    endDate: document.getElementById('job-end').value || '',
+    notes: document.getElementById('job-notes').value.trim()
+  };
+
+  if (editRef) {
+    // Editing existing job
+    const idx = db.jobs.findIndex(j => j.ref === editRef);
+    if (idx >= 0) {
+      jobData.id = db.jobs[idx].id;
+      jobData.sort_order = db.jobs[idx].sort_order;
+      db.jobs[idx] = jobData;
+    }
+  } else {
+    // New job — check for duplicate ref
+    if (db.jobs.some(j => j.ref === ref)) { alert('A job with ref ' + ref + ' already exists.'); return; }
+    jobData.sort_order = db.jobs.length;
+    db.jobs.push(jobData);
+  }
+
+  saveData();
+  closeModal('job-modal');
+  renderJobsTable();
+  renderPipeline();
+  renderDashboard();
+
+  // Sync to Supabase
+  try {
+    await syncJobToSupabase(ref);
+  } catch(e) {
+    console.warn('Supabase sync failed:', e);
+  }
+}
+
+async function archiveJob() {
+  const ref = document.getElementById('job-edit-ref').value;
+  const job = db.jobs.find(j => j.ref === ref);
+  if (!job) { alert('Job not found.'); return; }
+  if (!confirm('Archive ' + ref + '? It will be marked as Completed.')) return;
+  job.status = 'Completed';
+  saveData();
+  closeModal('job-modal');
+  renderJobsTable();
+  renderPipeline();
+  renderDashboard();
+  try { await syncJobToSupabase(ref); } catch(e) { console.warn('Supabase sync failed:', e); }
 }
 
 async function deleteJob() {
@@ -5119,4 +5233,3 @@ function exportQuotePDF() {
 }
 </script>
 </html>
-
