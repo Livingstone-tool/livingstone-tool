@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.46 -->
+<!-- Livingstone v2.48 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1487,7 +1487,9 @@
       <input type="hidden" id="task-edit-idx" value="-1">
       <div class="form-group">
         <label>Job</label>
-        <select id="task-job-ref" style="width:100%;"></select>
+        <select id="task-job-ref" style="width:100%;" onchange="updateTaskJobInfo()"></select>
+      </div>
+      <div id="task-job-info" style="display:none;background:var(--limestone);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;border:1px solid var(--border);">
       </div>
       <div class="form-group"><label>Task Description</label><input type="text" id="task-desc"></div>
       <div class="form-group"><label>Responsible</label><input type="text" id="task-responsible"></div>
@@ -1602,7 +1604,7 @@ const supa = {
     return r.json();
   },
   async post(table, data) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {method:'POST', headers: this.headers, body: JSON.stringify(data)});
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {method:'POST', headers: {...this.headers, 'Prefer':'return=representation'}, body: JSON.stringify(data)});
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   },
@@ -3239,6 +3241,9 @@ function renderTasksTable() {
 }
 
 function addTaskModal(jobRef) {
+  // Always populate job dropdown
+  const sel = document.getElementById('task-job-ref');
+  sel.innerHTML = db.jobs.map(j=>`<option value="${j.ref}">${j.ref} – ${j.name}</option>`).join('');
   document.getElementById('task-edit-idx').value=-1;
   document.getElementById('task-desc').value='';
   document.getElementById('task-responsible').value='Adam Hemming';
@@ -3246,11 +3251,39 @@ function addTaskModal(jobRef) {
   document.getElementById('task-end').value='';
   document.getElementById('task-status').value='Not Started';
   if(jobRef) document.getElementById('task-job-ref').value=jobRef;
+  updateTaskJobInfo();
   document.getElementById('task-modal').style.display='flex';
+}
+
+function updateTaskJobInfo() {
+  const ref = document.getElementById('task-job-ref').value;
+  const panel = document.getElementById('task-job-info');
+  const j = db.jobs.find(x => x.ref === ref);
+  if (!j) { panel.style.display = 'none'; return; }
+  const taskCount = db.tasks.filter(t => t.jobRef === ref).length;
+  const doneTasks = db.tasks.filter(t => t.jobRef === ref && t.status === 'Completed').length;
+  const dur = j.startDate && j.endDate ? Math.round((new Date(j.endDate) - new Date(j.startDate)) / 86400000) : null;
+  const leadName = j.lead === 'A' ? 'Adam' : 'Tom';
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-weight:600;font-size:13px;color:var(--text);">${j.name}</span>
+      <span class="badge ${getBadgeClass(j.status)}" style="font-size:11px;">${j.status}</span>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;color:var(--text-muted);">
+      <span>📅 ${j.startDate || '—'} → ${j.endDate || '—'}${dur !== null ? ' <span style="color:var(--text);">(' + dur + ' days)</span>' : ''}</span>
+      <span>👤 ${leadName}</span>
+      <span>📋 ${taskCount} task${taskCount !== 1 ? 's' : ''}${taskCount > 0 ? ' (' + doneTasks + ' done)' : ''}</span>
+    </div>
+    ${j.quoteValue ? '<div style="margin-top:6px;color:var(--text-muted);">💰 Quote: <span style="color:var(--copper);font-weight:600;">£' + j.quoteValue.toLocaleString() + '</span>' + (j.estCost ? ' · Est. Cost: £' + j.estCost.toLocaleString() : '') + '</div>' : ''}
+  `;
 }
 
 function editTask(i) {
   const t = db.tasks[i];
+  // Populate job dropdown
+  const sel = document.getElementById('task-job-ref');
+  sel.innerHTML = db.jobs.map(j=>`<option value="${j.ref}">${j.ref} – ${j.name}</option>`).join('');
   document.getElementById('task-edit-idx').value=i;
   document.getElementById('task-job-ref').value=t.jobRef;
   document.getElementById('task-desc').value=t.desc;
@@ -3258,10 +3291,11 @@ function editTask(i) {
   document.getElementById('task-start').value=t.start||'';
   document.getElementById('task-end').value=t.end||'';
   document.getElementById('task-status').value=t.status;
+  updateTaskJobInfo();
   document.getElementById('task-modal').style.display='flex';
 }
 
-function saveTask() {
+async function saveTask() {
   const idx = parseInt(document.getElementById('task-edit-idx').value);
   const task = {
     jobRef: document.getElementById('task-job-ref').value,
@@ -3274,14 +3308,17 @@ function saveTask() {
   if(idx>=0) {
     task.id = db.tasks[idx].id; // preserve Supabase id
     db.tasks[idx]=task;
-    syncTaskToSupabase(task);
+    await syncTaskToSupabase(task);
   } else {
     db.tasks.push(task);
-    syncTaskToSupabase(task);
+    await syncTaskToSupabase(task);
   }
   saveData();
   closeModal('task-modal');
   renderTasksTable();
+  // Also refresh planning views if visible
+  if(typeof renderJobPlan === 'function') try { renderJobPlan(); } catch(e) {}
+  if(typeof renderGantt === 'function') try { renderGantt(); } catch(e) {}
 }
 
 function deleteTask(i) {
