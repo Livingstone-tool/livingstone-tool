@@ -2879,19 +2879,22 @@ function saveQuote() {
     pm_fee: parseFloat(document.getElementById('qb-pm-fee')?.value)||0
   };
   // Always delete existing quote for this job_ref then reinsert - prevents duplicates
-  const normRef = norm(q.number);
-  fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef, {
-    method: 'DELETE',
-    headers: {...supa.headers}
-  }).finally(() => {
-    supa.post('quotes', qData).then(res => {
+  const normRef = q.number || q.jobRef || '';
+  (async () => {
+    try {
+      // Delete any existing quotes for this job ref (both formats)
+      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef, { method:'DELETE', headers:{...supa.headers} });
+      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef.replace('-',''), { method:'DELETE', headers:{...supa.headers} });
+      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.LP-'+normRef.replace(/^LP-?/,''), { method:'DELETE', headers:{...supa.headers} });
+      // Now insert fresh
+      const res = await supa.post('quotes', qData);
       if(res&&res[0]) {
         q.id = res[0].id;
-        const idx = db.quotes.findIndex(x => norm(x.number) === norm(q.number));
+        const idx = db.quotes.findIndex(x => (x.number||x.jobRef) === (q.number||q.jobRef));
         if(idx>=0) db.quotes[idx].id = res[0].id;
       }
-    }).catch(e => console.warn('Quote insert:', e));
-  });
+    } catch(e) { console.warn('Quote save error:', e); }
+  })();
   // Update job quoteValue using the LP reference
   const jobRef = q.number || q.jobRef;
   if(jobRef) {
