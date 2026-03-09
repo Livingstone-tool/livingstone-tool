@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.54 -->
+<!-- Livingstone v2.55 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -908,13 +908,20 @@
   <!-- TASKS PAGE -->
   <div id="page-tasks" class="page content">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <div></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-danger" id="tasks-page-bulk-delete" style="display:none;" onclick="bulkDeleteTasksPage()">🗑 Delete Selected</button>
+      </div>
       <button class="btn btn-primary" onclick="addTaskModal()">+ Add Task</button>
     </div>
     <div class="card">
+      <div style="padding:6px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+        <label style="font-size:11px;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" onchange="document.querySelectorAll('.task-page-check').forEach(c=>c.checked=this.checked);updateTasksPageBulkBtn()"> Select all
+        </label>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Job</th><th>Task</th><th>Responsible</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th style="width:30px;"></th><th>Job</th><th>Task</th><th>Responsible</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead>
           <tbody id="tasks-table-body"></tbody>
         </table>
       </div>
@@ -3233,6 +3240,7 @@ function renderTasksTable() {
   tbody.innerHTML = db.tasks.map((t,i) => {
     const job = db.jobs.find(j=>j.ref===t.jobRef);
     return `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="task-page-check" data-idx="${i}" onchange="updateTasksPageBulkBtn()"></td>
       <td><strong>${t.jobRef}</strong><br><span style="font-size:11px;color:var(--text-muted);">${job?.name||''}</span></td>
       <td>${t.desc}</td>
       <td>${t.responsible}</td>
@@ -4538,11 +4546,49 @@ function updateBulkDeleteBtn() {
   }
 }
 
+function updateTasksPageBulkBtn() {
+  const checked = document.querySelectorAll('.task-page-check:checked').length;
+  const btn = document.getElementById('tasks-page-bulk-delete');
+  if (btn) {
+    btn.style.display = checked > 0 ? '' : 'none';
+    btn.textContent = '🗑 Delete ' + checked + ' selected';
+  }
+}
+
+async function bulkDeleteTasksPage() {
+  const checkboxes = document.querySelectorAll('.task-page-check:checked');
+  if (!checkboxes.length) return;
+  if (!confirm('Delete ' + checkboxes.length + ' selected task(s)? This cannot be undone.')) return;
+
+  const indices = Array.from(checkboxes)
+    .map(cb => parseInt(cb.dataset.idx))
+    .filter(idx => idx >= 0 && idx < db.tasks.length)
+    .sort((a, b) => b - a);
+
+  for (const idx of indices) {
+    const task = db.tasks[idx];
+    if (task && task.id) {
+      try { await supa.delete('tasks', task.id); } catch(e) { console.warn('Delete failed:', e); }
+    }
+    db.tasks.splice(idx, 1);
+  }
+
+  saveData();
+  renderTasksTable();
+  renderJobPlan();
+  renderGantt();
+}
+
 async function bulkDeleteTasks() {
   const checkboxes = document.querySelectorAll('.task-check:checked');
-  const indices = Array.from(checkboxes).map(cb => parseInt(cb.dataset.idx)).sort((a,b) => b - a); // reverse order for safe splicing
-  if (!indices.length) return;
-  if (!confirm('Delete ' + indices.length + ' selected task(s)? This cannot be undone.')) return;
+  if (!checkboxes.length) return;
+  if (!confirm('Delete ' + checkboxes.length + ' selected task(s)? This cannot be undone.')) return;
+
+  // Collect the actual task indices, sort descending for safe splicing
+  const indices = Array.from(checkboxes)
+    .map(cb => parseInt(cb.dataset.idx))
+    .filter(idx => idx >= 0 && idx < db.tasks.length)
+    .sort((a, b) => b - a);
 
   for (const idx of indices) {
     const task = db.tasks[idx];
@@ -4556,6 +4602,7 @@ async function bulkDeleteTasks() {
   renderJobPlan();
   renderGantt();
   renderTasksTable();
+  console.log('Bulk deleted', indices.length, 'tasks');
 }
 
 function updateTaskStatus(idx, val) {
