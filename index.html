@@ -224,6 +224,7 @@
   label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; }
   input, select, textarea {
     width: 100%;
+    box-sizing: border-box;
     padding: 9px 12px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -1460,8 +1461,8 @@
       <button class="modal-close" onclick="closeModal('wishlist-modal')">×</button>
     </div>
     <div class="modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:20px;">
-        <input type="text" id="wish-input" placeholder="Describe idea or fix..." style="flex:1;min-width:0;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;" onkeydown="if(event.key==='Enter')addWish()">
+      <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center;">
+        <div style="flex:1;min-width:0;"><input type="text" id="wish-input" placeholder="Describe idea or fix..." style="width:100%;padding:8px 12px;margin:0;" onkeydown="if(event.key==='Enter')addWish()"></div>
         <select id="wish-type" style="font-size:13px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
           <option value="feature">✨ New Feature</option>
           <option value="fix">🔧 Fix</option>
