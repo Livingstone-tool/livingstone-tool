@@ -2420,6 +2420,7 @@ function renderQuotesTable() {
 function viewQuote(idx) {
   const q = db.quotes[idx];
   // Load into quote builder
+  window._activeQuoteRef = q.number||q.jobRef||'';
   populateQuoteJobDropdown(q.number||q.jobRef||'');
   document.getElementById('qb-client').value = q.client;
   document.getElementById('qb-address').value = '';
@@ -2460,6 +2461,7 @@ function populateQuoteJobDropdown(selectedRef) {
 
 function quoteJobSelected(ref) {
   if(!ref) return;
+  window._activeQuoteRef = ref;
   const job = db.jobs.find(j=>j.ref===ref);
   if(job) {
     document.getElementById('qb-client').value = job.client?.name||'';
@@ -2843,8 +2845,8 @@ function saveQuote() {
   }
 
   const q = {
-    number: document.getElementById('qb-number').value,
-    jobRef: document.getElementById('qb-number')?.value || '',
+    number: document.getElementById('qb-number').value || window._activeQuoteRef || '',
+    jobRef: document.getElementById('qb-number')?.value || window._activeQuoteRef || '',
     client: document.getElementById('qb-client').value,
     date: new Date().toISOString().split('T')[0],
     rooms: saveRooms,
