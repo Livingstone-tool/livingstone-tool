@@ -4550,6 +4550,13 @@ function renderCostStats() {
   set('ct-stat-other-sub', costs.filter(c=>c.type==='Other').length + ' entries');
 }
 
+
+function openFirstCostForJob() {
+  closeModal('job-detail-modal');
+  showPage('costs');
+  openCostModal();
+}
+
 function renderCostLog() {
   const jobF = document.getElementById('ct-filter-job')?.value || '';
   const typeF = document.getElementById('ct-filter-type')?.value || '';
@@ -4840,7 +4847,7 @@ function renderJobCosts(jobRef) {
   var pct = budget ? Math.round(total/budget*100) : null;
 
   if (!jobEntries.length) {
-    return '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;text-align:center;">No costs logged yet for this job.<br><button class="btn btn-sm btn-primary" style="margin-top:8px;" onclick="closeModal(&quot;job-detail-modal&quot;);showPage(&quot;costs&quot;);openCostModal()">+ Log First Cost</button></div>';
+    return '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;text-align:center;">No costs logged yet for this job.<br><button class="btn btn-sm btn-primary" style="margin-top:8px;" onclick="openFirstCostForJob()">+ Log First Cost</button></div>';
   }
 
   var rows = jobEntries.map(function(e) {
@@ -4878,7 +4885,7 @@ function renderJobCosts(jobRef) {
     + '<tbody>' + rows + '</tbody>'
     + '<tfoot><tr style="background:var(--limestone);font-weight:700;"><td colspan="3" style="text-align:right;padding:8px 12px;">Total</td><td style="text-align:right;padding:8px 12px;">£' + total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td></tr></tfoot>'
     + '</table>'
-    + '<div style="margin-top:12px;text-align:right;"><button class="btn btn-sm btn-primary" onclick="closeModal(&quot;job-detail-modal&quot;);showPage(&quot;costs&quot;);openCostModal()">+ Log Cost for this Job</button></div>';
+    + '<div style="margin-top:12px;text-align:right;"><button class="btn btn-sm btn-primary" onclick="openFirstCostForJob()">+ Log Cost for this Job</button></div>';
 }
 
 
