@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.41 -->
+<!-- Livingstone v2.42 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2426,7 +2426,8 @@ async function reseedJobsFromBackup() {
         headers: {
           'apikey': SUPABASE_KEY,
           'Authorization': 'Bearer ' + SUPABASE_KEY,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
         },
         body: JSON.stringify(job)
       });
@@ -4176,6 +4177,11 @@ function renderJobPlan() {
   `;
 }
 
+function statusBadge(s) {
+  const cls = getBadgeClass(s);
+  return '<span class="badge ' + cls + '">' + (s||'Unknown') + '</span>';
+}
+
 function getBadgeClass(s) {
   const map = {
     'Initial Enquiry':'badge-enquiry','Preparing Quote':'badge-preparing',
@@ -5113,4 +5119,3 @@ function exportQuotePDF() {
 }
 </script>
 </html>
-
