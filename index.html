@@ -692,7 +692,7 @@
         </div>
         <div class="card-body" style="padding:0;">
           <table>
-            <thead><tr><th>Name</th><th>Trade</th><th>Rate/Day</th><th>Rating</th></tr></thead>
+            <thead><tr><th>Name</th><th>Trade</th><th>Jobs</th><th>Status</th></tr></thead>
             <tbody id="sub-preview-table"></tbody>
           </table>
         </div>
@@ -2187,6 +2187,47 @@ function renderDashboard() {
   set('dash-confirmed-sub', quotedJobs.length + ' quoted, pending');
   set('dash-quotes-value', quotedVal ? '£' + Math.round(quotedVal).toLocaleString() : '—');
   set('dash-quotes-sub', quotedJobs.length + ' quotes outstanding');
+
+  // Subcontractor availability
+  const subPreview = document.getElementById('sub-preview-table');
+  if (subPreview) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const activeJobRefs = new Set(db.jobs.filter(j=>['Confirmed','In Progress','Quoted'].includes(j.status)).map(j=>j.ref));
+    // Find all tasks with a named responsible on active jobs, not completed
+    const activeTasks = (db.tasks||[]).filter(t =>
+      t.responsible && t.responsible.trim() &&
+      t.status !== 'Completed' && t.status !== 'Done' &&
+      activeJobRefs.has(t.jobRef)
+    );
+    // Group by sub name
+    const subMap = {};
+    activeTasks.forEach(t => {
+      const name = t.responsible.trim();
+      if (!subMap[name]) subMap[name] = { jobs: new Set(), tasks: 0, earliest: t.start, latest: t.end };
+      subMap[name].jobs.add(t.jobRef);
+      subMap[name].tasks++;
+      if (t.end && (!subMap[name].latest || t.end > subMap[name].latest)) subMap[name].latest = t.end;
+    });
+    // Enrich with sub data (trade etc)
+    const rows = Object.entries(subMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([name, info]) => {
+      const sub = (db.subs||[]).find(s=>s.name===name);
+      const trade = sub ? sub.trade : '—';
+      const jobList = [...info.jobs].join(', ');
+      const busyUntil = info.latest || '—';
+      const statusDot = (info.latest && info.latest >= today.toISOString().split('T')[0])
+        ? '<span style="color:#e67e22;font-weight:600;">Busy</span>'
+        : '<span style="color:#27ae60;font-weight:600;">Free</span>';
+      return `<tr>
+        <td><strong>${name}</strong></td>
+        <td style="color:var(--text-muted);font-size:12px;">${trade}</td>
+        <td style="font-size:12px;">${jobList}</td>
+        <td>${statusDot}<br><span style="font-size:11px;color:var(--text-muted);">until ${busyUntil}</span></td>
+      </tr>`;
+    });
+    subPreview.innerHTML = rows.length
+      ? rows.join('')
+      : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">No subs assigned to active jobs</td></tr>';
+  }
 
   // High value jobs
   const hvBody = document.getElementById('dash-high-value-body');
