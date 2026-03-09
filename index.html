@@ -4527,4 +4527,51 @@ function exportQuotePDF() {
   <div class="client-block">
     <h3>Prepared for</h3>
     <p><strong>${client}</strong></p>
-    ${jobName ? `<p style="color:#6b7e
+    ${jobName ? `<p style="color:#6b7e8e;">${jobName}</p>` : ''}
+  </div>
+
+  ${desc ? `<div class="desc-block">${desc}</div>` : ''}
+
+  <table>
+    <thead>
+      ${tableHeaders}
+    </thead>
+    <tbody>
+      ${lineRows}
+      <tr class="total-row">
+        <td colspan="${tableColspan-1}" style="text-align:right;letter-spacing:0.04em;">TOTAL (inc. VAT where applicable)</td>
+        <td style="text-align:right;">${grandTotal}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="validity">
+    ⏱ This quotation is valid for <strong>${validDays} days</strong> from the date above.
+  </div>
+
+  <div class="footer">
+    <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#B87333;margin-bottom:10px;">Terms &amp; Conditions</h3>
+    <p><strong>1. Quotation Validity:</strong> This quotation is valid for ${validDays} days from the date above. After this period, prices may be subject to change.</p>
+    <p><strong>2. Payment Terms:</strong> ${document.getElementById('qb-payment')?.value || '25% at 4 stages'}. Further stage payments will be agreed prior to the start of works. Final payment is due upon completion.</p>
+    <p><strong>3. Variations:</strong> Any variations or additional works requested by the client that are outside the agreed scope will be charged accordingly and confirmed in writing before proceeding.</p>
+    <p><strong>4. Materials:</strong> All materials supplied by Livingstone Projects remain the property of Livingstone Projects until payment is received in full.</p>
+    <p><strong>5. Access &amp; Facilities:</strong> The client agrees to provide reasonable access to the property and basic welfare facilities (water, electricity) for the duration of the works.</p>
+    <p><strong>6. Liability:</strong> Livingstone Projects carries full public liability insurance. We are not liable for any pre-existing defects or structural issues uncovered during the works unless separately quoted for.</p>
+    <p><strong>7. Waste Disposal:</strong> General site waste disposal is included unless otherwise stated. Specialist waste (e.g. asbestos) will be charged separately.</p>
+    <p><strong>8. Guarantee:</strong> All workmanship is guaranteed for 12 months from the date of completion. Manufacturer warranties apply to all materials and fixtures supplied.</p>
+    <p style="margin-top:12px;color:#1a2530;"><strong>Livingstone Projects</strong> · Premium Home Improvement · Registered in England &amp; Wales</p>
+  </div>
+</div>
+</div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  // Trigger print dialog after a short delay for styles to load
+  setTimeout(() => win.print(), 500);
+}
+</script>
+</html>
+
