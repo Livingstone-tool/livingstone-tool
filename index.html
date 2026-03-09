@@ -1461,7 +1461,7 @@
     </div>
     <div class="modal-body">
       <div style="display:flex;gap:8px;margin-bottom:20px;">
-        <input type="text" id="wish-input" placeholder="Describe idea or fix..." style="flex:1;" onkeydown="if(event.key==='Enter')addWish()">
+        <input type="text" id="wish-input" placeholder="Describe idea or fix..." style="flex:1;min-width:0;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;" onkeydown="if(event.key==='Enter')addWish()">
         <select id="wish-type" style="font-size:13px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);">
           <option value="feature">✨ New Feature</option>
           <option value="fix">🔧 Fix</option>
@@ -2135,14 +2135,7 @@ const SEED = {
      ]
     }
   ],
-  wishlist: [
-    {text:'Gantt chart / timeline view for active jobs',votes:3},
-    {text:'Client portal / quote approval online',votes:2},
-    {text:'PDF quote export with Livingstone branding',votes:4},
-    {text:'Material cost tracking vs actual spend',votes:2},
-    {text:'Subcontractor availability calendar',votes:1},
-    {text:'Mobile app / PWA version',votes:3}
-  ]
+  wishlist: []
 };
 
 // ============================================================
@@ -3384,13 +3377,20 @@ function renderWishlist() {
 }
 
 function addWish() {
-  const val = document.getElementById('wish-input').value.trim();
-  const type = document.getElementById('wish-type')?.value || 'feature';
-  if(!val) return;
-  db.wishlist.push({text:val, votes:1, type});
-  saveData();
-  document.getElementById('wish-input').value='';
-  renderWishlist();
+  try {
+    const inputEl = document.getElementById('wish-input');
+    const typeEl = document.getElementById('wish-type');
+    console.log('addWish called, inputEl:', inputEl, 'val:', inputEl?.value);
+    const val = inputEl ? inputEl.value.trim() : '';
+    const type = typeEl ? typeEl.value : 'feature';
+    if(!val) { console.warn('addWish: empty value'); return; }
+    if(!Array.isArray(db.wishlist)) { db.wishlist = []; }
+    db.wishlist.push({text:val, votes:1, type});
+    saveData();
+    inputEl.value = '';
+    renderWishlist();
+    console.log('addWish done, wishlist length:', db.wishlist.length);
+  } catch(e) { console.error('addWish error:', e); }
 }
 
 function voteWish(i, delta) {
