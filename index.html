@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.56 -->
+<!-- Livingstone v2.58 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -4362,12 +4362,12 @@ function renderJobPlan() {
           <table style="font-size:12px;width:100%;border-collapse:collapse;">
             <thead><tr style="background:var(--limestone);">
               <th style="width:28px;"></th>
-              <th style="min-width:160px;">Task</th>
+              <th style="min-width:120px;">Task</th>
               <th style="width:80px;">Start</th>
               <th style="width:80px;">End</th>
-              <th style="width:90px;">Days</th>
+              <th style="width:70px;">Days</th>
               <th style="width:70px;">Status</th>
-              <th style="width:100px;">Notes</th>
+              <th style="min-width:150px;">Notes</th>
               <th style="width:30px;"></th>
             </tr></thead>
             <tbody>${tasks.map((t,i) => {
@@ -4375,7 +4375,7 @@ function renderJobPlan() {
               const days = t.start && t.end ? Math.round((new Date(t.end) - new Date(t.start)) / 86400000) + 1 : 0;
               return `<tr style="border-bottom:1px solid var(--border);" data-taskidx="${realIdx}">
                 <td style="text-align:center;"><input type="checkbox" class="task-check" data-idx="${realIdx}" onchange="updateBulkDeleteBtn()"></td>
-                <td style="font-size:11.5px;line-height:1.3;padding:6px 4px;">${t.desc}</td>
+                <td><input type="text" value="${(t.desc||'').replace(/"/g,'&quot;')}" style="font-size:11px;padding:2px 4px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskDesc(${realIdx},this.value)"></td>
                 <td><input type="date" value="${t.start||''}" style="font-size:11px;padding:2px 3px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskDate(${realIdx},'start',this.value)"></td>
                 <td><input type="date" value="${t.end||''}" style="font-size:11px;padding:2px 3px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskDate(${realIdx},'end',this.value)"></td>
                 <td style="text-align:center;">
@@ -4547,6 +4547,25 @@ function renderJobPlan() {
   });
 })();
 
+function showSpinner(msg) {
+  let el = document.getElementById('action-spinner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'action-spinner';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(26,37,48,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<div style="background:white;border-radius:12px;padding:28px 40px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.2);">' +
+    '<div style="width:36px;height:36px;border:3px solid #e8e0d5;border-top-color:#B87333;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>' +
+    '<div style="font-size:14px;color:#1a2530;font-weight:500;">' + (msg||'Working...') + '</div></div>';
+  el.style.display = 'flex';
+}
+
+function hideSpinner() {
+  const el = document.getElementById('action-spinner');
+  if (el) el.style.display = 'none';
+}
+
 function statusBadge(s) {
   const cls = getBadgeClass(s);
   return '<span class="badge ' + cls + '">' + (s||'Unknown') + '</span>';
@@ -4589,6 +4608,8 @@ async function bulkDeleteTasksPage() {
   if (!checkboxes.length) return;
   if (!confirm('Delete ' + checkboxes.length + ' selected task(s)? This cannot be undone.')) return;
 
+  showSpinner('Deleting ' + checkboxes.length + ' tasks...');
+
   const indices = Array.from(checkboxes)
     .map(cb => parseInt(cb.dataset.idx))
     .filter(idx => idx >= 0 && idx < db.tasks.length)
@@ -4606,12 +4627,15 @@ async function bulkDeleteTasksPage() {
   renderTasksTable();
   renderJobPlan();
   renderGantt();
+  hideSpinner();
 }
 
 async function bulkDeleteTasks() {
   const checkboxes = document.querySelectorAll('.task-check:checked');
   if (!checkboxes.length) return;
   if (!confirm('Delete ' + checkboxes.length + ' selected task(s)? This cannot be undone.')) return;
+
+  showSpinner('Deleting ' + checkboxes.length + ' tasks...');
 
   // Collect the actual task indices, sort descending for safe splicing
   const indices = Array.from(checkboxes)
@@ -4631,7 +4655,15 @@ async function bulkDeleteTasks() {
   renderJobPlan();
   renderGantt();
   renderTasksTable();
-  console.log('Bulk deleted', indices.length, 'tasks');
+  hideSpinner();
+}
+
+function updateTaskDesc(idx, value) {
+  const task = db.tasks[idx];
+  if (!task) return;
+  task.desc = value;
+  saveData();
+  syncTaskToSupabase(task);
 }
 
 function updateTaskDate(idx, field, value) {
@@ -4794,6 +4826,7 @@ async function generatePlanFromQuote() {
   }
 
   // Add to db and sync
+  showSpinner('Generating ' + newTasks.length + ' tasks...');
   for (const task of newTasks) {
     db.tasks.push(task);
     try { await syncTaskToSupabase(task); } catch(e) { console.warn('Task sync failed:', e); }
@@ -4803,7 +4836,7 @@ async function generatePlanFromQuote() {
   renderJobPlan();
   renderGantt();
   renderTasksTable();
-  alert('Done! ' + newTasks.length + ' tasks created for ' + ref + '. Drag the bars to adjust dates.');
+  hideSpinner();
 }
 
 function addTaskToSelectedJob() {
