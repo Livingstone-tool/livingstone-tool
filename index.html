@@ -4641,7 +4641,7 @@ function openCostModal(editIdx) {
   } else {
     setCostType('Labour', true);
     // Default: add one allocation row
-    window._costAllocations = [{ jobRef: db.jobs[0]?.ref || '', mode: '£', amount: 0, pct: 100 }];
+    window._costAllocations = [{ jobRef: db.jobs[0]?.ref || '', mode: 'GBP', amount: 0, pct: 100 }];
   }
 
   renderCostAllocations();
@@ -4677,7 +4677,7 @@ function calcLabourCost() {
 }
 
 function addCostAllocation() {
-  window._costAllocations.push({ jobRef: db.jobs[0]?.ref || '', mode: '£', amount: 0, pct: 0 });
+  window._costAllocations.push({ jobRef: db.jobs[0]?.ref || '', mode: 'GBP', amount: 0, pct: 0 });
   renderCostAllocations();
 }
 
@@ -4689,26 +4689,27 @@ function removeCostAllocation(i) {
 function renderCostAllocations() {
   var container = document.getElementById('cost-allocations');
   if (!container) return;
-
+  var fJob = 'jobRef';
+  var fMode = 'mode';
+  var fVal = 'value';
   var html = '';
   (window._costAllocations || []).forEach(function(a, i) {
     var jobOpts = db.jobs.map(function(j) {
-      return '<option value="' + j.ref + '"' + (j.ref === a.jobRef ? ' selected' : '') + '>' + j.ref + ' — ' + j.name + '</option>';
+      var sel = j.ref === a.jobRef ? ' selected' : '';
+      return '<option value="' + j.ref + '"' + sel + '>' + j.ref + ' - ' + j.name + '</option>';
     }).join('');
-
-    var modeSelected_gbp = a.mode === '£' ? ' selected' : '';
-    var modeSelected_pct = a.mode === '%' ? ' selected' : '';
-    var currentVal = a.mode === '%' ? (a.pct || 0) : (+(a.amount || 0)).toFixed(2);
-    var stepVal = a.mode === '%' ? '1' : '0.01';
-    var placeholderVal = a.mode === '%' ? '100' : '0.00';
-
+    var selGbp = a.mode !== 'P' ? ' selected' : '';
+    var selPct = a.mode === 'P' ? ' selected' : '';
+    var curVal = a.mode === 'P' ? (a.pct || 0) : parseFloat(a.amount || 0).toFixed(2);
+    var step = a.mode === 'P' ? '1' : '0.01';
+    var ph = a.mode === 'P' ? '100' : '0.00';
     html += '<div style="display:flex;gap:8px;align-items:center;background:var(--limestone);border-radius:7px;padding:10px 12px;">';
-    html += '<select onchange="updateAlloc(' + i + ',\'jobRef\',this.value)" style="flex:2;font-size:13px;">' + jobOpts + '</select>';
-    html += '<select onchange="updateAlloc(' + i + ',\'mode\',this.value)" style="width:60px;font-size:13px;">';
-    html += '<option value="£"' + modeSelected_gbp + '>£</option>';
-    html += '<option value="%"' + modeSelected_pct + '>%</option>';
+    html += '<select onchange="updateAlloc(' + i + ',\'' + fJob + '\',this.value)" style="flex:2;font-size:13px;">' + jobOpts + '</select>';
+    html += '<select onchange="updateAlloc(' + i + ',\'' + fMode + '\',this.value)" style="width:70px;font-size:13px;">';
+    html += '<option value="GBP"' + selGbp + '>&pound;</option>';
+    html += '<option value="P"' + selPct + '>%</option>';
     html += '</select>';
-    html += '<input type="number" min="0" step="' + stepVal + '" value="' + currentVal + '" placeholder="' + placeholderVal + '" style="width:90px;font-size:13px;text-align:right;" oninput="updateAlloc(' + i + ',\'value\',parseFloat(this.value)||0)">';
+    html += '<input type="number" min="0" step="' + step + '" value="' + curVal + '" placeholder="' + ph + '" style="width:90px;font-size:13px;text-align:right;" oninput="updateAlloc(' + i + ',\'' + fVal + '\',parseFloat(this.value)||0)">';
     html += '<button class="btn btn-sm btn-danger" onclick="removeCostAllocation(' + i + ')" style="flex-shrink:0;">&#x2715;</button>';
     html += '</div>';
   });
@@ -4722,7 +4723,7 @@ function updateAlloc(i, field, val) {
   if (field === 'jobRef') window._costAllocations[i].jobRef = val;
   else if (field === 'mode') { window._costAllocations[i].mode = val; renderCostAllocations(); return; }
   else if (field === 'value') {
-    if (window._costAllocations[i].mode === '%') window._costAllocations[i].pct = val;
+    if (window._costAllocations[i].mode === 'P') window._costAllocations[i].pct = val;
     else window._costAllocations[i].amount = val;
   }
   updateAllocRemaining();
@@ -4743,7 +4744,7 @@ function updateAllocRemaining() {
   // Calculate allocated amount
   let allocated = 0;
   allocs.forEach(a => {
-    if (a.mode === '%') allocated += (a.pct / 100) * total;
+    if (a.mode === 'P') allocated += (a.pct / 100) * total;
     else allocated += (a.amount || 0);
   });
 
@@ -4781,7 +4782,7 @@ function saveCostEntry() {
     jobRef: a.jobRef,
     mode: a.mode,
     pct: a.pct,
-    amount: a.mode === '%' ? (a.pct / 100) * amount : (a.amount || 0)
+    amount: a.mode === 'P' ? (a.pct / 100) * amount : (a.amount || 0)
   }));
 
   const entry = {
