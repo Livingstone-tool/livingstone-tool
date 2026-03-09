@@ -1690,7 +1690,11 @@ async function loadFromSupabase() {
     db.subs = SEED.subs || [];
     db.actionsQ1 = SEED.actionsQ1 || [];
     db.actionsLT = SEED.actionsLT || [];
-    db.wishlist = SEED.wishlist || [];
+    // Restore wishlist from localStorage (persisted independently, not in Supabase)
+    try {
+      const _wl = localStorage.getItem('livingstoneWishlist');
+      db.wishlist = _wl ? JSON.parse(_wl) : (SEED.wishlist || []);
+    } catch(e) { db.wishlist = []; }
     db.rooms = SEED.rooms || [];
 
     saveData(); // backup to localStorage
@@ -3451,12 +3455,6 @@ window.addEventListener('load', async () => {
   
   await loadFromSupabase();
 
-  // Restore wishlist from localStorage (not stored in Supabase)
-  try {
-    const wl = localStorage.getItem('livingstoneWishlist');
-    if (wl) db.wishlist = JSON.parse(wl);
-  } catch(e) {}
-  
   // Remove loading overlay
   const overlay = document.getElementById('loading-overlay');
   if (overlay) overlay.remove();
