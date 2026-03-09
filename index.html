@@ -2280,8 +2280,8 @@ function renderJobsTable() {
       <td onclick="event.stopPropagation()" style="padding:4px 8px;">
         <input type="number" value="${j.estimate||''}" placeholder="—"
           style="width:100px;border:1px solid transparent;background:transparent;text-align:right;font-size:13px;cursor:pointer;"
-          onfocus="this.style.border='1px solid var(--copper)';this.style.background='#fff';"
-          onblur="this.style.border='1px solid transparent';this.style.background='transparent';saveInlineEstimate('${j.ref}',this.value)"
+          onfocus="this.style.border=&quot;1px solid var(--copper)&quot;;this.style.background=&quot;#fff&quot;;"
+          onblur="this.style.border=&quot;1px solid transparent&quot;;this.style.background=&quot;transparent&quot;;saveInlineEstimate(&quot;${j.ref}&quot;,this.value)"
           onclick="this.select()"
         />
       </td>
