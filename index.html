@@ -521,7 +521,8 @@
   .qb-line.drag-over { border-top: 2px solid var(--copper) !important; background: rgba(184,115,51,0.08); }
   .drag-handle { opacity:0.4; transition:opacity 0.15s; }
   .drag-handle:hover { opacity:1; }
-</style>
+  #wish-input { flex:1 !important; width:auto !important; min-width:0 !important; }
+  </style>
 </head>
 <body>
 <div id="app-wrapper" style="opacity:0;">
@@ -1462,7 +1463,7 @@
     </div>
     <div class="modal-body">
       <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center;">
-        <input type="text" id="wish-input" placeholder="Describe idea or fix..." style="flex:1;min-width:0;width:0;padding:8px 12px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')addWish()">
+        <input type="text" id="wish-input" placeholder="Describe idea or fix..." onkeydown="if(event.key==='Enter')addWish()">
         <select id="wish-type" style="flex-shrink:0;font-size:13px;padding:8px;border-radius:6px;border:1px solid var(--border);width:auto;">
           <option value="feature">✨ Feature</option>
           <option value="fix">🔧 Fix</option>
