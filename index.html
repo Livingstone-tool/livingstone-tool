@@ -1738,6 +1738,8 @@ async function loadFromSupabase() {
       endDate: j.end_date || '',
       notes: j.notes || ''
     }));
+    db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
+    db.jobs = db.jobs.filter((j, i, arr) => arr.findIndex(x => x.ref === j.ref) === i);
 
     db.tasks = tasks.map(t => ({
       id: t.id,
@@ -2374,7 +2376,7 @@ function renderJobsTable() {
       <td style="text-align:right">${j.quoteValue ? '£'+j.quoteValue.toLocaleString() : '—'}</td>
       <td style="text-align:right">${j.estCost ? '£'+j.estCost.toLocaleString() : '—'}</td>
       <td>${j.startDate||'—'}</td>
-      <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editJobByRef('${j.ref}')">Edit</button></td>
+      <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editJobByRef('${j.ref}', ${i})">Edit</button></td>
     </tr>`;
   }).join('');
 }
@@ -2416,10 +2418,12 @@ function newJobModal() {
   document.getElementById('job-modal-delete-btn').style.display='none';
 }
 
-function editJobByRef(ref) {
-  const j = db.jobs.find(x=>x.ref===ref);
+function editJobByRef(ref, idx) {
+  const j = ref ? db.jobs.find(x=>x.ref===ref) : db.jobs[idx];
   if(!j) return;
+  ref = j.ref || '';
   document.getElementById('job-edit-ref').value = ref;
+  document.getElementById('job-edit-idx').value = idx ?? db.jobs.findIndex(j => j.ref === ref);
   document.getElementById('job-modal-title').textContent = 'Edit Job – '+ref;
   document.getElementById('job-ref').value = j.ref;
   document.getElementById('job-name').value = j.name;
@@ -2500,7 +2504,7 @@ function archiveJob() {
   if (job) {
     job.status = 'Archived';
     syncJobToSupabase(ref);
-    db.jobs = db.jobs.filter(j => j.ref !== ref);
+    db.jobs = ref ? db.jobs.filter(j => j.ref !== ref) : db.jobs.filter(j => j !== job);
     saveData();
   }
   closeModal('job-modal');
@@ -2511,10 +2515,11 @@ function archiveJob() {
 
 async function deleteJob() {
   const ref = document.getElementById('job-edit-ref').value;
-  if (!ref) return;
-  if (!confirm('Permanently delete ' + ref + '? This cannot be undone.')) return;
-  const job = db.jobs.find(j => j.ref === ref);
-  db.jobs = db.jobs.filter(j => j.ref !== ref);
+  const editIdx = parseInt(document.getElementById('job-edit-idx')?.value ?? '-1');
+  const job = ref ? db.jobs.find(j => j.ref === ref) : (editIdx >= 0 ? db.jobs[editIdx] : null);
+  if (!job) { alert('Could not find job to delete.'); return; }
+  if (!confirm('Permanently delete ' + (ref || job.name || 'this job') + '? This cannot be undone.')) return;
+  db.jobs = ref ? db.jobs.filter(j => j.ref !== ref) : db.jobs.filter(j => j !== job);
   saveData();
   closeModal('job-modal');
   renderJobsTable();
