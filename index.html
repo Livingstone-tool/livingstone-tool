@@ -2880,14 +2880,19 @@ function saveQuote() {
   };
   // Always delete existing quote for this job_ref then reinsert - prevents duplicates
   const normRef = q.number || q.jobRef || '';
+  console.log('SAVING QUOTE - normRef='+normRef, 'qData.job_ref='+qData.job_ref);
   (async () => {
     try {
       // Delete any existing quotes for this job ref (both formats)
-      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef, { method:'DELETE', headers:{...supa.headers} });
-      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef.replace('-',''), { method:'DELETE', headers:{...supa.headers} });
-      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.LP-'+normRef.replace(/^LP-?/,''), { method:'DELETE', headers:{...supa.headers} });
+      const d1 = await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef, { method:'DELETE', headers:{...supa.headers} });
+      console.log('Delete 1 status:', d1.status);
+      const d2 = await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef.replace('-',''), { method:'DELETE', headers:{...supa.headers} });
+      console.log('Delete 2 status:', d2.status);
+      const d3 = await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.LP-'+normRef.replace(/^LP-?/,''), { method:'DELETE', headers:{...supa.headers} });
+      console.log('Delete 3 status:', d3.status);
       // Now insert fresh
       const res = await supa.post('quotes', qData);
+      console.log('Insert result:', res);
       if(res&&res[0]) {
         q.id = res[0].id;
         const idx = db.quotes.findIndex(x => (x.number||x.jobRef) === (q.number||q.jobRef));
