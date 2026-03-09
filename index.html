@@ -2401,7 +2401,8 @@ function statusBadge(s) {
 function newJobModal() {
   document.getElementById('job-edit-ref').value = '';
   document.getElementById('job-modal-title').textContent = 'New Job';
-  ['job-ref','job-name','job-client-name','job-client-phone','job-client-email','job-desc','job-notes'].forEach(id=>document.getElementById(id).value='');
+  ['job-name','job-client-name','job-client-phone','job-client-email','job-desc','job-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('job-ref').value = nextLPRef();
   document.getElementById('job-status').value='Initial Enquiry';
   document.getElementById('job-lead').value='A';
   document.getElementById('job-scale').value='5';
