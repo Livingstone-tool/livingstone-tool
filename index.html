@@ -581,23 +581,23 @@
     <div class="grid-4" style="margin-bottom:24px;">
       <div class="stat-card">
         <div class="stat-label">Pipeline Value</div>
-        <div class="stat-value stat-copper" style="color:var(--copper)">£198,612</div>
-        <div class="stat-sub">20 active jobs</div>
+        <div class="stat-value stat-copper" style="color:var(--copper)" id="dash-pipeline-value">—</div>
+        <div class="stat-sub" id="dash-pipeline-sub">loading...</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Est. Total Margin</div>
-        <div class="stat-value" style="color:var(--success)">£36,272</div>
-        <div class="stat-sub">18.3% avg margin</div>
+        <div class="stat-value" style="color:var(--success)" id="dash-margin-value">—</div>
+        <div class="stat-sub" id="dash-margin-sub">—</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Confirmed Jobs</div>
-        <div class="stat-value">0</div>
-        <div class="stat-sub">4 quoted, pending</div>
+        <div class="stat-value" id="dash-confirmed-value">—</div>
+        <div class="stat-sub" id="dash-confirmed-sub">—</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Quotes Sent</div>
-        <div class="stat-value" style="color:var(--slate)">£149,942</div>
-        <div class="stat-sub">3 quotes outstanding</div>
+        <div class="stat-value" style="color:var(--slate)" id="dash-quotes-value">—</div>
+        <div class="stat-sub" id="dash-quotes-sub">—</div>
       </div>
     </div>
 
@@ -746,8 +746,11 @@
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th><th>Quote Value</th><th>Margin %</th>
-              <th>Start</th><th>Duration</th><th></th>
+              <th>Lead</th>
+              <th title="Initial finger in the air idea of what the client will pay us for the job when we first hear about it" style="cursor:help;border-bottom:1px dashed var(--copper)">Estimate to Client ⓘ</th>
+              <th title="The quote that we send to a client once we have been through the quote builder" style="cursor:help;border-bottom:1px dashed var(--copper)">Quote ⓘ</th>
+              <th title="What we are hoping the job costs us (Materials &amp; Labour)" style="cursor:help;border-bottom:1px dashed var(--copper)">Est. Job Cost ⓘ</th>
+              <th>Start</th><th></th>
             </tr>
           </thead>
           <tbody id="jobs-table-body"></tbody>
@@ -1282,8 +1285,9 @@
         <div class="form-group"><label>Client Phone</label><input type="tel" id="job-client-phone"></div>
         <div class="form-group"><label>Client Email</label><input type="email" id="job-client-email"></div>
         <div class="form-group"><label>Job Scale (1-10)</label><input type="number" id="job-scale" min="1" max="10"></div>
-        <div class="form-group"><label>Quote Value (£)</label><input type="number" id="job-quote-value" step="100"></div>
-        <div class="form-group"><label>Est. Cost (£)</label><input type="number" id="job-est-cost" step="100"></div>
+        <div class="form-group"><label title="Initial finger in the air idea of what the client will pay us" style="cursor:help;border-bottom:1px dashed var(--copper)">Estimate to Client (£) ⓘ</label><input type="number" id="job-estimate" step="100" placeholder="0"></div>
+        <div class="form-group"><label title="The formal quote generated through the quote builder — read only here" style="cursor:help;border-bottom:1px dashed var(--copper)">Quote Value (£) ⓘ</label><input type="number" id="job-quote-value" step="100" readonly style="background:#f5f0e8;color:#999"></div>
+        <div class="form-group"><label title="What we are hoping the job costs us (Materials &amp; Labour)" style="cursor:help;border-bottom:1px dashed var(--copper)">Est. Job Cost (£) ⓘ</label><input type="number" id="job-est-cost" step="100"></div>
         <div class="form-group"><label>Start Date</label><input type="date" id="job-start"></div>
         <div class="form-group"><label>End Date</label><input type="date" id="job-end"></div>
       </div>
@@ -1551,6 +1555,7 @@ async function syncJobToSupabase(ref) {
       status: job.status,
       lead: job.lead,
       scale: job.scale,
+      estimate: job.estimate || 0,
       quote_value: job.quoteValue || 0,
       est_cost: job.estCost || 0,
       start_date: job.startDate || null,
@@ -1618,11 +1623,11 @@ async function loadFromSupabase() {
       lead: j.lead || 'A',
       scale: j.scale || 5,
       quoteValue: (() => {
-        // Normalise ref for matching: LP001 <-> LP-001
         const norm = r => (r||'').replace('-','').toUpperCase();
         const q = (quotes||[]).find(q => norm(q.job_ref) === norm(j.ref));
-        return q ? parseFloat(q.total)||0 : parseFloat(j.quote_value)||0;
+        return q ? parseFloat(q.total)||0 : 0; // Only from quote builder, not free text
       })(),
+      estimate: parseFloat(j.estimate) || 0,
       estCost: parseFloat(j.est_cost) || 0,
       startDate: j.start_date || '',
       endDate: j.end_date || '',
@@ -2172,6 +2177,27 @@ function renderPage(id) {
 // DASHBOARD
 // ============================================================
 function renderDashboard() {
+  // --- Dynamic stat cards ---
+  const activeStatuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold'];
+  const activeJobs = db.jobs.filter(j => activeStatuses.includes(j.status));
+  const pipelineVal = activeJobs.reduce((s,j) => s + (j.quoteValue || j.estimate || 0), 0);
+  const totalCost = activeJobs.reduce((s,j) => s + (j.estCost || 0), 0);
+  const totalMargin = pipelineVal - totalCost;
+  const marginPct = pipelineVal ? (totalMargin/pipelineVal*100).toFixed(1) : 0;
+  const confirmedJobs = db.jobs.filter(j => j.status === 'Confirmed' || j.status === 'In Progress');
+  const quotedJobs = db.jobs.filter(j => j.status === 'Quoted');
+  const quotedVal = quotedJobs.reduce((s,j) => s + (j.quoteValue || 0), 0);
+
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set('dash-pipeline-value', '£' + Math.round(pipelineVal).toLocaleString());
+  set('dash-pipeline-sub', activeJobs.length + ' active jobs');
+  set('dash-margin-value', totalCost ? '£' + Math.round(totalMargin).toLocaleString() : '—');
+  set('dash-margin-sub', totalCost ? marginPct + '% avg margin' : 'Add est. costs to jobs');
+  set('dash-confirmed-value', confirmedJobs.length);
+  set('dash-confirmed-sub', quotedJobs.length + ' quoted, pending');
+  set('dash-quotes-value', quotedVal ? '£' + Math.round(quotedVal).toLocaleString() : '—');
+  set('dash-quotes-sub', quotedJobs.length + ' quotes outstanding');
+
   // upcoming actions
   const upcoming = db.actionsQ1
     .filter(a=>a.status!=='Completed')
@@ -2207,13 +2233,17 @@ function renderPipeline() {
 
   board.innerHTML = cols.map(status => {
     const colJobs = jobs.filter(j=>j.status===status);
-    const total = colJobs.reduce((s,j)=>s+(j.quoteValue||0),0);
-    const cards = colJobs.map(j=>`
+    const total = colJobs.reduce((s,j)=>s+(j.quoteValue||j.estimate||0),0);
+    const cards = colJobs.map(j=>{
+      const displayVal = j.quoteValue || j.estimate || 0;
+      const valLabel = j.quoteValue ? '£'+j.quoteValue.toLocaleString() : j.estimate ? '~£'+j.estimate.toLocaleString() : 'TBC';
+      return `
       <div class="pipeline-card" onclick="openJob('${j.ref}')">
         <div class="job-ref">${j.ref}</div>
         <div class="job-name">${j.name}</div>
-        <div class="job-value">${j.quoteValue ? '£'+j.quoteValue.toLocaleString() : 'TBC'} · ${j.lead==='A'?'Adam':'Tom'}</div>
-      </div>`).join('');
+        <div class="job-value">${valLabel} · ${j.lead==='A'?'Adam':'Tom'}</div>
+      </div>`;
+    }).join('');
     return `<div class="pipeline-col">
       <div class="pipeline-col-header">
         ${status}
@@ -2247,13 +2277,29 @@ function renderJobsTable() {
       <td>${j.client?.name||''}</td>
       <td>${statusBadge(j.status)}</td>
       <td><span class="chip chip-${j.lead==='A'?'a':'t'}">${j.lead==='A'?'Adam':'Tom'}</span></td>
-      <td>${j.quoteValue ? '£'+j.quoteValue.toLocaleString() : '—'}</td>
-      <td>${margin!=='–' ? margin+'%' : '—'}</td>
+      <td onclick="event.stopPropagation()" style="padding:4px 8px;">
+        <input type="number" value="${j.estimate||''}" placeholder="—"
+          style="width:100px;border:1px solid transparent;background:transparent;text-align:right;font-size:13px;cursor:pointer;"
+          onfocus="this.style.border='1px solid var(--copper)';this.style.background='#fff';"
+          onblur="this.style.border='1px solid transparent';this.style.background='transparent';saveInlineEstimate('${j.ref}',this.value)"
+          onclick="this.select()"
+        />
+      </td>
+      <td style="text-align:right">${j.quoteValue ? '£'+j.quoteValue.toLocaleString() : '—'}</td>
+      <td style="text-align:right">${j.estCost ? '£'+j.estCost.toLocaleString() : '—'}</td>
       <td>${j.startDate||'—'}</td>
-      <td>${dur}</td>
       <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editJobByRef('${j.ref}')">Edit</button></td>
     </tr>`;
   }).join('');
+}
+
+function saveInlineEstimate(ref, val) {
+  const job = db.jobs.find(j => j.ref === ref);
+  if (!job) return;
+  job.estimate = parseFloat(val) || 0;
+  supa.patchByRef('jobs', ref, { estimate: job.estimate }).catch(e => console.warn('Estimate save failed:', e));
+  renderJobsTable();
+  renderPipeline();
 }
 
 function statusBadge(s) {
@@ -2268,10 +2314,20 @@ function statusBadge(s) {
 // ============================================================
 // JOB MODAL
 // ============================================================
+function nextLPRef() {
+  const refs = db.jobs.map(j => {
+    const m = (j.ref||'').match(/LP-?(\d+)/i);
+    return m ? parseInt(m[1]) : 0;
+  });
+  const maxNum = refs.length ? Math.max(...refs) : 0;
+  return 'LP-' + String(maxNum + 1).padStart(3, '0');
+}
+
 function newJobModal() {
   document.getElementById('job-edit-ref').value = '';
   document.getElementById('job-modal-title').textContent = 'New Job';
   ['job-ref','job-name','job-client-name','job-client-phone','job-client-email','job-desc','job-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('job-ref').value = nextLPRef();
   document.getElementById('job-status').value='Initial Enquiry';
   document.getElementById('job-lead').value='A';
   document.getElementById('job-scale').value='5';
@@ -2293,6 +2349,7 @@ function editJobByRef(ref) {
   document.getElementById('job-client-name').value = j.client?.name||'';
   document.getElementById('job-client-phone').value = j.client?.phone||'';
   document.getElementById('job-client-email').value = j.client?.email||'';
+  document.getElementById('job-estimate').value = j.estimate||'';
   document.getElementById('job-quote-value').value = j.quoteValue||'';
   document.getElementById('job-est-cost').value = j.estCost||'';
   document.getElementById('job-start').value = j.startDate||'';
@@ -2315,6 +2372,7 @@ function saveJob() {
       phone: document.getElementById('job-client-phone').value,
       email: document.getElementById('job-client-email').value
     },
+    estimate: parseFloat(document.getElementById('job-estimate').value)||0,
     quoteValue: parseFloat(document.getElementById('job-quote-value').value)||0,
     estCost: parseFloat(document.getElementById('job-est-cost').value)||0,
     startDate: document.getElementById('job-start').value,
@@ -2336,7 +2394,8 @@ function saveJob() {
       ref: job.ref, name: job.name, description: job.desc||'',
       client_name: job.client?.name||'', client_phone: job.client?.phone||'',
       client_email: job.client?.email||'', status: job.status,
-      lead: job.lead, scale: job.scale, quote_value: job.quoteValue||0,
+      lead: job.lead, scale: job.scale, estimate: job.estimate||0,
+      quote_value: job.quoteValue||0,
       est_cost: job.estCost||0, start_date: job.startDate||null,
       end_date: job.endDate||null, notes: job.notes||'',
       sort_order: db.jobs.length - 1
@@ -2456,11 +2515,33 @@ function populateQuoteJobDropdown(selectedRef) {
   const sel = document.getElementById('qb-number');
   if(!sel) return;
   sel.innerHTML = '<option value="">— Select Job —</option>' +
-    db.jobs.map(j => `<option value="${j.ref}" ${j.ref===selectedRef?'selected':''}>${j.ref} — ${j.name}</option>`).join('');
+    db.jobs.map(j => `<option value="${j.ref}" ${j.ref===selectedRef?'selected':''}>${j.ref} — ${j.name}</option>`).join('') +
+    '<option value="__new__" style="color:var(--copper);font-weight:600;">+ Create New Job...</option>';
 }
 
 function quoteJobSelected(ref) {
   if(!ref) return;
+  if(ref === '__new__') {
+    const name = prompt('Job name for new job:');
+    if(!name) { document.getElementById('qb-number').value=''; return; }
+    const newRef = nextLPRef();
+    const newJob = {
+      ref: newRef, name: name, status: 'Preparing Quote', lead: 'A',
+      scale: 5, client: {name:'',phone:'',email:''}, estimate: 0,
+      quoteValue: 0, estCost: 0, startDate: '', endDate: '', desc: '', notes: ''
+    };
+    db.jobs.push(newJob);
+    supa.post('jobs', {
+      ref: newRef, name: name, status: 'Preparing Quote', lead: 'A',
+      scale: 5, sort_order: db.jobs.length - 1
+    }).then(res => { if(res&&res[0]) newJob.id = res[0].id; }).catch(e => console.warn('Job create failed:', e));
+    populateQuoteJobDropdown(newRef);
+    document.getElementById('qb-number').value = newRef;
+    window._activeQuoteRef = newRef;
+    document.getElementById('qb-client').value = '';
+    document.getElementById('qb-title').textContent = newRef + ' — ' + name;
+    return;
+  }
   window._activeQuoteRef = ref;
   const job = db.jobs.find(j=>j.ref===ref);
   if(job) {
@@ -2523,7 +2604,8 @@ function renderQBRooms() {
         <input type="number" value="${l.rate||0}" min="0" step="0.01" oninput="updateLine(${ri},${li},'rate',parseFloat(this.value)||0)" style="font-size:12.5px;">
         <span data-linetotal style="font-size:12.5px;font-weight:600;">£${((l.withMargin)||0).toFixed(2)}</span>
         <button class="del-btn" onclick="removeLine(${ri},${li})">🗑</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     return `<div class="qb-room-section">
       <div class="qb-room-header">
