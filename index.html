@@ -2532,7 +2532,12 @@ function editCurrentJob() {
 // ============================================================
 function renderQuotesTable() {
   const tbody = document.getElementById('quotes-table-body');
-  tbody.innerHTML = db.quotes.map((q,i) => `
+  const sorted = [...db.quotes].sort((a,b) => {
+    const numA = parseInt(((a.number||a.jobRef||'').match(/\d+/)||[0])[0]);
+    const numB = parseInt(((b.number||b.jobRef||'').match(/\d+/)||[0])[0]);
+    return numA - numB;
+  });
+  tbody.innerHTML = sorted.map((q,i) => `
     <tr>
       <td><strong>${q.number||q.jobRef}</strong></td>
       <td>${(() => { const j=db.jobs.find(x=>x.ref===(q.number||q.jobRef)); return j?j.name:''; })()}</td>
@@ -2542,7 +2547,7 @@ function renderQuotesTable() {
       <td>${q.labourMargin||q.margin||10}%</td>
       <td><span class="badge badge-quoted">Quoted</span></td>
       <td>
-        <button class="btn btn-sm btn-secondary" onclick="viewQuote(${i})">View</button>
+        <button class="btn btn-sm btn-secondary" onclick="viewQuote(${db.quotes.indexOf(q)})">View</button>
       </td>
     </tr>`).join('');
 }
