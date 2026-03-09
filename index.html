@@ -2355,6 +2355,44 @@ function renderPipeline() {
 // JOBS TABLE
 // ============================================================
 
+function renderJobsTable() {
+  var statusF = document.getElementById('job-filter-status') ? document.getElementById('job-filter-status').value : '';
+  var leadF = document.getElementById('job-filter-lead') ? document.getElementById('job-filter-lead').value : '';
+  var jobs = db.jobs.filter(function(j) {
+    return (!statusF || j.status === statusF) && (!leadF || j.lead === leadF);
+  });
+  var tbody = document.getElementById('jobs-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = jobs.map(function(j, i) {
+    var quoteVal = j.quoteValue || 0;
+    var estCost = j.estCost || 0;
+    var margin = quoteVal && estCost ? Math.round((quoteVal - estCost) / quoteVal * 100) : null;
+    var quoteDisplay = quoteVal ? '£' + quoteVal.toLocaleString() : '--';
+    var estCostDisplay = estCost ? '£' + estCost.toLocaleString() : '--';
+    var estimateDisplay = j.estimate ? ('~£' + parseFloat(j.estimate).toLocaleString()) : '--';
+    var leadName = j.lead === 'A' ? 'Adam' : 'Tom';
+    var leadClass = j.lead === 'A' ? 'a' : 't';
+    var refDisplay = j.ref ? '<strong>' + j.ref + '</strong>' : '<span style="color:#e74c3c;font-size:11px;font-weight:600;">⚠ NO REF</span>';
+    var marginDisplay = margin !== null ? '<span style="font-size:11px;color:' + (margin > 20 ? 'var(--success)' : margin > 10 ? '#e67e22' : 'var(--danger)') + ';">' + margin + '%</span>' : '';
+    var statusDisplay = statusBadge(j.status);
+    var row = '<tr data-ref="' + (j.ref||'') + '" onclick="openJob(this.dataset.ref)" style="cursor:pointer;">';
+    row += '<td style="position:relative;">' + refDisplay + '</td>';
+    row += '<td>' + (j.name||'') + '</td>';
+    row += '<td>' + (j.client && j.client.name ? j.client.name : '') + '</td>';
+    row += '<td>' + statusDisplay + '</td>';
+    row += '<td><span class="chip chip-' + leadClass + '">' + leadName + '</span></td>';
+    row += '<td>' + estimateDisplay + '</td>';
+    row += '<td>' + quoteDisplay + '</td>';
+    row += '<td>' + estCostDisplay + '</td>';
+    row += '<td>' + (j.startDate||'--') + '</td>';
+    row += '<td onclick="event.stopPropagation()" style="padding:4px 8px;">' + marginDisplay + '</td>';
+    row += '<td><button class="btn btn-sm btn-secondary" data-ref="' + (j.ref||'') + '" data-idx="' + i + '" onclick="event.stopPropagation();editJobByRef(this.dataset.ref,parseInt(this.dataset.idx))">Edit</button></td>';
+    row += '</tr>';
+    return row;
+  }).join('');
+}
+
+
 async function reseedJobsFromBackup() {
   if (!confirm('Re-insert all LP-001 to LP-021 into Supabase from Excel backup? Only use if jobs are missing.')) return;
   const jobs = [
