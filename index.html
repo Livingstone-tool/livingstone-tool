@@ -2383,8 +2383,17 @@ async function reseedJobsFromBackup() {
   let ok = 0, fail = 0;
   for (const job of jobs) {
     try {
-      await supa.post('jobs', job);
-      ok++;
+      const r = await fetch(SUPABASE_URL + '/rest/v1/jobs', {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(job)
+      });
+      if (r.ok) { ok++; } 
+      else { const txt = await r.text(); console.warn('Failed:', job.ref, r.status, txt); fail++; }
     } catch(e) {
       console.warn('Failed:', job.ref, e.message);
       fail++;
