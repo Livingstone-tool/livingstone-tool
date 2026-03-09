@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.48 -->
+<!-- Livingstone v2.49 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3264,18 +3264,22 @@ function updateTaskJobInfo() {
   const doneTasks = db.tasks.filter(t => t.jobRef === ref && t.status === 'Completed').length;
   const dur = j.startDate && j.endDate ? Math.round((new Date(j.endDate) - new Date(j.startDate)) / 86400000) : null;
   const leadName = j.lead === 'A' ? 'Adam' : 'Tom';
+  const fmtD = d => d ? new Date(d).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '—';
   panel.style.display = 'block';
   panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <span style="font-weight:600;font-size:13px;color:var(--text);">${j.name}</span>
       <span class="badge ${getBadgeClass(j.status)}" style="font-size:11px;">${j.status}</span>
     </div>
+    <div style="background:white;border-radius:6px;padding:8px 12px;margin-bottom:8px;border:1px solid var(--border);">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px;">Job Date Span</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);">${fmtD(j.startDate)}  →  ${fmtD(j.endDate)}${dur !== null ? '<span style="font-weight:400;font-size:12px;color:var(--text-muted);margin-left:8px;">(' + dur + ' days)</span>' : ''}</div>
+    </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;color:var(--text-muted);">
-      <span>📅 ${j.startDate || '—'} → ${j.endDate || '—'}${dur !== null ? ' <span style="color:var(--text);">(' + dur + ' days)</span>' : ''}</span>
       <span>👤 ${leadName}</span>
       <span>📋 ${taskCount} task${taskCount !== 1 ? 's' : ''}${taskCount > 0 ? ' (' + doneTasks + ' done)' : ''}</span>
+      ${j.quoteValue ? '<span>💰 £' + j.quoteValue.toLocaleString() + '</span>' : ''}
     </div>
-    ${j.quoteValue ? '<div style="margin-top:6px;color:var(--text-muted);">💰 Quote: <span style="color:var(--copper);font-weight:600;">£' + j.quoteValue.toLocaleString() + '</span>' + (j.estCost ? ' · Est. Cost: £' + j.estCost.toLocaleString() : '') + '</div>' : ''}
   `;
 }
 
