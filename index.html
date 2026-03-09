@@ -224,7 +224,6 @@
   label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; }
   input, select, textarea {
     width: 100%;
-    box-sizing: border-box;
     padding: 9px 12px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -521,7 +520,28 @@
   .qb-line.drag-over { border-top: 2px solid var(--copper) !important; background: rgba(184,115,51,0.08); }
   .drag-handle { opacity:0.4; transition:opacity 0.15s; }
   .drag-handle:hover { opacity:1; }
+
   #wish-input { flex:1 !important; width:auto !important; min-width:0 !important; }
+  /* JOB ROW TOOLTIP */
+  tr.clickable-row:hover td:first-child .job-row-tip { display: block; }
+  .job-row-tip {
+    display: none;
+    position: absolute;
+    left: 0; top: 100%;
+    z-index: 200;
+    background: var(--slate-dark);
+    color: white;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    min-width: 280px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    pointer-events: none;
+    line-height: 1.8;
+    white-space: nowrap;
+  }
+  .job-row-tip strong { color: #d4956a; }
+
   </style>
 </head>
 <body>
@@ -583,23 +603,23 @@
     <div class="grid-4" style="margin-bottom:24px;">
       <div class="stat-card">
         <div class="stat-label">Pipeline Value</div>
-        <div class="stat-value stat-copper" style="color:var(--copper)" id="dash-pipeline-value">—</div>
-        <div class="stat-sub" id="dash-pipeline-sub">loading...</div>
+        <div class="stat-value stat-copper" style="color:var(--copper)">£198,612</div>
+        <div class="stat-sub">20 active jobs</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Est. Total Margin</div>
-        <div class="stat-value" style="color:var(--success)" id="dash-margin-value">—</div>
-        <div class="stat-sub" id="dash-margin-sub">—</div>
+        <div class="stat-value" style="color:var(--success)">£36,272</div>
+        <div class="stat-sub">18.3% avg margin</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Confirmed Jobs</div>
-        <div class="stat-value" id="dash-confirmed-value">—</div>
-        <div class="stat-sub" id="dash-confirmed-sub">—</div>
+        <div class="stat-value">0</div>
+        <div class="stat-sub">4 quoted, pending</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Quotes Sent</div>
-        <div class="stat-value" style="color:var(--slate)" id="dash-quotes-value">—</div>
-        <div class="stat-sub" id="dash-quotes-sub">—</div>
+        <div class="stat-value" style="color:var(--slate)">£149,942</div>
+        <div class="stat-sub">3 quotes outstanding</div>
       </div>
     </div>
 
@@ -748,10 +768,7 @@
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th>
-              <th title="Initial finger in the air idea of what the client will pay us for the job when we first hear about it" style="cursor:help;border-bottom:1px dashed var(--copper)">Estimate to Client ⓘ</th>
-              <th title="The quote that we send to a client once we have been through the quote builder" style="cursor:help;border-bottom:1px dashed var(--copper)">Quote ⓘ</th>
-              <th title="What we are hoping the job costs us (Materials &amp; Labour)" style="cursor:help;border-bottom:1px dashed var(--copper)">Est. Job Cost ⓘ</th>
+              <th>Lead</th><th title="Your estimate to the client (editable)">Estimate to Client</th><th title="From quote builder">Quote</th><th title="Estimated job cost">Est. Cost</th>
               <th>Start</th><th></th>
             </tr>
           </thead>
@@ -1287,9 +1304,8 @@
         <div class="form-group"><label>Client Phone</label><input type="tel" id="job-client-phone"></div>
         <div class="form-group"><label>Client Email</label><input type="email" id="job-client-email"></div>
         <div class="form-group"><label>Job Scale (1-10)</label><input type="number" id="job-scale" min="1" max="10"></div>
-        <div class="form-group"><label title="Initial finger in the air idea of what the client will pay us" style="cursor:help;border-bottom:1px dashed var(--copper)">Estimate to Client (£) ⓘ</label><input type="number" id="job-estimate" step="100" placeholder="0"></div>
-        <div class="form-group"><label title="The formal quote generated through the quote builder — read only here" style="cursor:help;border-bottom:1px dashed var(--copper)">Quote Value (£) ⓘ</label><input type="number" id="job-quote-value" step="100" readonly style="background:#f5f0e8;color:#999"></div>
-        <div class="form-group"><label title="What we are hoping the job costs us (Materials &amp; Labour)" style="cursor:help;border-bottom:1px dashed var(--copper)">Est. Job Cost (£) ⓘ</label><input type="number" id="job-est-cost" step="100"></div>
+        <div class="form-group"><label>Quote Value (£)</label><input type="number" id="job-quote-value" step="100"></div>
+        <div class="form-group"><label>Est. Cost (£)</label><input type="number" id="job-est-cost" step="100"></div>
         <div class="form-group"><label>Start Date</label><input type="date" id="job-start"></div>
         <div class="form-group"><label>End Date</label><input type="date" id="job-end"></div>
       </div>
@@ -1465,8 +1481,8 @@
       <div style="display:flex;gap:8px;margin-bottom:20px;align-items:center;">
         <input type="text" id="wish-input" placeholder="Describe idea or fix..." onkeydown="if(event.key==='Enter')addWish()">
         <select id="wish-type" style="flex-shrink:0;font-size:13px;padding:8px;border-radius:6px;border:1px solid var(--border);width:auto;">
-          <option value="feature">✨ Feature</option>
-          <option value="fix">🔧 Fix</option>
+          <option value="feature">&#x2728; Feature</option>
+          <option value="fix">&#x1F527; Fix</option>
         </select>
         <button class="btn btn-primary" style="flex-shrink:0;" onclick="addWish()">Add</button>
       </div>
@@ -1540,13 +1556,13 @@ let db = { jobs:[], tasks:[], paymentGates:[], quotes:[], weeklyEntries:[], prod
 const STORE_KEY = 'lp_data_v1';
 
 function saveData() {
-  // Save to localStorage as backup + sync key changes to Supabase
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
     localStorage.setItem('livingstoneCosts', JSON.stringify(db.costs||[]));
     localStorage.setItem('livingstoneWishlist', JSON.stringify(db.wishlist||[]));
   } catch(e) {}
 }
+
 
 async function syncJobToSupabase(ref) {
   const job = db.jobs.find(j => j.ref === ref);
@@ -1561,7 +1577,6 @@ async function syncJobToSupabase(ref) {
       status: job.status,
       lead: job.lead,
       scale: job.scale,
-      estimate: job.estimate || 0,
       quote_value: job.quoteValue || 0,
       est_cost: job.estCost || 0,
       start_date: job.startDate || null,
@@ -1621,7 +1636,7 @@ async function loadFromSupabase() {
     // Map Supabase column names to app's internal format
     db.jobs = jobs.map(j => ({
       id: j.id,
-      ref: (j.ref||'').replace(/^LP(\d)/,'LP-$1'),
+      ref: j.ref,
       name: j.name || '',
       desc: j.description || '',
       client: { name: j.client_name || '', phone: j.client_phone || '', email: j.client_email || '' },
@@ -1629,11 +1644,11 @@ async function loadFromSupabase() {
       lead: j.lead || 'A',
       scale: j.scale || 5,
       quoteValue: (() => {
+        // Normalise ref for matching: LP001 <-> LP-001
         const norm = r => (r||'').replace('-','').toUpperCase();
         const q = (quotes||[]).find(q => norm(q.job_ref) === norm(j.ref));
-        return q ? parseFloat(q.total)||0 : 0; // Only from quote builder, not free text
+        return q ? parseFloat(q.total)||0 : parseFloat(j.quote_value)||0;
       })(),
-      estimate: parseFloat(j.estimate) || 0,
       estCost: parseFloat(j.est_cost) || 0,
       startDate: j.start_date || '',
       endDate: j.end_date || '',
@@ -1664,7 +1679,7 @@ async function loadFromSupabase() {
     db.quotes = quotes.map(q => ({
       id: q.id,
       number: (() => { const d=q.description||''; const m=d.match(/^NUM:([^|]*)/); return (m&&m[1]) ? m[1] : (q.job_ref ? q.job_ref : 'LP-?'); })(),
-      jobRef: (q.job_ref||'').replace(/^LP(\d)/,'LP-$1'),
+      jobRef: q.job_ref || '',
       client: q.client_name || '',
       date: q.quote_date || '',
       validDays: q.valid_days || 30,
@@ -1692,10 +1707,9 @@ async function loadFromSupabase() {
     db.subs = SEED.subs || [];
     db.actionsQ1 = SEED.actionsQ1 || [];
     db.actionsLT = SEED.actionsLT || [];
-    // Restore wishlist from localStorage (persisted independently, not in Supabase)
     try {
       const _wl = localStorage.getItem('livingstoneWishlist');
-      db.wishlist = _wl ? JSON.parse(_wl) : (SEED.wishlist || []);
+      db.wishlist = _wl ? JSON.parse(_wl) : [];
     } catch(e) { db.wishlist = []; }
     db.rooms = SEED.rooms || [];
 
@@ -1724,26 +1738,26 @@ async function loadFromSupabase() {
 // ============================================================
 const SEED = {
   jobs: [
-    {ref:'LP-001',name:'Yarlet 1 - Music Academy',desc:'Renovation of building to house music academy on the grounds of Yarlet School. Current building is structurally sound but in need of significant renovation.',client:{name:'Yarlet Trust',phone:'',email:''},status:'Quoted',lead:'A',scale:9,quoteValue:104307,estCost:90309,startDate:'2026-04-06',endDate:'2026-06-30',notes:'25% deposit, 25% after first fix, 25% on second fix, 25% on completion. Start date subject to acceptance.'},
-    {ref:'LP-002',name:'Yarlet 2 - Reception',desc:'Reception area renovation at Yarlet School.',client:{name:'Yarlet Trust',phone:'',email:''},status:'Quoted',lead:'A',scale:6,quoteValue:23300,estCost:19000,startDate:'2026-03-23',endDate:'2026-05-01',notes:''},
-    {ref:'LP-003',name:'Oak House Ph.1',desc:'Phase 1 of renovation of newly purchased Oak House. Main bathroom reinstallation, master bedroom works, electrics throughout.',client:{name:'Khine and Myat',phone:'',email:''},status:'Preparing Quote',lead:'A',scale:6,quoteValue:18282,estCost:15500,startDate:'2026-04-15',endDate:'2026-05-31',notes:''},
-    {ref:'LP-004',name:'Oak House Ph.2',desc:'Full renovation phase 2 - major structural and interior works.',client:{name:'Khine and Myat',phone:'',email:''},status:'Preparing Quote',lead:'A',scale:9,quoteValue:0,estCost:135000,startDate:'2026-06-01',endDate:'2026-06-30',notes:'Estimated cost only at this stage'},
-    {ref:'LP-005',name:'Keates Ph.1',desc:'Footings work for Keates property.',client:{name:'Jim Keates',phone:'',email:''},status:'Completed',lead:'T',scale:3,quoteValue:7400,estCost:6200,startDate:'2026-03-02',endDate:'2026-03-10',notes:'Footings completed'},
-    {ref:'LP-006',name:'Keates Ph.2',desc:'Garage, balcony and basement renovation.',client:{name:'Jim Keates',phone:'',email:''},status:'Quoted',lead:'T',scale:8,quoteValue:45000,estCost:38000,startDate:'2026-09-01',endDate:'2026-12-31',notes:'121 day project estimate'},
-    {ref:'LP-007',name:'Howes',desc:'',client:{name:'Mills Howe',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:5,quoteValue:0,estCost:0,startDate:'2026-04-07',endDate:'2026-04-28',notes:''},
-    {ref:'LP-008',name:'Follwells',desc:'',client:{name:'Lou Follwell',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:5,quoteValue:0,estCost:0,startDate:'2026-06-08',endDate:'2026-07-03',notes:''},
-    {ref:'LP-009',name:'Harrisons',desc:'',client:{name:'Sarah Harrison',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:5,quoteValue:0,estCost:0,startDate:'2026-04-15',endDate:'2026-04-19',notes:''},
-    {ref:'LP-010',name:'Whitby-Samways 3',desc:'',client:{name:'Kate Whitby Samways',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:4,quoteValue:0,estCost:0,startDate:'2026-03-03',endDate:'2026-04-06',notes:''},
-    {ref:'LP-011',name:'Pippa Gee',desc:'',client:{name:'Pippa Gee',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:4,quoteValue:0,estCost:0,startDate:'2026-03-14',endDate:'2026-03-15',notes:''},
-    {ref:'LP-012',name:'Halls (Outdoor)',desc:'',client:{name:'Ali Hall',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:3,quoteValue:0,estCost:0,startDate:'2026-06-01',endDate:'2026-06-12',notes:''},
-    {ref:'LP-013',name:'Busbys',desc:'Strip out room, remove partition wall, replumb, plasterboard all walls with insulated backs, recessed ceiling with lights, new doorway, skim, radiator, paint.',client:{name:'Lindsey Busby',phone:'',email:''},status:'Quoted',lead:'A',scale:3,quoteValue:6470,estCost:5882,startDate:'2026-04-27',endDate:'2026-05-08',notes:''},
-    {ref:'LP-014',name:'Lloyds 1',desc:'',client:{name:'Fiona Lloyd',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:3,quoteValue:0,estCost:0,startDate:'2026-03-30',endDate:'2026-04-10',notes:''},
-    {ref:'LP-015',name:'Lloyds 2',desc:'',client:{name:'Fiona Lloyd',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:3,quoteValue:0,estCost:0,startDate:'2026-04-20',endDate:'2026-04-23',notes:''},
-    {ref:'LP-016',name:'Pickerings',desc:'',client:{name:'Lou Pickering',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:3,quoteValue:0,estCost:0,startDate:'2026-04-18',endDate:'2026-04-20',notes:''},
-    {ref:'LP-017',name:'Halls (Bed)',desc:'',client:{name:'Ali Hall',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:4,quoteValue:0,estCost:0,startDate:'2026-03-02',endDate:'2026-03-13',notes:''},
-    {ref:'LP-018',name:'Jackie Cummings',desc:'',client:{name:'Jackie Cummings',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:5,quoteValue:0,estCost:0,startDate:'2026-04-27',endDate:'2026-05-22',notes:''},
-    {ref:'LP-019',name:'Whitby-Samways 4',desc:'',client:{name:'Greg Whitby-Samways',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:5,quoteValue:0,estCost:0,startDate:'2026-08-01',endDate:'2026-08-22',notes:''},
-    {ref:'LP-020',name:'Lloyds - Study',desc:'Study room - painting, doors.',client:{name:'Lloyds',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:2,quoteValue:2600,estCost:2000,startDate:'2026-02-10',endDate:'2026-03-10',notes:''}
+    {ref:'LP001',name:'Yarlet 1 - Music Academy',desc:'Renovation of building to house music academy on the grounds of Yarlet School. Current building is structurally sound but in need of significant renovation.',client:{name:'Yarlet Trust',phone:'',email:''},status:'Quoted',lead:'A',scale:9,quoteValue:104307,estCost:90309,startDate:'2026-04-06',endDate:'2026-06-30',notes:'25% deposit, 25% after first fix, 25% on second fix, 25% on completion. Start date subject to acceptance.'},
+    {ref:'LP002',name:'Yarlet 2 - Reception',desc:'Reception area renovation at Yarlet School.',client:{name:'Yarlet Trust',phone:'',email:''},status:'Quoted',lead:'A',scale:6,quoteValue:23300,estCost:19000,startDate:'2026-03-23',endDate:'2026-05-01',notes:''},
+    {ref:'LP003',name:'Oak House Ph.1',desc:'Phase 1 of renovation of newly purchased Oak House. Main bathroom reinstallation, master bedroom works, electrics throughout.',client:{name:'Khine and Myat',phone:'',email:''},status:'Preparing Quote',lead:'A',scale:6,quoteValue:18282,estCost:15500,startDate:'2026-04-15',endDate:'2026-05-31',notes:''},
+    {ref:'LP004',name:'Oak House Ph.2',desc:'Full renovation phase 2 - major structural and interior works.',client:{name:'Khine and Myat',phone:'',email:''},status:'Preparing Quote',lead:'A',scale:9,quoteValue:0,estCost:135000,startDate:'2026-06-01',endDate:'2026-06-30',notes:'Estimated cost only at this stage'},
+    {ref:'LP005',name:'Keates Ph.1',desc:'Footings work for Keates property.',client:{name:'Jim Keates',phone:'',email:''},status:'Completed',lead:'T',scale:3,quoteValue:7400,estCost:6200,startDate:'2026-03-02',endDate:'2026-03-10',notes:'Footings completed'},
+    {ref:'LP006',name:'Keates Ph.2',desc:'Garage, balcony and basement renovation.',client:{name:'Jim Keates',phone:'',email:''},status:'Quoted',lead:'T',scale:8,quoteValue:45000,estCost:38000,startDate:'2026-09-01',endDate:'2026-12-31',notes:'121 day project estimate'},
+    {ref:'LP007',name:'Howes',desc:'',client:{name:'Mills Howe',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:5,quoteValue:0,estCost:0,startDate:'2026-04-07',endDate:'2026-04-28',notes:''},
+    {ref:'LP008',name:'Follwells',desc:'',client:{name:'Lou Follwell',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:5,quoteValue:0,estCost:0,startDate:'2026-06-08',endDate:'2026-07-03',notes:''},
+    {ref:'LP009',name:'Harrisons',desc:'',client:{name:'Sarah Harrison',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:5,quoteValue:0,estCost:0,startDate:'2026-04-15',endDate:'2026-04-19',notes:''},
+    {ref:'LP010',name:'Whitby-Samways 3',desc:'',client:{name:'Kate Whitby Samways',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:4,quoteValue:0,estCost:0,startDate:'2026-03-03',endDate:'2026-04-06',notes:''},
+    {ref:'LP011',name:'Pippa Gee',desc:'',client:{name:'Pippa Gee',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:4,quoteValue:0,estCost:0,startDate:'2026-03-14',endDate:'2026-03-15',notes:''},
+    {ref:'LP012',name:'Halls (Outdoor)',desc:'',client:{name:'Ali Hall',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:3,quoteValue:0,estCost:0,startDate:'2026-06-01',endDate:'2026-06-12',notes:''},
+    {ref:'LP013',name:'Busbys',desc:'Strip out room, remove partition wall, replumb, plasterboard all walls with insulated backs, recessed ceiling with lights, new doorway, skim, radiator, paint.',client:{name:'Lindsey Busby',phone:'',email:''},status:'Quoted',lead:'A',scale:3,quoteValue:6470,estCost:5882,startDate:'2026-04-27',endDate:'2026-05-08',notes:''},
+    {ref:'LP014',name:'Lloyds 1',desc:'',client:{name:'Fiona Lloyd',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:3,quoteValue:0,estCost:0,startDate:'2026-03-30',endDate:'2026-04-10',notes:''},
+    {ref:'LP015',name:'Lloyds 2',desc:'',client:{name:'Fiona Lloyd',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:3,quoteValue:0,estCost:0,startDate:'2026-04-20',endDate:'2026-04-23',notes:''},
+    {ref:'LP016',name:'Pickerings',desc:'',client:{name:'Lou Pickering',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:3,quoteValue:0,estCost:0,startDate:'2026-04-18',endDate:'2026-04-20',notes:''},
+    {ref:'LP017',name:'Halls (Bed)',desc:'',client:{name:'Ali Hall',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:4,quoteValue:0,estCost:0,startDate:'2026-03-02',endDate:'2026-03-13',notes:''},
+    {ref:'LP018',name:'Jackie Cummings',desc:'',client:{name:'Jackie Cummings',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:5,quoteValue:0,estCost:0,startDate:'2026-04-27',endDate:'2026-05-22',notes:''},
+    {ref:'LP019',name:'Whitby-Samways 4',desc:'',client:{name:'Greg Whitby-Samways',phone:'',email:''},status:'Initial Enquiry',lead:'T',scale:5,quoteValue:0,estCost:0,startDate:'2026-08-01',endDate:'2026-08-22',notes:''},
+    {ref:'LP020',name:'Lloyds - Study',desc:'Study room - painting, doors.',client:{name:'Lloyds',phone:'',email:''},status:'Initial Enquiry',lead:'A',scale:2,quoteValue:2600,estCost:2000,startDate:'2026-02-10',endDate:'2026-03-10',notes:''}
   ],
   subs: [
     {name:'Chris Rowley',trade:'Plasterer',dayRate:230,phone:'',email:'',reliability:9,quality:8,costScore:8,notes:''},
@@ -1801,252 +1815,252 @@ const SEED = {
     {name:'Handle for door',type:'Material',rate:20,unit:'Per handle'}
   ],
   tasks: [
-    {jobRef:'LP-003',desc:'Take Bobby and Josh to look',responsible:'',start:'2026-02-25',end:'2026-02-25',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Full project plan',responsible:'',start:'2026-02-26',end:'2026-03-03',status:'In Progress'},
-    {jobRef:'LP-012',desc:'Reach out to Ben and Ali to go asnd have a look',responsible:'',start:'2026-02-27',end:'2026-02-27',status:'Not Started'},
-    {jobRef:'LP-017',desc:'Reach out to Ben and Ali to go asnd have a look',responsible:'',start:'2026-02-27',end:'2026-02-27',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Take Bobby to look at job',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Take Polish Krys to look at job',responsible:'',start:'2026-03-02',end:'2026-03-06',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Condition report visit (Bobby and Josh)',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
-    {jobRef:'LP-005',desc:'Dig and prepare footings',responsible:'',start:'2026-03-02',end:'2026-03-04',status:'Not Started'},
-    {jobRef:'LP-010',desc:'Prepare quote',responsible:'',start:'2026-03-02',end:'2026-03-06',status:'Not Started'},
-    {jobRef:'LP-012',desc:'Go and look at the job',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
-    {jobRef:'LP-017',desc:'Go and look at the job',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
-    {jobRef:'LP-019',desc:'Ask Greg when he wants it doing',responsible:'',start:'2026-03-02',end:'2026-03-03',status:'Not Started'},
-    {jobRef:'LP-001',desc:'DBS checks (Kirsty - are they needed?)',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Organise DBS checks',responsible:'',start:'2026-03-03',end:'2026-03-10',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Send quote',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
-    {jobRef:'LP-005',desc:'Quote',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
-    {jobRef:'LP-009',desc:'Reach out to Sarah',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Condition report',responsible:'',start:'2026-03-04',end:'2026-03-04',status:'Not Started'},
-    {jobRef:'LP-014',desc:'Reach out to go and look',responsible:'',start:'2026-03-04',end:'2026-03-05',status:'Not Started'},
-    {jobRef:'LP-015',desc:'Reach out to go and look',responsible:'',start:'2026-03-04',end:'2026-03-05',status:'Not Started'},
-    {jobRef:'LP-016',desc:'Reach out to Lou',responsible:'',start:'2026-03-04',end:'2026-03-04',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Confirmation of quote',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
-    {jobRef:'LP-012',desc:'Reach out to Lee to come and look',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
-    {jobRef:'LP-014',desc:'Find labourer (Ethan or Evo)',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
-    {jobRef:'LP-015',desc:'Find labourer (Ethan or Evo)',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
-    {jobRef:'LP-016',desc:'Visit Lou',responsible:'',start:'2026-03-06',end:'2026-03-10',status:'Not Started'},
-    {jobRef:'LP-017',desc:'Reach out to Lee to come and look',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
-    {jobRef:'LP-002',desc:'Full project plan',responsible:'',start:'2026-03-08',end:'2026-03-11',status:'Not Started'},
-    {jobRef:'LP-016',desc:'Quote',responsible:'',start:'2026-03-08',end:'2026-03-10',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Book subbies',responsible:'',start:'2026-03-10',end:'2026-03-14',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Put together project plan',responsible:'',start:'2026-03-10',end:'2026-03-11',status:'Not Started'},
-    {jobRef:'LP-007',desc:'Full quote',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
-    {jobRef:'LP-009',desc:'Quote',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
-    {jobRef:'LP-009',desc:'Book Lee to come and quote',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
-    {jobRef:'LP-009',desc:'Ask Evo if he wants the labouring work',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
-    {jobRef:'LP-002',desc:'Any additional DBS needed',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Book in Carl the Carpet',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Book in Geoff',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
-    {jobRef:'LP-003',desc:'Book in Bobby',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
-    {jobRef:'LP-002',desc:'Project',responsible:'',start:'2026-03-12',end:'2026-06-30',status:'Not Started'},
-    {jobRef:'LP-009',desc:'Project plan',responsible:'',start:'2026-03-12',end:'2026-03-13',status:'Not Started'},
-    {jobRef:'LP-016',desc:'Project plan',responsible:'',start:'2026-03-12',end:'2026-03-15',status:'Not Started'},
-    {jobRef:'LP-013',desc:'Quote',responsible:'',start:'2026-03-13',end:'2026-03-15',status:'Not Started'},
-    {jobRef:'LP-006',desc:'Full quote for double garage, balcony, basement',responsible:'',start:'2026-03-15',end:'2026-03-18',status:'Not Started'},
-    {jobRef:'LP-014',desc:'Quote',responsible:'',start:'2026-03-15',end:'2026-03-18',status:'Not Started'},
-    {jobRef:'LP-015',desc:'Quote',responsible:'',start:'2026-03-15',end:'2026-03-18',status:'Not Started'},
-    {jobRef:'LP-016',desc:'Find labourer',responsible:'',start:'2026-03-15',end:'2026-03-16',status:'Not Started'},
-    {jobRef:'LP-010',desc:'Project plan',responsible:'',start:'2026-03-16',end:'2026-03-20',status:'Not Started'},
-    {jobRef:'LP-012',desc:'Quote',responsible:'',start:'2026-03-16',end:'2026-03-17',status:'Not Started'},
-    {jobRef:'LP-017',desc:'Quote',responsible:'',start:'2026-03-16',end:'2026-03-17',status:'Not Started'},
-    {jobRef:'LP-004',desc:'Prepare quote',responsible:'',start:'2026-03-20',end:'2026-03-23',status:'Not Started'},
-    {jobRef:'LP-010',desc:'Book Geoff?',responsible:'',start:'2026-03-20',end:'2026-03-20',status:'Not Started'},
-    {jobRef:'LP-012',desc:'Project plan',responsible:'',start:'2026-03-20',end:'2026-03-22',status:'Not Started'},
-    {jobRef:'LP-013',desc:'Project plan',responsible:'',start:'2026-03-20',end:'2026-03-22',status:'Not Started'},
-    {jobRef:'LP-017',desc:'Project plan',responsible:'',start:'2026-03-20',end:'2026-03-22',status:'Not Started'},
-    {jobRef:'LP-014',desc:'Project plan',responsible:'',start:'2026-03-25',end:'2026-03-27',status:'Not Started'},
-    {jobRef:'LP-015',desc:'Project plan',responsible:'',start:'2026-03-25',end:'2026-03-27',status:'Not Started'},
-    {jobRef:'LP-004',desc:'Confirmation of job',responsible:'',start:'2026-03-27',end:'2026-03-27',status:'Not Started'},
-    {jobRef:'LP-013',desc:'Book Chris the plasterer',responsible:'',start:'2026-03-27',end:'2026-03-28',status:'Not Started'},
-    {jobRef:'LP-004',desc:'Full project plan',responsible:'',start:'2026-03-28',end:'2026-03-31',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Project',responsible:'',start:'2026-04-01',end:'2026-06-30',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Clear and level',responsible:'',start:'2026-04-01',end:'2026-04-04',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Path / Gravel - Labour to clear',responsible:'',start:'2026-04-01',end:'2026-04-04',status:'Not Started'},
-    {jobRef:'LP-018',desc:'Quote',responsible:'',start:'2026-04-01',end:'2026-04-02',status:'Not Started'},
-    {jobRef:'LP-018',desc:'Book Chris',responsible:'',start:'2026-04-01',end:'2026-04-02',status:'Not Started'},
-    {jobRef:'LP-018',desc:'Book Geoff',responsible:'',start:'2026-04-01',end:'2026-04-02',status:'Not Started'},
-    {jobRef:'LP-007',desc:'Do job',responsible:'',start:'2026-04-05',end:'2026-04-08',status:'Not Started'},
-    {jobRef:'LP-018',desc:'Project plan',responsible:'',start:'2026-04-05',end:'2026-04-09',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Accesibility Ramp - Footings, digging',responsible:'',start:'2026-04-06',end:'2026-04-08',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Accesibility Ramp - Footings, concreteing',responsible:'',start:'2026-04-09',end:'2026-04-09',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Accesibility Ramp - Brickwork',responsible:'',start:'2026-04-10',end:'2026-04-16',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Accesibility Ramp - Tarmac',responsible:'',start:'2026-04-20',end:'2026-04-21',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit doors and windows',responsible:'',start:'2026-04-22',end:'2026-04-22',status:'Not Started'},
-    {jobRef:'LP-011',desc:'Prepare quote',responsible:'',start:'2026-05-01',end:'2026-05-01',status:'Not Started'},
-    {jobRef:'LP-011',desc:'Prepare project plan',responsible:'',start:'2026-05-03',end:'2026-05-03',status:'Not Started'},
-    {jobRef:'LP-011',desc:'Do the work',responsible:'',start:'2026-06-01',end:'2026-06-03',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Take Paul to look at job',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Take Chris to look at job',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Take Geoff to look at job',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Take Carl the Carpet to look at job',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Find labourer(s)',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Register for VAT (Do we need to before job?) Quote still valid?',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Wire and fit downlights',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New doorway into visitors WC',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New doorway into visitors WC',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Visitors Loos',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New consumer unit',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Redo mains water (IN GENERAL)',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Relevel floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Relevel floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New flooring - Laid',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit fan',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit fan - Drill hole',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall - Calcs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall - Building regs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall Timber',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall Steel',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit electric points (x 2)',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door for under stairs cupboard',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door for under stairs cupboard',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Reskim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Reskim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Remove current stairs and walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Remove current stairs and walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Re Build Opening for stairs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Re Build Opening for stairs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Re Build Opening for stairs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Create new stairs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Create new stairs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Create new stairs',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New Loos',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall Timber',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Rip down roof',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New flooring - Laid',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim ceiling',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Rip down roof',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim ceiling',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit electric points',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Window renovation - Materials (Fitted)',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit electric points',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim ceiling',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Level Floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Level Floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Skim Walls',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Conduit for listening cable',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Conduit for listening cable',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-001',desc:'Fit electric points',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-002',desc:'Book subbies',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-008',desc:'Quote',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-008',desc:'Project plan',responsible:'',start:'',end:'',status:'Not Started'},
-    {jobRef:'LP-008',desc:'Give Chris Alcock the plan',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP003',desc:'Take Bobby and Josh to look',responsible:'',start:'2026-02-25',end:'2026-02-25',status:'Not Started'},
+    {jobRef:'LP001',desc:'Full project plan',responsible:'',start:'2026-02-26',end:'2026-03-03',status:'In Progress'},
+    {jobRef:'LP012',desc:'Reach out to Ben and Ali to go asnd have a look',responsible:'',start:'2026-02-27',end:'2026-02-27',status:'Not Started'},
+    {jobRef:'LP017',desc:'Reach out to Ben and Ali to go asnd have a look',responsible:'',start:'2026-02-27',end:'2026-02-27',status:'Not Started'},
+    {jobRef:'LP001',desc:'Take Bobby to look at job',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
+    {jobRef:'LP001',desc:'Take Polish Krys to look at job',responsible:'',start:'2026-03-02',end:'2026-03-06',status:'Not Started'},
+    {jobRef:'LP003',desc:'Condition report visit (Bobby and Josh)',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
+    {jobRef:'LP005',desc:'Dig and prepare footings',responsible:'',start:'2026-03-02',end:'2026-03-04',status:'Not Started'},
+    {jobRef:'LP010',desc:'Prepare quote',responsible:'',start:'2026-03-02',end:'2026-03-06',status:'Not Started'},
+    {jobRef:'LP012',desc:'Go and look at the job',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
+    {jobRef:'LP017',desc:'Go and look at the job',responsible:'',start:'2026-03-02',end:'2026-03-02',status:'Not Started'},
+    {jobRef:'LP019',desc:'Ask Greg when he wants it doing',responsible:'',start:'2026-03-02',end:'2026-03-03',status:'Not Started'},
+    {jobRef:'LP001',desc:'DBS checks (Kirsty - are they needed?)',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
+    {jobRef:'LP001',desc:'Organise DBS checks',responsible:'',start:'2026-03-03',end:'2026-03-10',status:'Not Started'},
+    {jobRef:'LP003',desc:'Send quote',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
+    {jobRef:'LP005',desc:'Quote',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
+    {jobRef:'LP009',desc:'Reach out to Sarah',responsible:'',start:'2026-03-03',end:'2026-03-03',status:'Not Started'},
+    {jobRef:'LP003',desc:'Condition report',responsible:'',start:'2026-03-04',end:'2026-03-04',status:'Not Started'},
+    {jobRef:'LP014',desc:'Reach out to go and look',responsible:'',start:'2026-03-04',end:'2026-03-05',status:'Not Started'},
+    {jobRef:'LP015',desc:'Reach out to go and look',responsible:'',start:'2026-03-04',end:'2026-03-05',status:'Not Started'},
+    {jobRef:'LP016',desc:'Reach out to Lou',responsible:'',start:'2026-03-04',end:'2026-03-04',status:'Not Started'},
+    {jobRef:'LP003',desc:'Confirmation of quote',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
+    {jobRef:'LP012',desc:'Reach out to Lee to come and look',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
+    {jobRef:'LP014',desc:'Find labourer (Ethan or Evo)',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
+    {jobRef:'LP015',desc:'Find labourer (Ethan or Evo)',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
+    {jobRef:'LP016',desc:'Visit Lou',responsible:'',start:'2026-03-06',end:'2026-03-10',status:'Not Started'},
+    {jobRef:'LP017',desc:'Reach out to Lee to come and look',responsible:'',start:'2026-03-06',end:'2026-03-06',status:'Not Started'},
+    {jobRef:'LP002',desc:'Full project plan',responsible:'',start:'2026-03-08',end:'2026-03-11',status:'Not Started'},
+    {jobRef:'LP016',desc:'Quote',responsible:'',start:'2026-03-08',end:'2026-03-10',status:'Not Started'},
+    {jobRef:'LP001',desc:'Book subbies',responsible:'',start:'2026-03-10',end:'2026-03-14',status:'Not Started'},
+    {jobRef:'LP003',desc:'Put together project plan',responsible:'',start:'2026-03-10',end:'2026-03-11',status:'Not Started'},
+    {jobRef:'LP007',desc:'Full quote',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
+    {jobRef:'LP009',desc:'Quote',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
+    {jobRef:'LP009',desc:'Book Lee to come and quote',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
+    {jobRef:'LP009',desc:'Ask Evo if he wants the labouring work',responsible:'',start:'2026-03-10',end:'2026-03-10',status:'Not Started'},
+    {jobRef:'LP002',desc:'Any additional DBS needed',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
+    {jobRef:'LP003',desc:'Book in Carl the Carpet',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
+    {jobRef:'LP003',desc:'Book in Geoff',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
+    {jobRef:'LP003',desc:'Book in Bobby',responsible:'',start:'2026-03-11',end:'2026-03-13',status:'Not Started'},
+    {jobRef:'LP002',desc:'Project',responsible:'',start:'2026-03-12',end:'2026-06-30',status:'Not Started'},
+    {jobRef:'LP009',desc:'Project plan',responsible:'',start:'2026-03-12',end:'2026-03-13',status:'Not Started'},
+    {jobRef:'LP016',desc:'Project plan',responsible:'',start:'2026-03-12',end:'2026-03-15',status:'Not Started'},
+    {jobRef:'LP013',desc:'Quote',responsible:'',start:'2026-03-13',end:'2026-03-15',status:'Not Started'},
+    {jobRef:'LP006',desc:'Full quote for double garage, balcony, basement',responsible:'',start:'2026-03-15',end:'2026-03-18',status:'Not Started'},
+    {jobRef:'LP014',desc:'Quote',responsible:'',start:'2026-03-15',end:'2026-03-18',status:'Not Started'},
+    {jobRef:'LP015',desc:'Quote',responsible:'',start:'2026-03-15',end:'2026-03-18',status:'Not Started'},
+    {jobRef:'LP016',desc:'Find labourer',responsible:'',start:'2026-03-15',end:'2026-03-16',status:'Not Started'},
+    {jobRef:'LP010',desc:'Project plan',responsible:'',start:'2026-03-16',end:'2026-03-20',status:'Not Started'},
+    {jobRef:'LP012',desc:'Quote',responsible:'',start:'2026-03-16',end:'2026-03-17',status:'Not Started'},
+    {jobRef:'LP017',desc:'Quote',responsible:'',start:'2026-03-16',end:'2026-03-17',status:'Not Started'},
+    {jobRef:'LP004',desc:'Prepare quote',responsible:'',start:'2026-03-20',end:'2026-03-23',status:'Not Started'},
+    {jobRef:'LP010',desc:'Book Geoff?',responsible:'',start:'2026-03-20',end:'2026-03-20',status:'Not Started'},
+    {jobRef:'LP012',desc:'Project plan',responsible:'',start:'2026-03-20',end:'2026-03-22',status:'Not Started'},
+    {jobRef:'LP013',desc:'Project plan',responsible:'',start:'2026-03-20',end:'2026-03-22',status:'Not Started'},
+    {jobRef:'LP017',desc:'Project plan',responsible:'',start:'2026-03-20',end:'2026-03-22',status:'Not Started'},
+    {jobRef:'LP014',desc:'Project plan',responsible:'',start:'2026-03-25',end:'2026-03-27',status:'Not Started'},
+    {jobRef:'LP015',desc:'Project plan',responsible:'',start:'2026-03-25',end:'2026-03-27',status:'Not Started'},
+    {jobRef:'LP004',desc:'Confirmation of job',responsible:'',start:'2026-03-27',end:'2026-03-27',status:'Not Started'},
+    {jobRef:'LP013',desc:'Book Chris the plasterer',responsible:'',start:'2026-03-27',end:'2026-03-28',status:'Not Started'},
+    {jobRef:'LP004',desc:'Full project plan',responsible:'',start:'2026-03-28',end:'2026-03-31',status:'Not Started'},
+    {jobRef:'LP001',desc:'Project',responsible:'',start:'2026-04-01',end:'2026-06-30',status:'Not Started'},
+    {jobRef:'LP001',desc:'Clear and level',responsible:'',start:'2026-04-01',end:'2026-04-04',status:'Not Started'},
+    {jobRef:'LP001',desc:'Path / Gravel - Labour to clear',responsible:'',start:'2026-04-01',end:'2026-04-04',status:'Not Started'},
+    {jobRef:'LP018',desc:'Quote',responsible:'',start:'2026-04-01',end:'2026-04-02',status:'Not Started'},
+    {jobRef:'LP018',desc:'Book Chris',responsible:'',start:'2026-04-01',end:'2026-04-02',status:'Not Started'},
+    {jobRef:'LP018',desc:'Book Geoff',responsible:'',start:'2026-04-01',end:'2026-04-02',status:'Not Started'},
+    {jobRef:'LP007',desc:'Do job',responsible:'',start:'2026-04-05',end:'2026-04-08',status:'Not Started'},
+    {jobRef:'LP018',desc:'Project plan',responsible:'',start:'2026-04-05',end:'2026-04-09',status:'Not Started'},
+    {jobRef:'LP001',desc:'Accesibility Ramp - Footings, digging',responsible:'',start:'2026-04-06',end:'2026-04-08',status:'Not Started'},
+    {jobRef:'LP001',desc:'Accesibility Ramp - Footings, concreteing',responsible:'',start:'2026-04-09',end:'2026-04-09',status:'Not Started'},
+    {jobRef:'LP001',desc:'Accesibility Ramp - Brickwork',responsible:'',start:'2026-04-10',end:'2026-04-16',status:'Not Started'},
+    {jobRef:'LP001',desc:'Accesibility Ramp - Tarmac',responsible:'',start:'2026-04-20',end:'2026-04-21',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit doors and windows',responsible:'',start:'2026-04-22',end:'2026-04-22',status:'Not Started'},
+    {jobRef:'LP011',desc:'Prepare quote',responsible:'',start:'2026-05-01',end:'2026-05-01',status:'Not Started'},
+    {jobRef:'LP011',desc:'Prepare project plan',responsible:'',start:'2026-05-03',end:'2026-05-03',status:'Not Started'},
+    {jobRef:'LP011',desc:'Do the work',responsible:'',start:'2026-06-01',end:'2026-06-03',status:'Not Started'},
+    {jobRef:'LP001',desc:'Take Paul to look at job',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Take Chris to look at job',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Take Geoff to look at job',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Take Carl the Carpet to look at job',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Find labourer(s)',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Register for VAT (Do we need to before job?) Quote still valid?',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Wire and fit downlights',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Stud and soundproof alcove',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New doorway into visitors WC',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New doorway into visitors WC',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Visitors Loos',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New consumer unit',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Redo mains water (IN GENERAL)',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Relevel floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Relevel floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New flooring - Laid',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim all walls / ceilings',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lights',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit fan',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit fan - Drill hole',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall - Calcs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall - Building regs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall Timber',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall Steel',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit electric points (x 2)',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door for under stairs cupboard',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door for under stairs cupboard',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Reskim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Reskim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Remove current stairs and walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Remove current stairs and walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Re Build Opening for stairs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Re Build Opening for stairs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Re Build Opening for stairs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Create new stairs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Create new stairs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Create new stairs',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New Loos',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall Timber',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New stud wall',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit Toilet & Sink',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Rip down roof',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New flooring - Laid',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim ceiling',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Rip down roof',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New ceiling',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim ceiling',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'New door',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit electric points',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Inside stud wall for storage',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Window renovation - Materials (Fitted)',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit lighting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit electric points',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim ceiling',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Block up existing doorway',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Level Floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Level Floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Skim Walls',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit skirting',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit carpet tiles',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit ply to floor',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Conduit for listening cable',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Conduit for listening cable',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP001',desc:'Fit electric points',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP002',desc:'Book subbies',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP008',desc:'Quote',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP008',desc:'Project plan',responsible:'',start:'',end:'',status:'Not Started'},
+    {jobRef:'LP008',desc:'Give Chris Alcock the plan',responsible:'',start:'',end:'',status:'Not Started'},
   ],
   actionsQ1: [
     {desc:'Create Brand on a Page',owner:'Both',due:'2026-01-31',status:'Completed',notes:'Brand on a page completed - awaiting TD comments'},
@@ -2075,7 +2089,7 @@ const SEED = {
     {desc:'Develop repeat client relationships (Yarlet, Oak House)',owner:'Both',priority:'High',status:'In Progress',notes:'Multiple phases planned'}
   ],
   quotes: [
-    {number:'LP-001',jobRef:'LP-001',client:'Yarlet Trust',date:'2024-05-16',subtotal:99339.58,pmFee:4967,bonus:0,total:104306.56,margin:13.4,
+    {number:'LP-001',jobRef:'LP001',client:'Yarlet Trust',date:'2024-05-16',subtotal:99339.58,pmFee:4967,bonus:0,total:104306.56,margin:13.4,
      rooms:[
        {name:'Outside',lines:[
          {desc:'Clear and level',supplier:'Adam Hemming - PM',type:'Labour',qty:2,rate:200,subtotal:400,margin:10,withMargin:440},
@@ -2101,7 +2115,7 @@ const SEED = {
        ]}
      ]
     },
-    {number:'LP-003',jobRef:'LP-003',client:'Oak House',date:'2026-02-27',subtotal:17032.39,pmFee:1250,bonus:500,total:18282.39,margin:13.6,
+    {number:'LP-003',jobRef:'LP003',client:'Oak House',date:'2026-02-27',subtotal:17032.39,pmFee:1250,bonus:500,total:18282.39,margin:13.6,
      rooms:[
        {name:'Main Bathroom',lines:[
          {desc:'Removal of current bathroom',supplier:'Adam Hemming - PM',type:'Labour',qty:2.5,rate:200,subtotal:500,margin:10,withMargin:550},
@@ -2120,7 +2134,7 @@ const SEED = {
        ]}
      ]
     },
-    {number:'LP-013',jobRef:'LP-013',client:'Busby',date:'2026-03-02',subtotal:5881.77,pmFee:588.18,bonus:0,total:6469.95,margin:10,
+    {number:'LP-013',jobRef:'LP013',client:'Busby',date:'2026-03-02',subtotal:5881.77,pmFee:588.18,bonus:0,total:6469.95,margin:10,
      rooms:[
        {name:'Dressing Room',lines:[
          {desc:'Strip out room',supplier:'Adam Hemming - PM',type:'Labour',qty:2,rate:200,subtotal:400,margin:10,withMargin:440},
@@ -2180,20 +2194,18 @@ function renderPage(id) {
 // DASHBOARD
 // ============================================================
 function renderDashboard() {
-  // --- Dynamic stat cards ---
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
   const activeStatuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold'];
   const activeJobs = db.jobs.filter(j => activeStatuses.includes(j.status));
   const pipelineVal = activeJobs.reduce((s,j) => s + (j.quoteValue || j.estimate || 0), 0);
-  // Only count est cost for jobs that have a pipeline value (quote or estimate)
-  const totalCost = activeJobs.reduce((s,j) => (j.quoteValue || j.estimate) ? s + (j.estCost || 0) : s, 0);
+  const totalCost = activeJobs.reduce((s,j) => s + (j.estCost || 0), 0);
   const totalMargin = pipelineVal - totalCost;
   const marginPct = pipelineVal ? (totalMargin/pipelineVal*100).toFixed(1) : 0;
   const confirmedJobs = db.jobs.filter(j => j.status === 'Confirmed' || j.status === 'In Progress');
   const quotedJobs = db.jobs.filter(j => j.status === 'Quoted');
   const quotedVal = quotedJobs.reduce((s,j) => s + (j.quoteValue || 0), 0);
 
-  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
-  set('dash-pipeline-value', '£' + Math.round(pipelineVal).toLocaleString());
+  set('dash-pipeline-value', pipelineVal ? '£' + Math.round(pipelineVal).toLocaleString() : '—');
   set('dash-pipeline-sub', activeJobs.length + ' active jobs');
   set('dash-margin-value', totalCost ? '£' + Math.round(totalMargin).toLocaleString() : '—');
   set('dash-margin-sub', totalCost ? marginPct + '% avg margin' : 'Add est. costs to jobs');
@@ -2202,51 +2214,27 @@ function renderDashboard() {
   set('dash-quotes-value', quotedVal ? '£' + Math.round(quotedVal).toLocaleString() : '—');
   set('dash-quotes-sub', quotedJobs.length + ' quotes outstanding');
 
-  // upcoming actions
-  const upcoming = db.actionsQ1
-    .filter(a=>a.status!=='Completed')
-    .sort((a,b)=> (a.due||'9999') < (b.due||'9999') ? -1:1)
-    .slice(0,6);
-  const ul = document.getElementById('upcoming-actions-list');
-  ul.innerHTML = upcoming.map(a => {
-    const dot = a.status==='In Progress' ? 'dot-inprog' : a.status==='Blocked'?'dot-blocked':'dot-todo';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;">
-      <span class="action-dot ${dot}"></span>
-      <span style="flex:1;">${a.desc}</span>
-      <span style="color:var(--text-muted);font-size:12px;">${a.due||''}</span>
-      <span class="chip chip-${a.owner==='A'?'a':'t'}">${a.owner}</span>
-    </div>`;
-  }).join('') || '<div class="empty-state"><p>All actions complete!</p></div>';
-
-  // subs preview
-  const st = document.getElementById('sub-preview-table');
-  st.innerHTML = db.subs.slice(0,6).map(s => {
-    const avg = s.reliability&&s.quality ? ((s.reliability+s.quality+s.costScore)/3).toFixed(1) : '–';
-    return `<tr><td>${s.name}</td><td>${s.trade}</td><td>£${s.dayRate}/day</td><td>${avg!='–'?'\u2B50'+avg:'–'}</td></tr>`;
-  }).join('');
+  renderPipeline();
+  renderJobsTable();
 }
 
-// ============================================================
-// PIPELINE
-// ============================================================
+
 function renderPipeline() {
   const cols = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold'];
   const board = document.getElementById('pipeline-board');
   const leadF = document.getElementById('pipeline-filter-lead').value;
   const jobs = db.jobs.filter(j => !leadF || j.lead===leadF);
 
-  board.innerHTML = cols.map(status => {
+    board.innerHTML = cols.map(status => {
     const colJobs = jobs.filter(j=>j.status===status);
     const total = colJobs.reduce((s,j)=>s+(j.quoteValue||j.estimate||0),0);
     const cards = colJobs.map(j=>{
-      const displayVal = j.quoteValue || j.estimate || 0;
       const valLabel = j.quoteValue ? '\u00a3'+j.quoteValue.toLocaleString() : j.estimate ? '~\u00a3'+j.estimate.toLocaleString() : 'TBC';
-      const cardHtml = '<div class="pipeline-card" onclick="openJob(\'' + j.ref + '\')">'
+      return '<div class="pipeline-card" onclick="openJob(\'' + j.ref + '\')">'
         + '<div class="job-ref">' + j.ref + '</div>'
         + '<div class="job-name">' + j.name + '</div>'
         + '<div class="job-value">' + valLabel + ' \u00b7 ' + (j.lead==='A'?'Adam':'Tom') + '</div>'
         + '</div>';
-      return cardHtml;
     }).join('');
     const emptyHtml = colJobs.length === 0 ? '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">Empty</div>' : '';
     const totalHtml = total > 0 ? '<div style="text-align:right;font-size:11px;color:var(--text-muted);padding:4px 6px 0;">Total: <strong>\u00a3' + total.toLocaleString() + '</strong></div>' : '';
@@ -2269,19 +2257,29 @@ function renderJobsTable() {
   );
   const tbody = document.getElementById('jobs-table-body');
   tbody.innerHTML = jobs.map(j => {
-    const margin = j.quoteValue && j.estCost ? ((j.quoteValue-j.estCost)/j.quoteValue*100).toFixed(1) : '–';
-    const dur = j.startDate && j.endDate ? Math.round((new Date(j.endDate)-new Date(j.startDate))/(1000*60*60*24))+' days' : '–';
+    const _client = j.client?.name || '';
+    const _dates = j.startDate ? j.startDate + (j.endDate ? ' → ' + j.endDate : '') : '';
+    const _value = j.quoteValue ? '£' + j.quoteValue.toLocaleString() + ' quoted' : j.estimate ? '~£' + j.estimate.toLocaleString() + ' est.' : 'No value yet';
+    const _cost = j.estCost ? '£' + j.estCost.toLocaleString() + ' est. cost' : '';
+    const _notes = j.notes ? j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '';
+    const _tip = '<div class="job-row-tip">'
+      + '<strong>' + j.ref + ' – ' + j.name + '</strong><br>'
+      + (_client ? _client + '<br>' : '')
+      + (_dates ? _dates + '<br>' : '')
+      + _value + (_cost ? '  ·  ' + _cost : '') + '<br>'
+      + (_notes ? _notes : '')
+      + '</div>';
     return `<tr class="clickable-row" onclick="openJob('${j.ref}')">
-      <td><strong>${j.ref}</strong></td>
+      <td style="position:relative;"><strong>${j.ref}</strong>${_tip}</td>
       <td>${j.name}</td>
       <td>${j.client?.name||''}</td>
       <td>${statusBadge(j.status)}</td>
       <td><span class="chip chip-${j.lead==='A'?'a':'t'}">${j.lead==='A'?'Adam':'Tom'}</span></td>
       <td onclick="event.stopPropagation()" style="padding:4px 8px;">
-        <input type="number" value="${j.estimate||''}" placeholder="—"
-          style="width:100px;border:1px solid transparent;background:transparent;text-align:right;font-size:13px;cursor:pointer;"
-          onfocus="this.style.border=&quot;1px solid var(--copper)&quot;;this.style.background=&quot;#fff&quot;;"
-          onblur="this.style.border=&quot;1px solid transparent&quot;;this.style.background=&quot;transparent&quot;;saveInlineEstimate(&quot;${j.ref}&quot;,this.value)"
+        <input type="number" id="est-${j.ref}" value="${j.estimate||''}" placeholder="--"
+          style="width:90px;border:1px solid transparent;background:transparent;text-align:right;font-size:13px;cursor:pointer;"
+          onfocus="this.style.border='1px solid var(--copper)';this.style.background='#fff';"
+          onblur="this.style.border='1px solid transparent';this.style.background='transparent';saveInlineEstimate('${j.ref}',this.value)"
           onclick="this.select()"
         />
       </td>
@@ -2298,9 +2296,10 @@ function saveInlineEstimate(ref, val) {
   if (!job) return;
   job.estimate = parseFloat(val) || 0;
   supa.patchByRef('jobs', ref, { estimate: job.estimate }).catch(e => console.warn('Estimate save failed:', e));
-  renderJobsTable();
+  renderDashboard();
   renderPipeline();
 }
+
 
 function statusBadge(s) {
   const map = {
@@ -2314,20 +2313,10 @@ function statusBadge(s) {
 // ============================================================
 // JOB MODAL
 // ============================================================
-function nextLPRef() {
-  const refs = db.jobs.map(j => {
-    const m = (j.ref||'').match(/LP-?(\d+)/i);
-    return m ? parseInt(m[1]) : 0;
-  });
-  const maxNum = refs.length ? Math.max(...refs) : 0;
-  return 'LP-' + String(maxNum + 1).padStart(3, '0');
-}
-
 function newJobModal() {
   document.getElementById('job-edit-ref').value = '';
   document.getElementById('job-modal-title').textContent = 'New Job';
   ['job-ref','job-name','job-client-name','job-client-phone','job-client-email','job-desc','job-notes'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('job-ref').value = nextLPRef();
   document.getElementById('job-status').value='Initial Enquiry';
   document.getElementById('job-lead').value='A';
   document.getElementById('job-scale').value='5';
@@ -2349,7 +2338,6 @@ function editJobByRef(ref) {
   document.getElementById('job-client-name').value = j.client?.name||'';
   document.getElementById('job-client-phone').value = j.client?.phone||'';
   document.getElementById('job-client-email').value = j.client?.email||'';
-  document.getElementById('job-estimate').value = j.estimate||'';
   document.getElementById('job-quote-value').value = j.quoteValue||'';
   document.getElementById('job-est-cost').value = j.estCost||'';
   document.getElementById('job-start').value = j.startDate||'';
@@ -2372,7 +2360,6 @@ function saveJob() {
       phone: document.getElementById('job-client-phone').value,
       email: document.getElementById('job-client-email').value
     },
-    estimate: parseFloat(document.getElementById('job-estimate').value)||0,
     quoteValue: parseFloat(document.getElementById('job-quote-value').value)||0,
     estCost: parseFloat(document.getElementById('job-est-cost').value)||0,
     startDate: document.getElementById('job-start').value,
@@ -2394,8 +2381,7 @@ function saveJob() {
       ref: job.ref, name: job.name, description: job.desc||'',
       client_name: job.client?.name||'', client_phone: job.client?.phone||'',
       client_email: job.client?.email||'', status: job.status,
-      lead: job.lead, scale: job.scale, estimate: job.estimate||0,
-      quote_value: job.quoteValue||0,
+      lead: job.lead, scale: job.scale, quote_value: job.quoteValue||0,
       est_cost: job.estCost||0, start_date: job.startDate||null,
       end_date: job.endDate||null, notes: job.notes||'',
       sort_order: db.jobs.length - 1
@@ -2418,7 +2404,7 @@ function openJob(ref) {
   const margin = j.quoteValue && j.estCost ? j.quoteValue-j.estCost : 0;
   const marginPct = j.quoteValue ? (margin/j.quoteValue*100).toFixed(1)+'%' : '—';
   const dur = j.startDate&&j.endDate ? Math.round((new Date(j.endDate)-new Date(j.startDate))/(1000*60*60*24))+' days' : '—';
-  document.getElementById('jd-scale').textContent = j.scale ? '\u2B50'.repeat(Math.min(j.scale,10))+' ('+j.scale+'/10)' : '—';
+  document.getElementById('jd-scale').textContent = j.scale ? '⭐'.repeat(Math.min(j.scale,10))+' ('+j.scale+'/10)' : '—';
   document.getElementById('jd-lead').innerHTML = j.lead==='A' ? '<span class="chip chip-a">Adam</span>' : '<span class="chip chip-t">Tom</span>';
   document.getElementById('jd-start').textContent = j.startDate||'—';
   document.getElementById('jd-end').textContent = j.endDate||'—';
@@ -2479,7 +2465,6 @@ function renderQuotesTable() {
 function viewQuote(idx) {
   const q = db.quotes[idx];
   // Load into quote builder
-  window._activeQuoteRef = q.number||q.jobRef||'';
   populateQuoteJobDropdown(q.number||q.jobRef||'');
   document.getElementById('qb-client').value = q.client;
   document.getElementById('qb-address').value = '';
@@ -2519,6 +2504,16 @@ function populateQuoteJobDropdown(selectedRef) {
     '<option value="__new__" style="color:var(--copper);font-weight:600;">+ Create New Job...</option>';
 }
 
+
+function nextLPRef() {
+  const refs = db.jobs.map(j => {
+    const m = (j.ref||'').match(/LP-?(\d+)/i);
+    return m ? parseInt(m[1]) : 0;
+  });
+  const maxNum = refs.length ? Math.max(...refs) : 0;
+  return 'LP-' + String(maxNum + 1).padStart(3, '0');
+}
+
 function quoteJobSelected(ref) {
   if(!ref) return;
   if(ref === '__new__') {
@@ -2550,6 +2545,7 @@ function quoteJobSelected(ref) {
     document.getElementById('qb-subtitle').textContent = job.client?.name||'';
   }
 }
+
 
 function newQuoteModal() {
   populateQuoteJobDropdown('');
@@ -2591,7 +2587,7 @@ function renderQBRooms() {
     const roomTotal = room.lines.reduce((s,l)=>s+(l.withMargin||0),0);
     const lines = room.lines.map((l, li) => `
       <div class="qb-line" draggable="true" data-ri="${ri}" data-li="${li}" style="cursor:grab;">
-        <span class="drag-handle" style="cursor:grab;color:var(--text-muted);font-size:16px;padding:0 4px;user-select:none;" title="Drag to reorder">&#x28FF;</span>
+        <span class="drag-handle" style="cursor:grab;color:var(--text-muted);font-size:16px;padding:0 4px;user-select:none;" title="Drag to reorder">⠿</span>
         <input type="text" value="${l.desc||''}" placeholder="Description" oninput="updateLine(${ri},${li},'desc',this.value)" style="font-size:12.5px;">
         <select onchange="updateLine(${ri},${li},'supplier',this.value)" style="font-size:12px;">
           ${db.products.map(p=>`<option ${p.name===l.supplier?'selected':''}>${p.name}</option>`).join('')}
@@ -2603,9 +2599,8 @@ function renderQBRooms() {
         <input type="number" value="${l.qty||1}" min="0" step="0.5" oninput="updateLine(${ri},${li},'qty',parseFloat(this.value)||0)" style="font-size:12.5px;">
         <input type="number" value="${l.rate||0}" min="0" step="0.01" oninput="updateLine(${ri},${li},'rate',parseFloat(this.value)||0)" style="font-size:12.5px;">
         <span data-linetotal style="font-size:12.5px;font-weight:600;">£${((l.withMargin)||0).toFixed(2)}</span>
-        <button class="del-btn" onclick="removeLine(${ri},${li})">&#x1F5D1;</button>
-      </div>`
-    ).join('');
+        <button class="del-btn" onclick="removeLine(${ri},${li})">🗑</button>
+      </div>`).join('');
 
     return `<div class="qb-room-section">
       <div class="qb-room-header">
@@ -2927,8 +2922,8 @@ function saveQuote() {
   }
 
   const q = {
-    number: document.getElementById('qb-number').value || window._activeQuoteRef || '',
-    jobRef: document.getElementById('qb-number')?.value || window._activeQuoteRef || '',
+    number: document.getElementById('qb-number').value,
+    jobRef: document.getElementById('qb-number')?.value || '',
     client: document.getElementById('qb-client').value,
     date: new Date().toISOString().split('T')[0],
     rooms: saveRooms,
@@ -2950,7 +2945,7 @@ function saveQuote() {
 
   // Sync to Supabase
   const qData = {
-    job_ref: (q.number||q.jobRef||'').replace(/^LP(\d)/,'LP-$1'),
+    job_ref: q.number||q.jobRef||'',
     client_name: q.client||'',
     quote_date: q.date||null,
     rooms: JSON.stringify(saveRooms),
@@ -2962,23 +2957,32 @@ function saveQuote() {
     valid_days: parseInt(document.getElementById('qb-valid-days')?.value)||30,
     pm_fee: parseFloat(document.getElementById('qb-pm-fee')?.value)||0
   };
-  // Always delete existing quote for this job_ref then reinsert - prevents duplicates
-  const normRef = q.number || q.jobRef || '';
-  (async () => {
-    try {
-      // Delete any existing quotes for this job ref (both formats)
-      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef, { method:'DELETE', headers:{...supa.headers} });
-      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.'+normRef.replace('-',''), { method:'DELETE', headers:{...supa.headers} });
-      await fetch(SUPABASE_URL+'/rest/v1/quotes?job_ref=eq.LP-'+normRef.replace(/^LP-?/,''), { method:'DELETE', headers:{...supa.headers} });
-      // Now insert fresh
-      const res = await supa.post('quotes', qData);
-      if(res&&res[0]) {
+  if (q.id) {
+    // We have the Supabase ID - do a direct patch
+    supa.patch('quotes', q.id, qData).catch(e => console.warn('Quote sync:', e));
+  } else {
+    // No ID in memory - try patching by job_ref first, insert only if that finds nothing
+    supa.patchByJobRef('quotes', norm(q.number), qData).then(res => {
+      if(res && res.length > 0) {
+        // Patched existing row - store its ID
         q.id = res[0].id;
-        const idx = db.quotes.findIndex(x => (x.number||x.jobRef) === (q.number||q.jobRef));
+        const idx = db.quotes.findIndex(x => norm(x.number) === norm(q.number));
         if(idx>=0) db.quotes[idx].id = res[0].id;
+      } else {
+        // Nothing matched - genuinely new quote
+        supa.post('quotes', qData).then(res2 => {
+          if(res2&&res2[0]) {
+            q.id = res2[0].id;
+            const idx = db.quotes.findIndex(x => norm(x.number) === norm(q.number));
+            if(idx>=0) db.quotes[idx].id = res2[0].id;
+          }
+        }).catch(e => console.warn('Quote insert:', e));
       }
-    } catch(e) { console.warn('Quote save error:', e); }
-  })();
+    }).catch(() => {
+      // patchByJobRef failed - fall back to insert
+      supa.post('quotes', qData).then(res => { if(res&&res[0]) q.id=res[0].id; }).catch(e => console.warn('Quote insert:', e));
+    });
+  }
   // Update job quoteValue using the LP reference
   const jobRef = q.number || q.jobRef;
   if(jobRef) {
@@ -3089,7 +3093,7 @@ function renderSubs() {
   const container = document.getElementById('subs-cards-container');
   container.innerHTML = db.subs.map((s,i) => {
     const avg = (s.reliability&&s.quality&&s.costScore) ? ((s.reliability+s.quality+s.costScore)/3).toFixed(1) : null;
-    const stars = avg ? '\u2B50'.repeat(Math.round(avg/2)) : '';
+    const stars = avg ? '⭐'.repeat(Math.round(avg/2)) : '';
     return `<div class="card" style="margin-bottom:12px;">
       <div class="card-body">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;">
@@ -3379,20 +3383,13 @@ function renderWishlist() {
 }
 
 function addWish() {
-  try {
-    const inputEl = document.getElementById('wish-input');
-    const typeEl = document.getElementById('wish-type');
-    console.log('addWish called, inputEl:', inputEl, 'val:', inputEl?.value);
-    const val = inputEl ? inputEl.value.trim() : '';
-    const type = typeEl ? typeEl.value : 'feature';
-    if(!val) { console.warn('addWish: empty value'); return; }
-    if(!Array.isArray(db.wishlist)) { db.wishlist = []; }
-    db.wishlist.push({text:val, votes:1, type});
-    saveData();
-    inputEl.value = '';
-    renderWishlist();
-    console.log('addWish done, wishlist length:', db.wishlist.length);
-  } catch(e) { console.error('addWish error:', e); }
+  const val = document.getElementById('wish-input').value.trim();
+  const type = document.getElementById('wish-type')?.value || 'feature';
+  if(!val) return;
+  db.wishlist.push({text:val, votes:1, type});
+  saveData();
+  document.getElementById('wish-input').value='';
+  renderWishlist();
 }
 
 function voteWish(i, delta) {
@@ -3456,7 +3453,7 @@ window.addEventListener('load', async () => {
   if (app) app.style.opacity = '0';
   
   await loadFromSupabase();
-
+  
   // Remove loading overlay
   const overlay = document.getElementById('loading-overlay');
   if (overlay) overlay.remove();
@@ -4353,7 +4350,7 @@ function importData(input) {
           for(let i=0; i<db.jobs.length; i++) {
             const j = db.jobs[i];
             await supa.post('jobs', {
-              ref: (j.ref||'').replace(/^LP(\d)/,'LP-$1'), name: j.name, description: j.desc||j.description||'',
+              ref: j.ref, name: j.name, description: j.desc||j.description||'',
               client_name: j.client?.name||'', client_phone: j.client?.phone||'',
               client_email: j.client?.email||'', status: j.status||'Initial Enquiry',
               lead: j.lead||'', scale: j.scale||5,
