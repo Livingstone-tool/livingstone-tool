@@ -763,6 +763,7 @@
         </select>
       </div>
       <button class="btn btn-primary" onclick="newJobModal()">+ New Job</button>
+      <button class="btn btn-secondary" onclick="purgeNoRefJobs()" style="background:#e74c3c;color:white;font-size:12px;" title="Delete all jobs with no LP ref">🗑 Purge NO REF jobs</button>
     </div>
     <div class="card">
       <div class="table-wrap">
@@ -1617,6 +1618,11 @@ const supa = {
   },
   async delete(table, id) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {method:'DELETE', headers: this.headers});
+    if (!r.ok) throw new Error(await r.text());
+    return true;
+  },
+  async deleteWhere(table, filter) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {method:'DELETE', headers: this.headers});
     if (!r.ok) throw new Error(await r.text());
     return true;
   },
@@ -2511,6 +2517,26 @@ function archiveJob() {
   renderJobsTable();
   renderPipeline();
   renderDashboard();
+}
+
+async function purgeNoRefJobs() {
+  if (!confirm('This will permanently delete all jobs with no LP ref from Supabase and local storage. Continue?')) return;
+  try {
+    // Delete from Supabase where ref is null or empty
+    await supa.deleteWhere('jobs', 'ref=is.null');
+    console.log('Deleted null refs from Supabase');
+  } catch(e) { console.warn('null ref delete:', e); }
+  try {
+    await supa.deleteWhere('jobs', 'ref=eq.');
+    console.log('Deleted empty refs from Supabase');
+  } catch(e) { console.warn('empty ref delete:', e); }
+  // Also clean locally
+  db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
+  saveData();
+  renderJobsTable();
+  renderPipeline();
+  renderDashboard();
+  alert('Done - no-ref jobs purged.');
 }
 
 async function deleteJob() {
