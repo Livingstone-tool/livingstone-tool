@@ -2509,20 +2509,28 @@ function archiveJob() {
   renderDashboard();
 }
 
-function deleteJob() {
+async function deleteJob() {
   const ref = document.getElementById('job-edit-ref').value;
   if (!ref) return;
   if (!confirm('Permanently delete ' + ref + '? This cannot be undone.')) return;
   const job = db.jobs.find(j => j.ref === ref);
-  if (job && job.id) {
-    supa.delete('jobs', job.id).catch(e => console.warn('Delete failed:', e));
-  }
   db.jobs = db.jobs.filter(j => j.ref !== ref);
   saveData();
   closeModal('job-modal');
   renderJobsTable();
   renderPipeline();
   renderDashboard();
+  if (job && job.id) {
+    try {
+      await supa.delete('jobs', job.id);
+      console.log('Deleted from Supabase:', ref);
+    } catch(e) {
+      console.warn('Supabase delete failed:', e);
+      alert('Job removed locally but Supabase delete failed: ' + e.message);
+    }
+  } else {
+    console.warn('No Supabase id for job:', ref, job);
+  }
 }
 
 
