@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.58 -->
+<!-- Livingstone v2.59 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1728,12 +1728,13 @@ async function loadFromSupabase() {
     document.body.appendChild(_overlay);
 
     // Load all data in parallel
-    const [jobs, tasks, gates, quotes, weekly] = await Promise.all([
+    const [jobs, tasks, gates, quotes, weekly, costEntries] = await Promise.all([
       supa.get('jobs', 'order=sort_order.asc'),
       supa.get('tasks', 'order=sort_order.asc'),
       supa.get('payment_gates', 'order=sort_order.asc'),
       supa.get('quotes', 'order=created_at.desc'),
-      supa.get('weekly_entries', 'order=entry_date.asc')
+      supa.get('weekly_entries', 'order=entry_date.asc'),
+      supa.get('cost_entries', 'order=created_at.asc').catch(() => [])
     ]);
 
     // Map Supabase column names to app's internal format
@@ -1834,7 +1835,25 @@ async function loadFromSupabase() {
     } catch(e) { db.wishlist = []; }
     try {
       const _costs = localStorage.getItem('livingstoneCosts');
-      db.costs = _costs ? JSON.parse(_costs) : [];
+      const localCosts = _costs ? JSON.parse(_costs) : [];
+      // Prefer Supabase costs if available
+      if (costEntries && costEntries.length > 0) {
+        db.costs = costEntries.map(c => ({
+          id: c.id,
+          date: c.date || '',
+          type: c.type || 'Labour',
+          description: c.description || '',
+          notes: c.notes || '',
+          amount: parseFloat(c.amount) || 0,
+          sub: c.sub || '',
+          days: parseFloat(c.days) || 0,
+          dayRate: parseFloat(c.day_rate) || 0,
+          supplier: c.supplier || '',
+          allocations: typeof c.allocations === 'string' ? JSON.parse(c.allocations || '[]') : (c.allocations || [])
+        }));
+      } else {
+        db.costs = localCosts;
+      }
     } catch(e) { db.costs = []; }
     db.rooms = SEED.rooms || [];
 
@@ -5429,13 +5448,13 @@ function saveCostEntry() {
   }));
 
   const entry = {
-    id: Date.now(),
     date, type, description, notes, amount,
     allocations: resolvedAllocs,
     ...(type === 'Labour' ? { sub, days, dayRate } : { supplier })
   };
 
-  if (editIdx >= 0) {
+  const isEdit = editIdx >= 0;
+  if (isEdit) {
     entry.id = db.costs[editIdx].id;
     db.costs[editIdx] = entry;
   } else {
@@ -5446,6 +5465,40 @@ function saveCostEntry() {
   saveData();
   closeModal('cost-modal');
   renderCostTracker();
+
+  // Sync to Supabase
+  syncCostToSupabase(entry, isEdit);
+}
+
+async function syncCostToSupabase(entry, isEdit) {
+  const payload = {
+    date: entry.date || null,
+    type: entry.type || 'Labour',
+    description: entry.description || '',
+    notes: entry.notes || '',
+    amount: entry.amount || 0,
+    sub: entry.sub || '',
+    days: entry.days || null,
+    day_rate: entry.dayRate || null,
+    supplier: entry.supplier || '',
+    allocations: JSON.stringify(entry.allocations || [])
+  };
+
+  try {
+    if (isEdit && entry.id) {
+      await supa.patch('cost_entries', entry.id, payload);
+    } else {
+      const res = await supa.post('cost_entries', payload);
+      if (res && res[0]) {
+        // Update the local entry with the Supabase id
+        const local = db.costs.find(c => c === entry || (c.date === entry.date && c.description === entry.description && c.amount === entry.amount));
+        if (local) local.id = res[0].id;
+        saveData();
+      }
+    }
+  } catch(e) {
+    console.warn('Cost sync failed:', e.message);
+  }
 }
 
 function editCost(idx) {
@@ -5454,9 +5507,14 @@ function editCost(idx) {
 
 function deleteCost(idx) {
   if (!confirm('Delete this cost entry?')) return;
+  const cost = db.costs[idx];
   db.costs.splice(idx, 1);
   saveData();
   renderCostTracker();
+  // Delete from Supabase
+  if (cost && cost.id) {
+    supa.delete('cost_entries', cost.id).catch(e => console.warn('Cost delete failed:', e));
+  }
 }
 
 // ── COSTS PER JOB (for job detail modal) ──────────────────────────────────
