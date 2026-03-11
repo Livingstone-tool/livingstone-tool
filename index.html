@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.62 -->
+<!-- Livingstone v2.63 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -872,6 +872,7 @@
           </div>
 
           <!-- Rooms / Sections -->
+          <datalist id="supplier-list"></datalist>
           <div id="qb-rooms-container"></div>
 
           <div style="display:flex;gap:10px;margin-top:16px;">
@@ -1823,8 +1824,17 @@ async function loadFromSupabase() {
       notes: w.notes || ''
     }));
 
-    // Keep non-Supabase data from SEED
-    db.products = SEED.products || [];
+    // Keep non-Supabase data — merge SEED with any user-added products
+    const seedProducts = SEED.products || [];
+    try {
+      const localDB = JSON.parse(localStorage.getItem('livingstoneDB') || '{}');
+      const localProducts = localDB.products || [];
+      // Start with SEED, then add any local products not already in SEED
+      const seedNames = new Set(seedProducts.map(p => p.name));
+      db.products = [...seedProducts, ...localProducts.filter(p => !seedNames.has(p.name))];
+    } catch(e) {
+      db.products = seedProducts;
+    }
     db.subcontractors = SEED.subcontractors || [];
     db.subs = SEED.subs || [];
     db.actionsQ1 = SEED.actionsQ1 || [];
@@ -2824,6 +2834,10 @@ function addRoom() {
 }
 
 function renderQBRooms() {
+  // Populate supplier autocomplete
+  const dl = document.getElementById('supplier-list');
+  if (dl) dl.innerHTML = db.products.map(p => `<option value="${p.name}">`).join('');
+
   const mode = window._quoteMode || 'detailed';
   if(mode === 'byroom') return renderQBRoomSimple();
   if(mode === 'bytype') return renderQBRoomByType();
@@ -2837,10 +2851,7 @@ function renderQBRooms() {
       <div class="qb-line" draggable="true" data-ri="${ri}" data-li="${li}" style="cursor:grab;">
         <span class="drag-handle" style="cursor:grab;color:var(--text-muted);font-size:16px;padding:0 4px;user-select:none;" title="Drag to reorder">⠿</span>
         <input type="text" value="${l.desc||''}" placeholder="Description" oninput="updateLine(${ri},${li},'desc',this.value)" style="font-size:12.5px;">
-        <select onchange="updateLine(${ri},${li},'supplier',this.value)" style="font-size:12px;">
-          ${db.products.map(p=>`<option ${p.name===l.supplier?'selected':''}>${p.name}</option>`).join('')}
-          <option value="custom" ${!db.products.find(p=>p.name===l.supplier)?'selected':''}>Custom</option>
-        </select>
+        <input type="text" list="supplier-list" value="${l.supplier||''}" placeholder="Supplier / Sub" oninput="updateLine(${ri},${li},'supplier',this.value)" style="font-size:12px;">
         <select onchange="updateLine(${ri},${li},'type',this.value)" style="font-size:12px;">
           ${['Labour','Material','Skip Hire','Machine Hire','Other'].map(t=>`<option ${t===l.type?'selected':''}>${t}</option>`).join('')}
         </select>
