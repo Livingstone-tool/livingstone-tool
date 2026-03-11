@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.59 -->
+<!-- Livingstone v2.60 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5416,7 +5416,7 @@ function updateAllocRemaining() {
   allocEl.innerHTML = `<span style="color:${col};">Allocated: £${allocated.toFixed(2)} of £${total.toFixed(2)} (${pct}%) — Remaining: £${remaining.toFixed(2)}</span>`;
 }
 
-function saveCostEntry() {
+async function saveCostEntry() {
   const type = document.getElementById('cost-type').value;
   const date = document.getElementById('cost-date').value;
   const notes = document.getElementById('cost-notes').value;
@@ -5467,7 +5467,12 @@ function saveCostEntry() {
   renderCostTracker();
 
   // Sync to Supabase
-  syncCostToSupabase(entry, isEdit);
+  try {
+    await syncCostToSupabase(entry, isEdit);
+    console.log('Cost synced to Supabase OK');
+  } catch(e) {
+    console.error('Cost sync error:', e);
+  }
 }
 
 async function syncCostToSupabase(entry, isEdit) {
