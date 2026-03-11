@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.60 -->
+<!-- Livingstone v2.62 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1394,8 +1394,7 @@
         <div class="form-group"><label>Client Phone</label><input type="tel" id="job-client-phone"></div>
         <div class="form-group"><label>Client Email</label><input type="email" id="job-client-email"></div>
         <div class="form-group"><label>Job Scale (1-10)</label><input type="number" id="job-scale" min="1" max="10"></div>
-        <div class="form-group"><label>Quote Value (£)</label><input type="number" id="job-quote-value" step="100"></div>
-        <div class="form-group"><label>Est. Cost (£)</label><input type="number" id="job-est-cost" step="100"></div>
+        <div class="form-group"><label>Estimate to Client (£)</label><input type="number" id="job-estimate" step="100" placeholder="Ballpark figure"></div>
         <div class="form-group"><label>Start Date</label><input type="date" id="job-start"></div>
         <div class="form-group"><label>End Date</label><input type="date" id="job-end"></div>
       </div>
@@ -1680,7 +1679,7 @@ async function syncJobToSupabase(ref) {
       status: job.status,
       lead: job.lead,
       scale: job.scale,
-      quote_value: job.quoteValue || 0,
+      estimate: job.estimate || 0,
       est_cost: job.estCost || 0,
       start_date: job.startDate || null,
       end_date: job.endDate || null,
@@ -1754,6 +1753,7 @@ async function loadFromSupabase() {
         return q ? parseFloat(q.total)||0 : parseFloat(j.quote_value)||0;
       })(),
       estCost: parseFloat(j.est_cost) || 0,
+      estimate: parseFloat(j.estimate) || 0,
       startDate: j.start_date || '',
       endDate: j.end_date || '',
       notes: j.notes || ''
@@ -2511,8 +2511,7 @@ function newJobModal() {
   document.getElementById('job-client-phone').value = '';
   document.getElementById('job-client-email').value = '';
   document.getElementById('job-scale').value = '';
-  document.getElementById('job-quote-value').value = '';
-  document.getElementById('job-est-cost').value = '';
+  document.getElementById('job-estimate').value = '';
   document.getElementById('job-start').value = '';
   document.getElementById('job-end').value = '';
   document.getElementById('job-desc').value = '';
@@ -2536,8 +2535,7 @@ function editJobByRef(ref) {
   document.getElementById('job-client-phone').value = j.client?.phone || '';
   document.getElementById('job-client-email').value = j.client?.email || '';
   document.getElementById('job-scale').value = j.scale || '';
-  document.getElementById('job-quote-value').value = j.quoteValue || '';
-  document.getElementById('job-est-cost').value = j.estCost || '';
+  document.getElementById('job-estimate').value = j.estimate || '';
   document.getElementById('job-start').value = j.startDate || '';
   document.getElementById('job-end').value = j.endDate || '';
   document.getElementById('job-desc').value = j.desc || '';
@@ -2563,19 +2561,20 @@ async function saveJob() {
     status: document.getElementById('job-status').value,
     lead: document.getElementById('job-lead').value,
     scale: parseInt(document.getElementById('job-scale').value) || 5,
-    quoteValue: parseFloat(document.getElementById('job-quote-value').value) || 0,
-    estCost: parseFloat(document.getElementById('job-est-cost').value) || 0,
+    estimate: parseFloat(document.getElementById('job-estimate').value) || 0,
     startDate: document.getElementById('job-start').value || '',
     endDate: document.getElementById('job-end').value || '',
     notes: document.getElementById('job-notes').value.trim()
   };
 
   if (editRef) {
-    // Editing existing job
+    // Editing existing job — preserve quote builder values
     const idx = db.jobs.findIndex(j => j.ref === editRef);
     if (idx >= 0) {
       jobData.id = db.jobs[idx].id;
       jobData.sort_order = db.jobs[idx].sort_order;
+      jobData.quoteValue = db.jobs[idx].quoteValue || 0;
+      jobData.estCost = db.jobs[idx].estCost || 0;
       db.jobs[idx] = jobData;
     }
   } else {
