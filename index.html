@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.63 -->
+<!-- Livingstone v2.64 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1728,13 +1728,14 @@ async function loadFromSupabase() {
     document.body.appendChild(_overlay);
 
     // Load all data in parallel
-    const [jobs, tasks, gates, quotes, weekly, costEntries] = await Promise.all([
+    const [jobs, tasks, gates, quotes, weekly, costEntries, wishlistItems] = await Promise.all([
       supa.get('jobs', 'order=sort_order.asc'),
       supa.get('tasks', 'order=sort_order.asc'),
       supa.get('payment_gates', 'order=sort_order.asc'),
       supa.get('quotes', 'order=created_at.desc'),
       supa.get('weekly_entries', 'order=entry_date.asc'),
-      supa.get('cost_entries', 'order=created_at.asc').catch(() => [])
+      supa.get('cost_entries', 'order=created_at.asc').catch(() => []),
+      supa.get('wishlist', 'order=votes.desc').catch(() => [])
     ]);
 
     // Map Supabase column names to app's internal format
@@ -1841,7 +1842,35 @@ async function loadFromSupabase() {
     db.actionsLT = SEED.actionsLT || [];
     try {
       const _wl = localStorage.getItem('livingstoneWishlist');
-      db.wishlist = _wl ? JSON.parse(_wl) : [];
+      const localWishlist = _wl ? JSON.parse(_wl) : [];
+      if (wishlistItems && wishlistItems.length > 0) {
+        db.wishlist = wishlistItems.map(w => ({
+          id: w.id,
+          text: w.text || '',
+          votes: w.votes || 1,
+          type: w.type || 'feature'
+        }));
+        // Migrate any local-only items to Supabase
+        const supaTexts = new Set(db.wishlist.map(w => w.text));
+        const toMigrate = localWishlist.filter(w => w.text && !supaTexts.has(w.text));
+        for (const w of toMigrate) {
+          try {
+            const res = await supa.post('wishlist', { text: w.text, votes: w.votes || 1, type: w.type || 'feature' });
+            if (res && res[0]) { w.id = res[0].id; db.wishlist.push(w); }
+          } catch(e) { console.warn('Wishlist migrate failed:', e); }
+        }
+        if (toMigrate.length) console.log('Migrated', toMigrate.length, 'local wishlist items to Supabase');
+      } else {
+        db.wishlist = localWishlist;
+        // Push all local items to Supabase if table is empty
+        for (const w of db.wishlist) {
+          try {
+            const res = await supa.post('wishlist', { text: w.text, votes: w.votes || 1, type: w.type || 'feature' });
+            if (res && res[0]) w.id = res[0].id;
+          } catch(e) { console.warn('Wishlist push failed:', e); }
+        }
+        if (db.wishlist.length) console.log('Pushed', db.wishlist.length, 'wishlist items to Supabase');
+      }
     } catch(e) { db.wishlist = []; }
     try {
       const _costs = localStorage.getItem('livingstoneCosts');
@@ -3681,26 +3710,40 @@ function renderWishlist() {
   if(legacyEl) legacyEl.innerHTML = renderItems(sorted);
 }
 
-function addWish() {
+async function addWish() {
   const val = document.getElementById('wish-input').value.trim();
   const type = document.getElementById('wish-type')?.value || 'feature';
   if(!val) return;
-  db.wishlist.push({text:val, votes:1, type});
+  const wish = {text:val, votes:1, type};
+  db.wishlist.push(wish);
   saveData();
   document.getElementById('wish-input').value='';
   renderWishlist();
+  try {
+    const res = await supa.post('wishlist', { text: val, votes: 1, type });
+    if (res && res[0]) wish.id = res[0].id;
+    saveData();
+  } catch(e) { console.warn('Wishlist add sync failed:', e); }
 }
 
-function voteWish(i, delta) {
+async function voteWish(i, delta) {
   if(db.wishlist[i]) db.wishlist[i].votes = Math.max(0, db.wishlist[i].votes+delta);
   saveData();
   renderWishlist();
+  const w = db.wishlist[i];
+  if (w && w.id) {
+    try { await supa.patch('wishlist', w.id, { votes: w.votes }); } catch(e) { console.warn('Vote sync failed:', e); }
+  }
 }
 
-function deleteWish(i) {
+async function deleteWish(i) {
+  const w = db.wishlist[i];
   db.wishlist.splice(i, 1);
   saveData();
   renderWishlist();
+  if (w && w.id) {
+    try { await supa.delete('wishlist', w.id); } catch(e) { console.warn('Wishlist delete sync failed:', e); }
+  }
 }
 
 // ============================================================
