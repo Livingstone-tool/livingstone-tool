@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.65 -->
+<!-- Livingstone v2.66 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1663,6 +1663,7 @@ const STORE_KEY = 'lp_data_v1';
 function saveData() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    localStorage.setItem('livingstoneDB', JSON.stringify(db));
     localStorage.setItem('livingstoneCosts', JSON.stringify(db.costs||[]));
     localStorage.setItem('livingstoneWishlist', JSON.stringify(db.wishlist||[]));
   } catch(e) {}
@@ -1830,11 +1831,11 @@ async function loadFromSupabase() {
     // Keep non-Supabase data — merge SEED with any user-added products
     const seedProducts = SEED.products || [];
     try {
-      const localDB = JSON.parse(localStorage.getItem('livingstoneDB') || '{}');
+      const localDB = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       const localProducts = localDB.products || [];
       // Start with SEED, then add any local products not already in SEED
-      const seedNames = new Set(seedProducts.map(p => p.name));
-      db.products = [...seedProducts, ...localProducts.filter(p => !seedNames.has(p.name))];
+      const seedNames = new Set(seedProducts.map(p => p.name.toLowerCase()));
+      db.products = [...seedProducts, ...localProducts.filter(p => p.name && !seedNames.has(p.name.toLowerCase()))];
     } catch(e) {
       db.products = seedProducts;
     }
