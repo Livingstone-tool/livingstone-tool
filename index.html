@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.69 -->
+<!-- Livingstone v2.70 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -938,7 +938,7 @@
     <div class="grid-2" style="gap:20px;">
       <div id="subs-cards-container"></div>
       <div class="card" style="height:fit-content;">
-        <div class="card-header"><div class="card-title">Add / Edit Subcontractor</div></div>
+        <div class="card-header"><div class="card-title" id="sub-form-title">Add / Edit Subcontractor</div></div>
         <div class="card-body">
           <input type="hidden" id="sub-edit-idx" value="-1">
           <div class="form-group"><label>Full Name</label><input type="text" id="sub-name"></div>
@@ -964,16 +964,7 @@
   <!-- PRODUCTS PAGE -->
   <div id="page-products" class="page content">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <div style="display:flex;gap:10px;">
-        <select style="width:auto;" id="product-filter-type" onchange="renderProducts()">
-          <option value="">All Types</option>
-          <option value="Labour">Labour</option>
-          <option value="Material">Material</option>
-          <option value="Skip Hire">Skip Hire</option>
-          <option value="Machine Hire">Machine Hire</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
+      <div><span style="font-size:13px;color:var(--text-muted);">Materials & supplies database</span></div>
       <button class="btn btn-primary" onclick="addProductModal()">+ Add Product</button>
     </div>
     <div class="grid-2" style="gap:20px;">
@@ -981,7 +972,7 @@
         <div class="card-header"><div class="card-title">Product / Rate Database</div></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name</th><th>Type</th><th>Rate / Cost</th><th>Unit</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Rate / Cost</th><th>Unit</th><th></th></tr></thead>
             <tbody id="products-table-body"></tbody>
           </table>
         </div>
@@ -991,13 +982,6 @@
         <div class="card-body">
           <input type="hidden" id="product-edit-idx" value="-1">
           <div class="form-group"><label>Name</label><input type="text" id="product-name"></div>
-          <div class="form-group">
-            <label>Item Type</label>
-            <select id="product-type">
-              <option>Labour</option><option>Material</option>
-              <option>Skip Hire</option><option>Machine Hire</option><option>Other</option>
-            </select>
-          </div>
           <div class="form-group"><label>Rate / Cost (£)</label><input type="number" id="product-rate" step="0.01"></div>
           <div class="form-group"><label>Unit (optional)</label><input type="text" id="product-unit" placeholder="e.g. Per tonne, Per board"></div>
           <div style="display:flex;gap:8px;margin-top:4px;">
@@ -2884,11 +2868,11 @@ function addRoom() {
 }
 
 function renderQBRooms() {
-  // Populate supplier autocomplete from subs + products
+  // Populate supplier autocomplete from 3 databases: Subs, Products, Other
   const dl = document.getElementById('supplier-list');
   if (dl) {
-    const subOpts = (db.subs||[]).map(s => `<option value="${s.name}" label="${s.trade} — £${s.dayRate}/day">`);
-    const prodOpts = (db.products||[]).filter(p => p.type !== 'Labour').map(p => `<option value="${p.name}" label="${p.type} — £${p.rate}/${p.unit||'each'}">`);
+    const subOpts = (db.subs||[]).map(s => `<option value="${s.name}" label="Sub — ${s.trade} — £${s.dayRate}/day">`);
+    const prodOpts = (db.products||[]).map(p => `<option value="${p.name}" label="Material — £${p.rate}/${p.unit||'each'}">`);
     dl.innerHTML = subOpts.join('') + prodOpts.join('');
   }
 
@@ -2960,7 +2944,7 @@ function updateLine(ri, li, field, val) {
   const line = window._activeQuoteRooms[ri].lines[li];
   line[field] = val;
   if(field==='supplier' && val) {
-    // Check subs first (labour), then products (materials)
+    // Check subs (Labour), then products (Material)
     const sub = (db.subs||[]).find(s => s.name === val);
     const prod = (db.products||[]).find(p => p.name === val);
     if(sub) {
@@ -2968,7 +2952,7 @@ function updateLine(ri, li, field, val) {
       line.type = 'Labour';
     } else if(prod) {
       line.rate = prod.rate;
-      line.type = prod.type || 'Material';
+      line.type = 'Material';
     }
   }
   if(field==='qty'||field==='rate'||field==='supplier'||field==='type') {
@@ -3499,6 +3483,10 @@ function editSub(i) {
   document.getElementById('sub-quality').value=s.quality||'';
   document.getElementById('sub-cost').value=s.costScore||'';
   document.getElementById('sub-notes').value=s.notes||'';
+  // Visual indicator that we're editing
+  const header = document.getElementById('sub-form-title');
+  if(header) header.textContent = 'Editing: ' + s.name;
+  document.getElementById('sub-name').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 function saveSub() {
@@ -3514,8 +3502,13 @@ function saveSub() {
     costScore: parseInt(document.getElementById('sub-cost').value)||null,
     notes: document.getElementById('sub-notes').value
   };
-  if(idx>=0) db.subs[idx]=sub;
-  else db.subs.push(sub);
+  if(idx>=0 && idx < db.subs.length) {
+    console.log('Updating sub at index', idx, ':', db.subs[idx].name, '→', sub.name);
+    db.subs[idx] = sub;
+  } else {
+    console.log('Adding new sub:', sub.name);
+    db.subs.push(sub);
+  }
   saveData();
   clearSubForm();
   renderSubs();
@@ -3532,6 +3525,8 @@ function clearSubForm() {
   document.getElementById('sub-edit-idx').value=-1;
   ['sub-name','sub-trade','sub-rate','sub-phone','sub-email','sub-reliability','sub-quality','sub-cost','sub-notes']
     .forEach(id=>document.getElementById(id).value='');
+  const header = document.getElementById('sub-form-title');
+  if(header) header.textContent = 'Add / Edit Subcontractor';
 }
 
 function addSubModal() {
@@ -3543,14 +3538,12 @@ function addSubModal() {
 // PRODUCTS
 // ============================================================
 function renderProducts() {
-  const typeF = document.getElementById('product-filter-type').value;
-  const products = db.products.filter(p=>!typeF||p.type===typeF);
+  const products = db.products || [];
   const tbody = document.getElementById('products-table-body');
   tbody.innerHTML = products.map((p,i) => {
     const realIdx = db.products.indexOf(p);
     return `<tr>
       <td>${p.name}</td>
-      <td><span class="badge badge-copper">${p.type}</span></td>
       <td><strong>£${p.rate}</strong></td>
       <td style="color:var(--text-muted);">${p.unit||'—'}</td>
       <td>
@@ -3565,7 +3558,6 @@ function editProduct(i) {
   const p = db.products[i];
   document.getElementById('product-edit-idx').value=i;
   document.getElementById('product-name').value=p.name;
-  document.getElementById('product-type').value=p.type;
   document.getElementById('product-rate').value=p.rate;
   document.getElementById('product-unit').value=p.unit||'';
 }
@@ -3574,7 +3566,7 @@ function saveProduct() {
   const idx = parseInt(document.getElementById('product-edit-idx').value);
   const prod = {
     name: document.getElementById('product-name').value,
-    type: document.getElementById('product-type').value,
+    type: 'Material',
     rate: parseFloat(document.getElementById('product-rate').value)||0,
     unit: document.getElementById('product-unit').value
   };
