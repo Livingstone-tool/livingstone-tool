@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.68 -->
+<!-- Livingstone v2.69 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3004,11 +3004,11 @@ function removeLine(ri,li) {
 function setQuoteMode(mode) {
   const rooms = window._activeQuoteRooms || [];
 
-  // When switching TO byroom - pre-populate simpleTotal from detailed line totals
+  // When switching TO byroom - always recalculate simpleTotal from detailed line totals
   if(mode === 'byroom') {
     rooms.forEach(r => {
-      if(!r.simpleTotal || r.simpleTotal === 0) {
-        r.simpleTotal = r.lines ? r.lines.reduce((s,l) => s+(l.withMargin||0), 0) : 0;
+      if (r.lines && r.lines.length > 0) {
+        r.simpleTotal = r.lines.reduce((s,l) => s+(l.withMargin||0), 0);
       }
     });
     // If no rooms yet, add a blank one
