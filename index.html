@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.70 -->
+<!-- Livingstone v2.71 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -574,6 +574,7 @@
       <div class="nav-label">Resources</div>
       <div class="nav-item" onclick="showPage('subs')"><span class="icon">👷</span> Subcontractors</div>
       <div class="nav-item" onclick="showPage('products')"><span class="icon">📦</span> Products</div>
+      <div class="nav-item" onclick="showPage('othercosts')"><span class="icon">🔧</span> Other Costs</div>
     </div>
     <div class="nav-section">
       <div class="nav-label">Business</div>
@@ -987,6 +988,44 @@
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button class="btn btn-primary" onclick="saveProduct()">Save</button>
             <button class="btn btn-secondary" onclick="clearProductForm()">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OTHER COSTS PAGE -->
+  <div id="page-othercosts" class="page content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <div><span style="font-size:13px;color:var(--text-muted);">Waste disposal, machine hire, consultancy & other costs</span></div>
+      <button class="btn btn-primary" onclick="addOtherCostModal()">+ Add Other Cost</button>
+    </div>
+    <div class="grid-2" style="gap:20px;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Other Costs Database</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Category</th><th>Rate / Cost</th><th>Unit</th><th></th></tr></thead>
+            <tbody id="othercosts-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="height:fit-content;">
+        <div class="card-header"><div class="card-title" id="othercost-form-title">Add / Edit Other Cost</div></div>
+        <div class="card-body">
+          <input type="hidden" id="othercost-edit-idx" value="-1">
+          <div class="form-group"><label>Name</label><input type="text" id="othercost-name"></div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="othercost-category">
+              <option>Waste Disposal</option><option>Machine Hire</option><option>Consultancy</option><option>Skip Hire</option><option>Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Rate / Cost (£)</label><input type="number" id="othercost-rate" step="0.01"></div>
+          <div class="form-group"><label>Unit (optional)</label><input type="text" id="othercost-unit" placeholder="e.g. Per day, Per skip, Per visit"></div>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn btn-primary" onclick="saveOtherCost()">Save</button>
+            <button class="btn btn-secondary" onclick="clearOtherCostForm()">Clear</button>
           </div>
         </div>
       </div>
@@ -1639,7 +1678,7 @@ const supa = {
 };
 
 // ── LOCAL DB (in-memory, loaded from Supabase on startup) ────────────────
-let db = { jobs:[], tasks:[], paymentGates:[], quotes:[], weeklyEntries:[], products:[], subcontractors:[], subs:[], actionsQ1:[], actionsLT:[], wishlist:[], rooms:[], costs:[] };
+let db = { jobs:[], tasks:[], paymentGates:[], quotes:[], weeklyEntries:[], products:[], subcontractors:[], subs:[], actionsQ1:[], actionsLT:[], wishlist:[], rooms:[], costs:[], otherCosts:[] };
 
 // Legacy localStorage kept for backwards compat with export/import
 const STORE_KEY = 'lp_data_v1';
@@ -1830,27 +1869,39 @@ async function loadFromSupabase() {
     try {
       const localDB = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       const localProducts = localDB.products || [];
-      // Start with SEED, then add any local products not already in SEED
-      const seedNames = new Set(seedProducts.map(p => p.name.toLowerCase()));
-      db.products = [...seedProducts, ...localProducts.filter(p => p.name && !seedNames.has(p.name.toLowerCase()))];
+      if (localProducts.length > 0) {
+        // Deduplicate by name, keep last occurrence
+        const seen = {};
+        localProducts.forEach(p => { if(p.name) seen[p.name.toLowerCase()] = p; });
+        db.products = Object.values(seen);
+      } else {
+        db.products = seedProducts;
+      }
     } catch(e) {
       db.products = seedProducts;
     }
     db.subcontractors = SEED.subcontractors || [];
-    // Merge SEED subs with user-added subs
+    // Subs: use localStorage as source of truth if available, otherwise SEED
     const seedSubs = SEED.subs || [];
     try {
       const localDB2 = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       const localSubs = localDB2.subs || [];
-      const seedSubNames = new Set(seedSubs.map(s => s.name.toLowerCase()));
-      db.subs = [...seedSubs.map(s => {
-        // Allow edits to SEED subs by preferring local version
-        const local = localSubs.find(ls => ls.name.toLowerCase() === s.name.toLowerCase());
-        return local || s;
-      }), ...localSubs.filter(s => s.name && !seedSubNames.has(s.name.toLowerCase()))];
+      if (localSubs.length > 0) {
+        // Deduplicate by name (case-insensitive), keep last occurrence
+        const seen = {};
+        localSubs.forEach(s => { if(s.name) seen[s.name.toLowerCase()] = s; });
+        db.subs = Object.values(seen);
+      } else {
+        db.subs = seedSubs;
+      }
     } catch(e) {
       db.subs = seedSubs;
     }
+    // Other Costs: load from localStorage
+    try {
+      const localDB3 = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+      db.otherCosts = localDB3.otherCosts || [];
+    } catch(e) { db.otherCosts = []; }
     db.actionsQ1 = SEED.actionsQ1 || [];
     db.actionsLT = SEED.actionsLT || [];
     try {
@@ -2370,7 +2421,7 @@ const SEED = {
 const PAGE_TITLES = {
   dashboard:'Dashboard', pipeline:'Pipeline', jobs:'All Jobs',
   quotes:'Quote Builder', tasks:'Tasks', subs:'Subcontractors',
-  products:'Products', actions:'Action Tracker', finance:'Finance', planning:'Planning', costs:'Cost Tracker'
+  products:'Products', othercosts:'Other Costs', actions:'Action Tracker', finance:'Finance', planning:'Planning', costs:'Cost Tracker'
 };
 
 function showPage(id) {
@@ -2390,6 +2441,7 @@ function renderPage(id) {
   else if(id==='tasks') renderTasksTable();
   else if(id==='subs') renderSubs();
   else if(id==='products') renderProducts();
+  else if(id==='othercosts') renderOtherCosts();
   else if(id==='actions') renderActions();
   else if(id==='planning') renderPlanning();
   else if(id==='costs') renderCostTracker();
@@ -2868,12 +2920,13 @@ function addRoom() {
 }
 
 function renderQBRooms() {
-  // Populate supplier autocomplete from 3 databases: Subs, Products, Other
+  // Populate supplier autocomplete from 3 databases: Subs, Products, Other Costs
   const dl = document.getElementById('supplier-list');
   if (dl) {
     const subOpts = (db.subs||[]).map(s => `<option value="${s.name}" label="Sub — ${s.trade} — £${s.dayRate}/day">`);
     const prodOpts = (db.products||[]).map(p => `<option value="${p.name}" label="Material — £${p.rate}/${p.unit||'each'}">`);
-    dl.innerHTML = subOpts.join('') + prodOpts.join('');
+    const otherOpts = (db.otherCosts||[]).map(c => `<option value="${c.name}" label="${c.category} — £${c.rate}/${c.unit||'each'}">`);
+    dl.innerHTML = subOpts.join('') + prodOpts.join('') + otherOpts.join('');
   }
 
   const mode = window._quoteMode || 'detailed';
@@ -2944,15 +2997,21 @@ function updateLine(ri, li, field, val) {
   const line = window._activeQuoteRooms[ri].lines[li];
   line[field] = val;
   if(field==='supplier' && val) {
-    // Check subs (Labour), then products (Material)
+    // Check subs (Labour), then products (Material), then other costs
     const sub = (db.subs||[]).find(s => s.name === val);
     const prod = (db.products||[]).find(p => p.name === val);
+    const other = (db.otherCosts||[]).find(c => c.name === val);
     if(sub) {
       line.rate = sub.dayRate;
       line.type = 'Labour';
     } else if(prod) {
       line.rate = prod.rate;
       line.type = 'Material';
+    } else if(other) {
+      line.rate = other.rate;
+      // Map category to quote line type
+      const typeMap = {'Waste Disposal':'Skip Hire','Machine Hire':'Machine Hire','Skip Hire':'Skip Hire','Consultancy':'Labour','Other':'Other'};
+      line.type = typeMap[other.category] || 'Other';
     }
   }
   if(field==='qty'||field==='rate'||field==='supplier'||field==='type') {
@@ -3593,6 +3652,76 @@ function clearProductForm() {
 function addProductModal() {
   clearProductForm();
   document.getElementById('product-name').focus();
+}
+
+// ============================================================
+// OTHER COSTS
+// ============================================================
+function renderOtherCosts() {
+  const tbody = document.getElementById('othercosts-table-body');
+  if (!tbody) return;
+  const items = db.otherCosts || [];
+  tbody.innerHTML = items.map((c, i) => `<tr>
+    <td>${c.name}</td>
+    <td><span class="badge badge-enquiry">${c.category}</span></td>
+    <td><strong>£${c.rate}</strong></td>
+    <td style="color:var(--text-muted);">${c.unit||'—'}</td>
+    <td>
+      <button class="btn btn-sm btn-secondary" onclick="editOtherCost(${i})">Edit</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteOtherCost(${i})">✕</button>
+    </td>
+  </tr>`).join('');
+}
+
+function editOtherCost(i) {
+  const c = db.otherCosts[i];
+  document.getElementById('othercost-edit-idx').value = i;
+  document.getElementById('othercost-name').value = c.name;
+  document.getElementById('othercost-category').value = c.category;
+  document.getElementById('othercost-rate').value = c.rate;
+  document.getElementById('othercost-unit').value = c.unit || '';
+  const header = document.getElementById('othercost-form-title');
+  if(header) header.textContent = 'Editing: ' + c.name;
+  document.getElementById('othercost-name').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function saveOtherCost() {
+  const idx = parseInt(document.getElementById('othercost-edit-idx').value);
+  const item = {
+    name: document.getElementById('othercost-name').value,
+    category: document.getElementById('othercost-category').value,
+    rate: parseFloat(document.getElementById('othercost-rate').value) || 0,
+    unit: document.getElementById('othercost-unit').value
+  };
+  if (!item.name) { alert('Please enter a name.'); return; }
+  if (idx >= 0 && idx < db.otherCosts.length) {
+    db.otherCosts[idx] = item;
+  } else {
+    db.otherCosts.push(item);
+  }
+  saveData();
+  clearOtherCostForm();
+  renderOtherCosts();
+}
+
+function deleteOtherCost(i) {
+  if (!confirm('Remove this item?')) return;
+  db.otherCosts.splice(i, 1);
+  saveData();
+  renderOtherCosts();
+}
+
+function clearOtherCostForm() {
+  document.getElementById('othercost-edit-idx').value = -1;
+  ['othercost-name','othercost-rate','othercost-unit'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('othercost-category').value = 'Waste Disposal';
+  const header = document.getElementById('othercost-form-title');
+  if(header) header.textContent = 'Add / Edit Other Cost';
+}
+
+function addOtherCostModal() {
+  clearOtherCostForm();
+  document.getElementById('othercost-name').focus();
 }
 
 // ============================================================
