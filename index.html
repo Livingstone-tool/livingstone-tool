@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.67 -->
+<!-- Livingstone v2.68 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2969,30 +2969,6 @@ function updateLine(ri, li, field, val) {
     } else if(prod) {
       line.rate = prod.rate;
       line.type = prod.type || 'Material';
-    } else if(val.length > 2) {
-      // Unknown supplier — prompt to add to database (debounced)
-      clearTimeout(window._supplierPromptTimer);
-      window._supplierPromptTimer = setTimeout(() => {
-        if(confirm('"' + val + '" is not in your database. Add it?\n\nYes = choose where to add\nNo = use as one-off')) {
-          const isLabour = confirm('Is "' + val + '" a subcontractor/labour?\n\nOK = Add to Subcontractors\nCancel = Add to Products');
-          if(isLabour) {
-            const rate = parseFloat(prompt('Day rate for ' + val + ' (£):'))||0;
-            const trade = prompt('Trade (e.g. Plasterer, Plumber):') || '';
-            db.subs.push({name:val, trade:trade, dayRate:rate, phone:'', email:'', reliability:null, quality:null, costScore:null, notes:''});
-            line.rate = rate;
-            line.type = 'Labour';
-          } else {
-            const rate = parseFloat(prompt('Unit cost for ' + val + ' (£):'))||0;
-            const unit = prompt('Unit type (e.g. Per bag, Per metre):') || '';
-            db.products.push({name:val, type:'Material', rate:rate, unit:unit});
-            line.rate = rate;
-            line.type = 'Material';
-          }
-          saveData();
-          renderQBRooms();
-          return;
-        }
-      }, 800);
     }
   }
   if(field==='qty'||field==='rate'||field==='supplier'||field==='type') {
