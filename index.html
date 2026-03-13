@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.71 -->
+<!-- Livingstone v2.72 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3009,9 +3009,19 @@ function updateLine(ri, li, field, val) {
       line.type = 'Material';
     } else if(other) {
       line.rate = other.rate;
-      // Map category to quote line type
       const typeMap = {'Waste Disposal':'Skip Hire','Machine Hire':'Machine Hire','Skip Hire':'Skip Hire','Consultancy':'Labour','Other':'Other'};
       line.type = typeMap[other.category] || 'Other';
+    }
+    if (sub || prod || other) {
+      // Recalc with new rate/type, then full re-render to update dropdowns
+      const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
+      const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
+      const margin = (line.type==='Labour') ? labourMargin : matMargin;
+      line.subtotal = (line.qty||0)*(line.rate||0);
+      line.withMargin = line.subtotal * (1 + margin/100);
+      recalcQuote();
+      renderQBRooms();
+      return;
     }
   }
   if(field==='qty'||field==='rate'||field==='supplier'||field==='type') {
