@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.64 -->
+<!-- Livingstone v2.65 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1588,6 +1588,8 @@
       <div id="wishlist-items-feature"></div>
       <div style="margin:16px 0 8px;font-weight:700;font-size:13px;color:#4a90d9;">🔧 Fixes</div>
       <div id="wishlist-items-fix"></div>
+      <div style="margin:20px 0 8px;font-weight:700;font-size:13px;color:var(--success);border-top:1px solid var(--border);padding-top:16px;">✅ Implemented</div>
+      <div id="wishlist-items-implemented"></div>
     </div>
   </div>
 </div>
@@ -3682,12 +3684,15 @@ function openWishlist() {
 }
 
 function renderWishlist() {
-  const sorted = [...db.wishlist].sort((a,b)=>b.votes-a.votes);
-  const features = sorted.filter(w => !w.type || w.type==='feature');
-  const fixes = sorted.filter(w => w.type==='fix');
+  const active = db.wishlist.filter(w => !w.status || w.status === 'active');
+  const implemented = db.wishlist.filter(w => w.status === 'implemented');
+  const sorted = [...active].sort((a,b) => b.votes - a.votes);
+  const features = sorted.filter(w => !w.type || w.type === 'feature');
+  const fixes = sorted.filter(w => w.type === 'fix');
+  const implSorted = [...implemented].sort((a,b) => b.votes - a.votes);
   const empty = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">None yet</div>';
 
-  const renderItems = (items, offset) => items.map((w, i) => {
+  const renderItems = (items) => items.map((w) => {
     const origIdx = db.wishlist.indexOf(w);
     return `<div class="wish-item">
       <div class="wish-vote">
@@ -3698,15 +3703,30 @@ function renderWishlist() {
       <div style="flex:1;">
         <div class="wish-item-title">${w.text}</div>
       </div>
-      <button class="del-btn" onclick="deleteWish(${origIdx})">🗑</button>
+      <button title="Mark as implemented" onclick="archiveWish(${origIdx})" style="border:none;background:none;cursor:pointer;font-size:16px;padding:2px 4px;opacity:0.6;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">✅</button>
+      <button title="Delete" onclick="deleteWish(${origIdx})" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px 4px;color:var(--danger);opacity:0.4;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button>
     </div>`;
   }).join('') || empty;
 
+  const renderImpl = (items) => items.length ? items.map((w) => {
+    const origIdx = db.wishlist.indexOf(w);
+    return `<div class="wish-item" style="opacity:0.6;">
+      <div style="flex:1;">
+        <div class="wish-item-title" style="text-decoration:line-through;color:var(--text-muted);">${w.text}</div>
+      </div>
+      <span style="font-size:11px;color:var(--success);font-weight:600;padding:0 8px;">Done</span>
+      <button title="Restore" onclick="restoreWish(${origIdx})" style="border:none;background:none;cursor:pointer;font-size:12px;padding:2px 4px;opacity:0.4;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">↩</button>
+      <button title="Delete" onclick="deleteWish(${origIdx})" style="border:none;background:none;cursor:pointer;font-size:13px;padding:2px 4px;color:var(--danger);opacity:0.4;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button>
+    </div>`;
+  }).join('') : '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Nothing implemented yet</div>';
+
   const featureEl = document.getElementById('wishlist-items-feature');
   const fixEl = document.getElementById('wishlist-items-fix');
+  const implEl = document.getElementById('wishlist-items-implemented');
   const legacyEl = document.getElementById('wishlist-items');
   if(featureEl) featureEl.innerHTML = renderItems(features);
   if(fixEl) fixEl.innerHTML = renderItems(fixes);
+  if(implEl) implEl.innerHTML = renderImpl(implSorted);
   if(legacyEl) legacyEl.innerHTML = renderItems(sorted);
 }
 
@@ -3743,6 +3763,28 @@ async function deleteWish(i) {
   renderWishlist();
   if (w && w.id) {
     try { await supa.delete('wishlist', w.id); } catch(e) { console.warn('Wishlist delete sync failed:', e); }
+  }
+}
+
+async function archiveWish(i) {
+  const w = db.wishlist[i];
+  if (!w) return;
+  w.status = 'implemented';
+  saveData();
+  renderWishlist();
+  if (w.id) {
+    try { await supa.patch('wishlist', w.id, { status: 'implemented' }); } catch(e) { console.warn('Wishlist archive sync failed:', e); }
+  }
+}
+
+async function restoreWish(i) {
+  const w = db.wishlist[i];
+  if (!w) return;
+  w.status = 'active';
+  saveData();
+  renderWishlist();
+  if (w.id) {
+    try { await supa.patch('wishlist', w.id, { status: 'active' }); } catch(e) { console.warn('Wishlist restore sync failed:', e); }
   }
 }
 
