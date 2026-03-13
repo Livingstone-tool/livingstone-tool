@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.74 -->
+<!-- Livingstone v2.75 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2527,8 +2527,21 @@ function renderJobsTable() {
     var refDisplay = j.ref ? '<strong>' + j.ref + '</strong>' : '<span style="color:#e74c3c;font-size:11px;font-weight:600;">⚠ NO REF</span>';
     var marginDisplay = margin !== null ? '<span style="font-size:11px;color:' + (margin > 20 ? 'var(--success)' : margin > 10 ? '#e67e22' : 'var(--danger)') + ';">' + margin + '%</span>' : '';
     var statusDisplay = statusBadge(j.status);
+    var taskCount = db.tasks.filter(function(t){return t.jobRef===j.ref}).length;
+    var fmtD = function(d) { return d ? new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—'; };
+    var dur = j.startDate && j.endDate ? Math.round((new Date(j.endDate) - new Date(j.startDate)) / 86400000) : null;
+    var tipHtml = '<div class="job-row-tip">'
+      + '<strong>' + (j.ref||'') + ' — ' + (j.name||'') + '</strong><br>'
+      + '👤 Client: ' + (j.client&&j.client.name?j.client.name:'—') + '<br>'
+      + '📅 ' + fmtD(j.startDate) + ' → ' + fmtD(j.endDate) + (dur !== null ? ' (' + dur + ' days)' : '') + '<br>'
+      + '🏗 Lead: ' + leadName + ' · Scale: ' + (j.scale||'—') + '/10<br>'
+      + '📋 ' + taskCount + ' task' + (taskCount!==1?'s':'')
+      + (quoteVal ? ' · Quote: £' + quoteVal.toLocaleString() : '')
+      + (j.estimate ? ' · Estimate: ~£' + parseFloat(j.estimate).toLocaleString() : '')
+      + (j.notes ? '<br>📝 ' + j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '')
+      + '</div>';
     var row = '<tr data-ref="' + (j.ref||'') + '" onclick="openJob(this.dataset.ref)" style="cursor:pointer;">';
-    row += '<td style="position:relative;">' + refDisplay + '</td>';
+    row += '<td style="position:relative;">' + refDisplay + tipHtml + '</td>';
     row += '<td>' + (j.name||'') + '</td>';
     row += '<td>' + (j.client && j.client.name ? j.client.name : '') + '</td>';
     row += '<td>' + statusDisplay + '</td>';
