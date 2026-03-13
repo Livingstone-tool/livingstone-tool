@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.73 -->
+<!-- Livingstone v2.74 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1912,7 +1912,8 @@ async function loadFromSupabase() {
           id: w.id,
           text: w.text || '',
           votes: w.votes || 1,
-          type: w.type || 'feature'
+          type: w.type || 'feature',
+          status: w.status || 'active'
         }));
         // Migrate any local-only items to Supabase
         const supaTexts = new Set(db.wishlist.map(w => w.text));
