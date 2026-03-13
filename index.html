@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.66 -->
+<!-- Livingstone v2.67 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -774,7 +774,7 @@
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th><th>Estimate to Client <span title="Your estimate to the client (editable)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Quote <span title="From quote builder" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Est. Cost <span title="Estimated job cost" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th>
+              <th>Lead</th><th>Estimate to Client <span title="Your estimate to the client (editable)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Quote <span title="From quote builder (with margins + fees)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Est. Cost <span title="Raw cost from quote builder (before margins, PM fee and bonus)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th>
               <th>Start</th><th></th>
             </tr>
           </thead>
@@ -1752,12 +1752,25 @@ async function loadFromSupabase() {
       lead: j.lead || 'A',
       scale: j.scale || 5,
       quoteValue: (() => {
-        // Normalise ref for matching: LP001 <-> LP-001
+        // Only from a real quote in the quote builder
         const norm = r => (r||'').replace('-','').toUpperCase();
         const q = (quotes||[]).find(q => norm(q.job_ref) === norm(j.ref));
-        return q ? parseFloat(q.total)||0 : parseFloat(j.quote_value)||0;
+        return q ? parseFloat(q.total)||0 : 0;
       })(),
-      estCost: parseFloat(j.est_cost) || 0,
+      estCost: (() => {
+        // Only from a real quote — raw cost before margins
+        const norm = r => (r||'').replace('-','').toUpperCase();
+        const q = (quotes||[]).find(q => norm(q.job_ref) === norm(j.ref));
+        if (!q) return 0;
+        // If estCost was set by saveQuote, use the job's est_cost; otherwise derive from quote rooms
+        const jobEstCost = parseFloat(j.est_cost) || 0;
+        if (jobEstCost > 0) return jobEstCost;
+        // Fallback: calculate from quote rooms
+        try {
+          const rooms = typeof q.rooms === 'string' ? JSON.parse(q.rooms || '[]') : (q.rooms || []);
+          return rooms.reduce((s,r) => s + (r.lines||[]).reduce((ss,l) => ss + ((l.qty||0)*(l.rate||0)), 0), 0);
+        } catch(e) { return 0; }
+      })(),
       estimate: parseFloat(j.estimate) || 0,
       startDate: j.start_date || '',
       endDate: j.end_date || '',
@@ -1840,7 +1853,20 @@ async function loadFromSupabase() {
       db.products = seedProducts;
     }
     db.subcontractors = SEED.subcontractors || [];
-    db.subs = SEED.subs || [];
+    // Merge SEED subs with user-added subs
+    const seedSubs = SEED.subs || [];
+    try {
+      const localDB2 = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+      const localSubs = localDB2.subs || [];
+      const seedSubNames = new Set(seedSubs.map(s => s.name.toLowerCase()));
+      db.subs = [...seedSubs.map(s => {
+        // Allow edits to SEED subs by preferring local version
+        const local = localSubs.find(ls => ls.name.toLowerCase() === s.name.toLowerCase());
+        return local || s;
+      }), ...localSubs.filter(s => s.name && !seedSubNames.has(s.name.toLowerCase()))];
+    } catch(e) {
+      db.subs = seedSubs;
+    }
     db.actionsQ1 = SEED.actionsQ1 || [];
     db.actionsLT = SEED.actionsLT || [];
     try {
@@ -1973,14 +1999,6 @@ const SEED = {
     {name:'Paul Snelson',trade:'Bricklayer',dayRate:250,phone:'',email:'',reliability:null,quality:null,costScore:null,notes:''}
   ],
   products: [
-    {name:'Chris Rowley - Plasterer',type:'Labour',rate:230,unit:''},
-    {name:'Jeff Knapper - Plumber',type:'Labour',rate:300,unit:''},
-    {name:'Bobby Davis - Electrician',type:'Labour',rate:400,unit:''},
-    {name:'Lee Johnson - Joiner',type:'Labour',rate:225,unit:''},
-    {name:'Nigel Bennet - Painter',type:'Labour',rate:200,unit:''},
-    {name:'Paul Taylor - Tiler',type:'Labour',rate:260,unit:''},
-    {name:'Adam Hemming - PM',type:'Labour',rate:200,unit:''},
-    {name:'Paul Snelson - Builder',type:'Labour',rate:250,unit:''},
     {name:'Plasterboard 2400x1200 - 12.5mm',type:'Material',rate:11,unit:'Per board'},
     {name:'Multi-finish Plaster 25kg',type:'Material',rate:12,unit:'Per bag'},
     {name:'22mm Copper Pipe',type:'Material',rate:4.5,unit:'Per metre'},
@@ -2866,9 +2884,13 @@ function addRoom() {
 }
 
 function renderQBRooms() {
-  // Populate supplier autocomplete
+  // Populate supplier autocomplete from subs + products
   const dl = document.getElementById('supplier-list');
-  if (dl) dl.innerHTML = db.products.map(p => `<option value="${p.name}">`).join('');
+  if (dl) {
+    const subOpts = (db.subs||[]).map(s => `<option value="${s.name}" label="${s.trade} — £${s.dayRate}/day">`);
+    const prodOpts = (db.products||[]).filter(p => p.type !== 'Labour').map(p => `<option value="${p.name}" label="${p.type} — £${p.rate}/${p.unit||'each'}">`);
+    dl.innerHTML = subOpts.join('') + prodOpts.join('');
+  }
 
   const mode = window._quoteMode || 'detailed';
   if(mode === 'byroom') return renderQBRoomSimple();
@@ -2937,9 +2959,41 @@ function applyMarginToLine(l, labourMargin, matMargin) {
 function updateLine(ri, li, field, val) {
   const line = window._activeQuoteRooms[ri].lines[li];
   line[field] = val;
-  if(field==='supplier') {
-    const prod = db.products.find(p=>p.name===val);
-    if(prod) { line.rate = prod.rate; line.type = prod.type; }
+  if(field==='supplier' && val) {
+    // Check subs first (labour), then products (materials)
+    const sub = (db.subs||[]).find(s => s.name === val);
+    const prod = (db.products||[]).find(p => p.name === val);
+    if(sub) {
+      line.rate = sub.dayRate;
+      line.type = 'Labour';
+    } else if(prod) {
+      line.rate = prod.rate;
+      line.type = prod.type || 'Material';
+    } else if(val.length > 2) {
+      // Unknown supplier — prompt to add to database (debounced)
+      clearTimeout(window._supplierPromptTimer);
+      window._supplierPromptTimer = setTimeout(() => {
+        if(confirm('"' + val + '" is not in your database. Add it?\n\nYes = choose where to add\nNo = use as one-off')) {
+          const isLabour = confirm('Is "' + val + '" a subcontractor/labour?\n\nOK = Add to Subcontractors\nCancel = Add to Products');
+          if(isLabour) {
+            const rate = parseFloat(prompt('Day rate for ' + val + ' (£):'))||0;
+            const trade = prompt('Trade (e.g. Plasterer, Plumber):') || '';
+            db.subs.push({name:val, trade:trade, dayRate:rate, phone:'', email:'', reliability:null, quality:null, costScore:null, notes:''});
+            line.rate = rate;
+            line.type = 'Labour';
+          } else {
+            const rate = parseFloat(prompt('Unit cost for ' + val + ' (£):'))||0;
+            const unit = prompt('Unit type (e.g. Per bag, Per metre):') || '';
+            db.products.push({name:val, type:'Material', rate:rate, unit:unit});
+            line.rate = rate;
+            line.type = 'Material';
+          }
+          saveData();
+          renderQBRooms();
+          return;
+        }
+      }, 800);
+    }
   }
   if(field==='qty'||field==='rate'||field==='supplier'||field==='type') {
     const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
@@ -2962,7 +3016,7 @@ function updateLine(ri, li, field, val) {
 }
 
 function addLine(ri) {
-  window._activeQuoteRooms[ri].lines.push({desc:'',supplier:db.products[0]?.name||'',type:'Labour',qty:1,rate:200,subtotal:200,margin:10,withMargin:220});
+  window._activeQuoteRooms[ri].lines.push({desc:'',supplier:'',type:'Labour',qty:0,rate:0,subtotal:0,margin:10,withMargin:0});
   renderQBRooms();
 }
 
@@ -3274,14 +3328,16 @@ function saveQuote() {
       supa.post('quotes', qData).then(res => { if(res&&res[0]) q.id=res[0].id; }).catch(e => console.warn('Quote insert:', e));
     });
   }
-  // Update job quoteValue using the LP reference
+  // Update job quoteValue and estCost using the LP reference
   const jobRef = q.number || q.jobRef;
   if(jobRef) {
     const job = db.jobs.find(j=>j.ref===jobRef);
     if(job) {
       job.quoteValue = q.total;
-      // Patch just the quote_value column in Supabase jobs table
-      supa.patchByRef('jobs', jobRef, { quote_value: q.total })
+      // Est. cost = raw cost before margins, PM fee and bonus
+      const rawCost = rooms.reduce((s,r) => s + r.lines.reduce((ss,l) => ss + ((l.qty||0)*(l.rate||0)), 0), 0);
+      job.estCost = rawCost;
+      supa.patchByRef('jobs', jobRef, { quote_value: q.total, est_cost: rawCost })
         .catch(e => console.warn('Failed to update job quote_value:', e));
     }
   }
