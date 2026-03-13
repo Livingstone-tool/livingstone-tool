@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.75 -->
+<!-- Livingstone v2.76 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2540,7 +2540,7 @@ function renderJobsTable() {
       + (j.estimate ? ' · Estimate: ~£' + parseFloat(j.estimate).toLocaleString() : '')
       + (j.notes ? '<br>📝 ' + j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '')
       + '</div>';
-    var row = '<tr data-ref="' + (j.ref||'') + '" onclick="openJob(this.dataset.ref)" style="cursor:pointer;">';
+    var row = '<tr class="clickable-row" data-ref="' + (j.ref||'') + '" onclick="openJob(this.dataset.ref)" style="cursor:pointer;">';
     row += '<td style="position:relative;">' + refDisplay + tipHtml + '</td>';
     row += '<td>' + (j.name||'') + '</td>';
     row += '<td>' + (j.client && j.client.name ? j.client.name : '') + '</td>';
