@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.83 -->
+<!-- Livingstone v2.84 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1474,6 +1474,7 @@
         <div class="form-group"><label>Client Name</label><input type="text" id="job-client-name"></div>
         <div class="form-group"><label>Client Phone</label><input type="tel" id="job-client-phone"></div>
         <div class="form-group"><label>Client Email</label><input type="email" id="job-client-email"></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>Project Address</label><input type="text" id="job-address" placeholder="Site address"></div>
         <div class="form-group"><label>Job Scale (1-10)</label><input type="number" id="job-scale" min="1" max="10"></div>
         <div class="form-group"><label>Estimate to Client (£)</label><input type="number" id="job-estimate" step="100" placeholder="Ballpark figure"></div>
         <div class="form-group"><label>Start Date</label><input type="date" id="job-start"></div>
@@ -1779,7 +1780,8 @@ async function syncJobToSupabase(ref) {
       est_cost: job.estCost || 0,
       start_date: job.startDate || null,
       end_date: job.endDate || null,
-      notes: job.notes || ''
+      notes: job.notes || '',
+      address: job.address || ''
     });
   } catch(e) { console.warn('Supabase sync failed:', e.message); }
 }
@@ -1868,7 +1870,8 @@ async function loadFromSupabase() {
       estimate: parseFloat(j.estimate) || 0,
       startDate: j.start_date || '',
       endDate: j.end_date || '',
-      notes: j.notes || ''
+      notes: j.notes || '',
+      address: j.address || ''
     }));
     db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
     // Deduplicate: normalise refs (LP001 == LP-001), prefer hyphenated version
@@ -2750,6 +2753,7 @@ function newJobModal() {
   document.getElementById('job-client-name').value = '';
   document.getElementById('job-client-phone').value = '';
   document.getElementById('job-client-email').value = '';
+  document.getElementById('job-address').value = '';
   document.getElementById('job-scale').value = '';
   document.getElementById('job-estimate').value = '';
   document.getElementById('job-start').value = '';
@@ -2774,6 +2778,7 @@ function editJobByRef(ref) {
   document.getElementById('job-client-name').value = j.client?.name || '';
   document.getElementById('job-client-phone').value = j.client?.phone || '';
   document.getElementById('job-client-email').value = j.client?.email || '';
+  document.getElementById('job-address').value = j.address || '';
   document.getElementById('job-scale').value = j.scale || '';
   document.getElementById('job-estimate').value = j.estimate || '';
   document.getElementById('job-start').value = j.startDate || '';
@@ -2804,7 +2809,8 @@ async function saveJob() {
     estimate: parseFloat(document.getElementById('job-estimate').value) || 0,
     startDate: document.getElementById('job-start').value || '',
     endDate: document.getElementById('job-end').value || '',
-    notes: document.getElementById('job-notes').value.trim()
+    notes: document.getElementById('job-notes').value.trim(),
+    address: document.getElementById('job-address').value.trim()
   };
 
   if (editRef) {
@@ -2955,7 +2961,7 @@ function viewQuote(idx) {
   // Load into quote builder
   populateQuoteJobDropdown(q.number||q.jobRef||'');
   document.getElementById('qb-client').value = q.client;
-  document.getElementById('qb-address').value = '';
+  document.getElementById('qb-address').value = q.address || '';
   document.getElementById('qb-payment').value = '25% at 4 stages';
   document.getElementById('qb-labour-margin').value = q.labourMargin||q.margin||10;
   document.getElementById('qb-mat-margin').value = q.matMargin||q.margin||10;
@@ -2964,6 +2970,9 @@ function viewQuote(idx) {
   document.getElementById('qb-bonus').value = q.bonus;
   document.getElementById('qb-title').textContent = q.number + ' — ' + q.client;
   document.getElementById('qb-subtitle').textContent = 'Quote Date: '+q.date;
+  // Populate description from quote or from job
+  const qJob = db.jobs.find(j => j.ref === (q.number||q.jobRef));
+  document.getElementById('qb-desc').value = q.projectDesc || (qJob ? qJob.desc : '') || '';
   window._activeQuoteRooms = JSON.parse(JSON.stringify(q.rooms||[]));
   // Recalculate withMargin on all lines in case it wasn't stored
   const lMargin = (q.labourMargin||q.margin||10)/100;
@@ -3029,6 +3038,8 @@ function quoteJobSelected(ref) {
   const job = db.jobs.find(j=>j.ref===ref);
   if(job) {
     document.getElementById('qb-client').value = job.client?.name||'';
+    document.getElementById('qb-address').value = job.address || '';
+    document.getElementById('qb-desc').value = job.desc || '';
     document.getElementById('qb-title').textContent = ref + ' — ' + job.name;
     document.getElementById('qb-subtitle').textContent = job.client?.name||'';
   }
@@ -3443,6 +3454,8 @@ function saveQuote() {
     number: document.getElementById('qb-number').value,
     jobRef: document.getElementById('qb-number')?.value || '',
     client: document.getElementById('qb-client').value,
+    address: document.getElementById('qb-address')?.value || '',
+    projectDesc: document.getElementById('qb-desc')?.value || '',
     date: new Date().toISOString().split('T')[0],
     rooms: saveRooms,
     pmFee, bonus, subtotal,
