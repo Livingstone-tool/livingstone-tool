@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.77 -->
+<!-- Livingstone v2.78 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -4575,7 +4575,7 @@ function renderJobPlan() {
         const left = ((ts - minD) / 86400000 / spanDays) * BAR_TOTAL;
         const w = Math.max(8, ((te - ts) / 86400000 + 1) / spanDays * BAR_TOTAL);
         const color = statusColors[t.status] || '#adb5bd';
-        const days = Math.round((te - ts) / 86400000) + 1;
+        const days = countWorkingDays(t.start, t.end);
         return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;font-size:11px;height:26px;">' +
           '<div style="width:140px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);" title="' + (t.desc||'') + '">' + (t.desc||'') + '</div>' +
           '<input type="date" value="' + (t.start||'') + '" style="font-size:10px;padding:1px 2px;width:105px;flex-shrink:0;border:1px solid var(--border);border-radius:3px;" onchange="updateTaskDate(' + realIdx + ',\'start\',this.value)">' +
@@ -4667,7 +4667,7 @@ function renderJobPlan() {
             </tr></thead>
             <tbody>${tasks.map((t,i) => {
               const realIdx = db.tasks.indexOf(t);
-              const days = t.start && t.end ? Math.round((new Date(t.end) - new Date(t.start)) / 86400000) + 1 : 0;
+              const days = t.start && t.end ? countWorkingDays(t.start, t.end) : 0;
               return `<tr style="border-bottom:1px solid var(--border);" data-taskidx="${realIdx}">
                 <td style="text-align:center;"><input type="checkbox" class="task-check" data-idx="${realIdx}" onchange="updateBulkDeleteBtn()"></td>
                 <td><input type="text" value="${(t.desc||'').replace(/"/g,'&quot;')}" style="font-size:11px;padding:2px 4px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskDesc(${realIdx},this.value)"></td>
@@ -4976,14 +4976,39 @@ function updateTaskDate(idx, field, value) {
   renderJobPlan();
 }
 
+// Working days helpers (Mon-Fri, excludes weekends)
+function countWorkingDays(startDate, endDate) {
+  const s = new Date(startDate); const e = new Date(endDate);
+  if (s > e) return 0;
+  let count = 0;
+  const d = new Date(s);
+  while (d <= e) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
+function addWorkingDays(startDate, numDays) {
+  const d = new Date(startDate);
+  let added = 0;
+  // If starting on a weekend, skip to Monday first
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  const start = new Date(d);
+  while (added < numDays - 1) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+  }
+  return d.toISOString().split('T')[0];
+}
+
 function adjustTaskDays(idx, delta) {
   const task = db.tasks[idx];
   if (!task || !task.start || !task.end) return;
-  const end = new Date(task.end);
-  end.setDate(end.getDate() + delta);
-  // Don't let end go before start
-  if (end < new Date(task.start)) return;
-  task.end = end.toISOString().split('T')[0];
+  const currentWorkDays = countWorkingDays(task.start, task.end);
+  const newWorkDays = Math.max(1, currentWorkDays + delta);
+  task.end = addWorkingDays(task.start, newWorkDays);
   saveData();
   syncTaskToSupabase(task);
   renderJobPlan();
@@ -5083,41 +5108,46 @@ async function generatePlanFromQuote() {
     if (!confirm('Generate ' + allLines.length + ' tasks for ' + ref + ' — ' + job.name + '?')) return;
   }
 
-  // Sequential dates, weighted by value
+  // Sequential dates, weighted by value (working days only)
   const jobStart = job.startDate ? new Date(job.startDate) : new Date();
   const jobEnd = job.endDate ? new Date(job.endDate) : new Date(jobStart.getTime() + 30 * 86400000);
-  const totalDays = Math.max(allLines.length, Math.round((jobEnd - jobStart) / 86400000));
+  const totalWorkDays = countWorkingDays(jobStart, jobEnd);
   const grandTotal = allLines.reduce((s, l) => s + l.value, 0) || 1;
   const leadName = job.lead === 'A' ? 'Adam Hemming' : 'Tom';
-  const fmtDate = d => d.toISOString().split('T')[0];
+  const fmtDate = d => new Date(d).toISOString().split('T')[0];
 
   let cursor = new Date(jobStart);
+  // Skip to Monday if starting on weekend
+  while (cursor.getDay() === 0 || cursor.getDay() === 6) cursor.setDate(cursor.getDate() + 1);
   const newTasks = [];
 
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
-    // Days proportional to value, min 1, or use qty (days) for labour
-    let days;
+    let workDays;
     if (line.type === 'Labour' && line.qty >= 1) {
-      days = Math.max(1, Math.round(line.qty));
+      workDays = Math.max(1, Math.round(line.qty));
     } else {
-      days = Math.max(1, Math.round((line.value / grandTotal) * totalDays));
+      workDays = Math.max(1, Math.round((line.value / grandTotal) * totalWorkDays));
     }
 
-    const taskStart = new Date(cursor);
-    const taskEnd = new Date(cursor.getTime() + (days - 1) * 86400000);
+    const taskStartStr = fmtDate(cursor);
+    const taskEndStr = addWorkingDays(cursor, workDays);
+    const taskEnd = new Date(taskEndStr);
     if (taskEnd > jobEnd) taskEnd.setTime(jobEnd.getTime());
 
     newTasks.push({
       jobRef: ref,
       desc: line.room + ': ' + line.desc,
       responsible: leadName,
-      start: fmtDate(taskStart),
+      start: taskStartStr,
       end: fmtDate(taskEnd),
       status: 'Not Started'
     });
 
-    cursor = new Date(taskEnd.getTime() + 86400000);
+    // Next task starts the working day after this one ends
+    cursor = new Date(taskEnd);
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor.getDay() === 0 || cursor.getDay() === 6) cursor.setDate(cursor.getDate() + 1);
   }
 
   // Add to db and sync
