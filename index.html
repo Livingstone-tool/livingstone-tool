@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.95 -->
+<!-- Livingstone v2.96 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5336,12 +5336,28 @@ function updateTaskDesc(idx, value) {
 function updateTaskDate(idx, field, value) {
   const task = db.tasks[idx];
   if (!task) return;
-  if (field === 'start') task.start = value;
-  else if (field === 'end') task.end = value;
-  // Ensure start <= end
-  if (task.start && task.end && new Date(task.start) > new Date(task.end)) {
-    if (field === 'start') task.end = task.start;
-    else task.start = task.end;
+
+  // Weekend warning
+  const d = new Date(value);
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) {
+    if (!confirm('That date is a ' + (dow === 0 ? 'Sunday' : 'Saturday') + '. Are you sure?')) {
+      renderJobPlan();
+      return;
+    }
+  }
+
+  if (field === 'start') {
+    // Preserve the number of working days — recalculate end date
+    const currentDays = task.start && task.end ? countWorkingDays(task.start, task.end) : 1;
+    task.start = value;
+    task.end = addWorkingDays(value, Math.max(1, currentDays));
+  } else if (field === 'end') {
+    task.end = value;
+    // Ensure end is not before start
+    if (task.start && new Date(task.start) > new Date(task.end)) {
+      task.start = task.end;
+    }
   }
   saveData();
   syncTaskToSupabase(task);
