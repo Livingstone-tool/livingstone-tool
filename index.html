@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.87 -->
+<!-- Livingstone v2.88 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2653,21 +2653,36 @@ function renderDashboard() {
   // Business Actions — show outstanding actions from Q1 and Long Term
   const dashActions = document.getElementById('dash-business-actions');
   if (dashActions) {
+    const today2 = new Date(); today2.setHours(0,0,0,0);
     const allActions = [
       ...(db.actionsQ1||[]).map((a,i) => ({...a, source:'q1', idx:i})),
       ...(db.actionsLT||[]).map((a,i) => ({...a, source:'lt', idx:i}))
     ].filter(a => a.status !== 'Done');
-    const priorityOrder = {'High':0,'Medium':1,'Low':2};
-    allActions.sort((a,b) => (priorityOrder[a.priority]||2) - (priorityOrder[b.priority]||2));
+    // Sort: overdue first, then by due date, then by priority
+    allActions.sort((a,b) => {
+      const aDate = a.due ? new Date(a.due) : new Date('9999-12-31');
+      const bDate = b.due ? new Date(b.due) : new Date('9999-12-31');
+      const aOverdue = a.due && aDate < today2 ? 0 : 1;
+      const bOverdue = b.due && bDate < today2 ? 0 : 1;
+      if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+      return aDate - bDate;
+    });
     const top = allActions.slice(0, 8);
+    const fmtD2 = d => d ? new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
 
     if (top.length) {
       dashActions.innerHTML = top.map(a => {
         const pColor = a.priority === 'High' ? 'var(--danger)' : a.priority === 'Medium' ? '#e67e22' : 'var(--text-muted)';
         const statusBg = a.status === 'In Progress' ? 'badge-progress' : a.status === 'To Do' ? 'badge-enquiry' : 'badge-preparing';
-        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;">' +
-          '<span style="color:' + pColor + ';font-size:10px;font-weight:700;min-width:45px;">' + (a.priority||'') + '</span>' +
+        const dueDate = a.due ? new Date(a.due) : null;
+        const isOverdue = dueDate && dueDate < today2;
+        const isDueSoon = dueDate && !isOverdue && (dueDate - today2) < 7 * 86400000;
+        const dueColor = isOverdue ? 'var(--danger)' : isDueSoon ? '#e67e22' : 'var(--text-muted)';
+        const dueText = a.due ? (isOverdue ? '⚠ ' : '') + fmtD2(a.due) : '';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;' + (isOverdue ? 'background:rgba(192,57,43,0.05);' : '') + '">' +
+          '<span style="color:' + pColor + ';font-size:10px;font-weight:700;min-width:42px;">' + (a.priority||'') + '</span>' +
           '<div style="flex:1;">' + (a.desc||'') + '</div>' +
+          (dueText ? '<span style="color:' + dueColor + ';font-size:10px;font-weight:' + (isOverdue?'700':'400') + ';min-width:50px;text-align:right;">' + dueText + '</span>' : '') +
           '<span class="badge ' + statusBg + '" style="font-size:10px;">' + (a.status||'') + '</span>' +
           '</div>';
       }).join('');
