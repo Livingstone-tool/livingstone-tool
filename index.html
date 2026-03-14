@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.81 -->
+<!-- Livingstone v2.82 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1018,8 +1018,11 @@
 
   <!-- PRODUCTS PAGE -->
   <div id="page-products" class="page content">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <div><span style="font-size:13px;color:var(--text-muted);">Materials & supplies database</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:12px;flex:1;">
+        <span style="font-size:13px;color:var(--text-muted);flex-shrink:0;">Materials & supplies</span>
+        <input type="text" id="product-search" placeholder="Search products..." oninput="renderProducts()" style="flex:1;max-width:300px;font-size:13px;padding:7px 12px;">
+      </div>
       <button class="btn btn-primary" onclick="addProductModal()">+ Add Product</button>
     </div>
     <div class="grid-2" style="gap:20px;">
@@ -3736,7 +3739,9 @@ function addSubModal() {
 // PRODUCTS
 // ============================================================
 function renderProducts() {
-  const products = db.products || [];
+  const searchEl = document.getElementById('product-search');
+  const query = searchEl ? searchEl.value.toLowerCase().trim() : '';
+  const products = (db.products || []).filter(p => !query || p.name.toLowerCase().includes(query));
   const tbody = document.getElementById('products-table-body');
   tbody.innerHTML = products.map((p,i) => {
     const realIdx = db.products.indexOf(p);
@@ -3750,6 +3755,9 @@ function renderProducts() {
       </td>
     </tr>`;
   }).join('');
+  if (!products.length && query) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">No products matching "' + query + '"</td></tr>';
+  }
 }
 
 function editProduct(i) {
