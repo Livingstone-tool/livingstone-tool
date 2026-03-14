@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.80 -->
+<!-- Livingstone v2.81 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1921,19 +1921,17 @@ async function loadFromSupabase() {
       notes: w.notes || ''
     }));
 
-    // Keep non-Supabase data — merge SEED with any user-added products
+    // Merge SEED products with localStorage — SEED provides the base, local edits/additions override
     const seedProducts = SEED.products || [];
     try {
       const localDB = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       const localProducts = localDB.products || [];
-      if (localProducts.length > 0) {
-        // Deduplicate by name, keep last occurrence
-        const seen = {};
-        localProducts.forEach(p => { if(p.name) seen[p.name.toLowerCase()] = p; });
-        db.products = Object.values(seen);
-      } else {
-        db.products = seedProducts;
-      }
+      // Build a map: start with SEED, then overlay local edits (by name match)
+      const seen = {};
+      seedProducts.forEach(p => { if(p.name) seen[p.name.toLowerCase()] = p; });
+      // Local products override SEED by name, and add any new ones
+      localProducts.forEach(p => { if(p.name) seen[p.name.toLowerCase()] = p; });
+      db.products = Object.values(seen);
     } catch(e) {
       db.products = seedProducts;
     }
@@ -1943,14 +1941,10 @@ async function loadFromSupabase() {
     try {
       const localDB2 = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       const localSubs = localDB2.subs || [];
-      if (localSubs.length > 0) {
-        // Deduplicate by name (case-insensitive), keep last occurrence
-        const seen = {};
-        localSubs.forEach(s => { if(s.name) seen[s.name.toLowerCase()] = s; });
-        db.subs = Object.values(seen);
-      } else {
-        db.subs = seedSubs;
-      }
+      const seen = {};
+      seedSubs.forEach(s => { if(s.name) seen[s.name.toLowerCase()] = s; });
+      localSubs.forEach(s => { if(s.name) seen[s.name.toLowerCase()] = s; });
+      db.subs = Object.values(seen);
     } catch(e) {
       db.subs = seedSubs;
     }
@@ -3764,6 +3758,7 @@ function editProduct(i) {
   document.getElementById('product-name').value=p.name;
   document.getElementById('product-rate').value=p.rate;
   document.getElementById('product-unit').value=p.unit||'';
+  document.getElementById('product-name').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 function saveProduct() {
@@ -3791,7 +3786,6 @@ function deleteProduct(i) {
 function clearProductForm() {
   document.getElementById('product-edit-idx').value=-1;
   ['product-name','product-rate','product-unit'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('product-type').value='Material';
 }
 
 function addProductModal() {
