@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.84 -->
+<!-- Livingstone v2.85 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -887,7 +887,7 @@
               </div>
               <div class="form-group">
                 <label>Project Address</label>
-                <input type="text" id="qb-address">
+                <input type="text" id="qb-address" readonly style="background:var(--limestone);cursor:default;" title="Edit this in the Job form">
               </div>
             </div>
             <div>
@@ -912,8 +912,8 @@
             </div>
           </div>
           <div class="form-group">
-            <label>Project Description / Scope of Work</label>
-            <textarea id="qb-desc" rows="3"></textarea>
+            <label>Project Description / Scope of Work <span style="font-size:11px;color:var(--text-muted);">(from job)</span></label>
+            <textarea id="qb-desc" rows="3" readonly style="background:var(--limestone);cursor:default;" title="Edit this in the Job form"></textarea>
           </div>
 
           <!-- Quote Mode Selector -->
@@ -2970,9 +2970,10 @@ function viewQuote(idx) {
   document.getElementById('qb-bonus').value = q.bonus;
   document.getElementById('qb-title').textContent = q.number + ' — ' + q.client;
   document.getElementById('qb-subtitle').textContent = 'Quote Date: '+q.date;
-  // Populate description from quote or from job
-  const qJob = db.jobs.find(j => j.ref === (q.number||q.jobRef));
-  document.getElementById('qb-desc').value = q.projectDesc || (qJob ? qJob.desc : '') || '';
+  // Populate description and address from job (job is master)
+  const qJob = db.jobs.find(j => { const n = r => (r||'').replace(/-/g,'').toUpperCase(); return n(j.ref) === n(q.number||q.jobRef); });
+  document.getElementById('qb-address').value = qJob ? qJob.address || '' : '';
+  document.getElementById('qb-desc').value = qJob ? qJob.desc || '' : '';
   window._activeQuoteRooms = JSON.parse(JSON.stringify(q.rooms||[]));
   // Recalculate withMargin on all lines in case it wasn't stored
   const lMargin = (q.labourMargin||q.margin||10)/100;
