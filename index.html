@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.82 -->
+<!-- Livingstone v2.83 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1664,12 +1664,24 @@
         </select>
         <button class="btn btn-primary" style="flex-shrink:0;" onclick="addWish()">Add</button>
       </div>
-      <div style="margin-bottom:8px;font-weight:700;font-size:13px;color:var(--copper);">✨ New Features</div>
-      <div id="wishlist-items-feature"></div>
-      <div style="margin:16px 0 8px;font-weight:700;font-size:13px;color:#4a90d9;">🔧 Fixes</div>
-      <div id="wishlist-items-fix"></div>
-      <div style="margin:20px 0 8px;font-weight:700;font-size:13px;color:var(--success);border-top:1px solid var(--border);padding-top:16px;">✅ Implemented</div>
-      <div id="wishlist-items-implemented"></div>
+      <div style="display:flex;gap:6px;margin-bottom:16px;">
+        <button class="btn btn-sm" id="wish-filter-all" onclick="setWishFilter('all')" style="background:var(--slate);color:white;">All</button>
+        <button class="btn btn-sm btn-secondary" id="wish-filter-feature" onclick="setWishFilter('feature')">✨ Features</button>
+        <button class="btn btn-sm btn-secondary" id="wish-filter-fix" onclick="setWishFilter('fix')">🔧 Fixes</button>
+        <button class="btn btn-sm btn-secondary" id="wish-filter-implemented" onclick="setWishFilter('implemented')">✅ Done</button>
+      </div>
+      <div id="wish-section-features">
+        <div style="margin-bottom:8px;font-weight:700;font-size:13px;color:var(--copper);">✨ New Features</div>
+        <div id="wishlist-items-feature"></div>
+      </div>
+      <div id="wish-section-fixes">
+        <div style="margin:16px 0 8px;font-weight:700;font-size:13px;color:#4a90d9;">🔧 Fixes</div>
+        <div id="wishlist-items-fix"></div>
+      </div>
+      <div id="wish-section-implemented">
+        <div style="margin:20px 0 8px;font-weight:700;font-size:13px;color:var(--success);border-top:1px solid var(--border);padding-top:16px;">✅ Implemented</div>
+        <div id="wishlist-items-implemented"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -3985,17 +3997,20 @@ function openWishlist() {
 }
 
 function renderWishlist() {
+  const filter = window._wishFilter || 'all';
   const active = db.wishlist.filter(w => !w.status || w.status === 'active');
   const implemented = db.wishlist.filter(w => w.status === 'implemented');
-  const sorted = [...active].sort((a,b) => b.votes - a.votes);
-  const features = sorted.filter(w => !w.type || w.type === 'feature');
-  const fixes = sorted.filter(w => w.type === 'fix');
-  const implSorted = [...implemented].sort((a,b) => b.votes - a.votes);
+  // Sort by sort_order if set, otherwise by votes
+  const sortFn = (a,b) => (a.sortOrder !== undefined && b.sortOrder !== undefined) ? a.sortOrder - b.sortOrder : b.votes - a.votes;
+  const features = active.filter(w => !w.type || w.type === 'feature').sort(sortFn);
+  const fixes = active.filter(w => w.type === 'fix').sort(sortFn);
+  const implSorted = [...implemented].sort(sortFn);
   const empty = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">None yet</div>';
 
-  const renderItems = (items) => items.map((w) => {
+  const renderItems = (items, listId) => items.map((w) => {
     const origIdx = db.wishlist.indexOf(w);
-    return `<div class="wish-item">
+    return `<div class="wish-item" draggable="true" data-wish-idx="${origIdx}" data-list="${listId}">
+      <span style="cursor:grab;color:var(--text-muted);font-size:14px;padding:0 4px;user-select:none;" class="wish-drag">⠿</span>
       <div class="wish-vote">
         <button class="wish-vote-btn" onclick="voteWish(${origIdx},1)">▲</button>
         <div class="wish-vote-count">${w.votes}</div>
@@ -4025,10 +4040,78 @@ function renderWishlist() {
   const fixEl = document.getElementById('wishlist-items-fix');
   const implEl = document.getElementById('wishlist-items-implemented');
   const legacyEl = document.getElementById('wishlist-items');
-  if(featureEl) featureEl.innerHTML = renderItems(features);
-  if(fixEl) fixEl.innerHTML = renderItems(fixes);
+  if(featureEl) featureEl.innerHTML = renderItems(features, 'features');
+  if(fixEl) fixEl.innerHTML = renderItems(fixes, 'fixes');
   if(implEl) implEl.innerHTML = renderImpl(implSorted);
-  if(legacyEl) legacyEl.innerHTML = renderItems(sorted);
+  if(legacyEl) legacyEl.innerHTML = renderItems([...features,...fixes], 'all');
+
+  // Show/hide sections based on filter
+  const sf = document.getElementById('wish-section-features');
+  const sx = document.getElementById('wish-section-fixes');
+  const si = document.getElementById('wish-section-implemented');
+  if(sf) sf.style.display = (filter === 'all' || filter === 'feature') ? '' : 'none';
+  if(sx) sx.style.display = (filter === 'all' || filter === 'fix') ? '' : 'none';
+  if(si) si.style.display = (filter === 'all' || filter === 'implemented') ? '' : 'none';
+
+  // Init drag listeners
+  initWishDrag();
+}
+
+window._wishFilter = 'all';
+function setWishFilter(f) {
+  window._wishFilter = f;
+  ['all','feature','fix','implemented'].forEach(id => {
+    const btn = document.getElementById('wish-filter-' + id);
+    if(btn) {
+      btn.style.background = (id === f) ? 'var(--slate)' : '';
+      btn.style.color = (id === f) ? 'white' : '';
+      btn.className = (id === f) ? 'btn btn-sm' : 'btn btn-sm btn-secondary';
+    }
+  });
+  renderWishlist();
+}
+
+function initWishDrag() {
+  document.querySelectorAll('.wish-item[draggable]').forEach(el => {
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', el.dataset.wishIdx);
+      el.style.opacity = '0.4';
+    });
+    el.addEventListener('dragend', e => { el.style.opacity = '1'; });
+    el.addEventListener('dragover', e => {
+      e.preventDefault();
+      el.style.borderTop = '2px solid var(--copper)';
+    });
+    el.addEventListener('dragleave', e => { el.style.borderTop = ''; });
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.style.borderTop = '';
+      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+      const toIdx = parseInt(el.dataset.wishIdx);
+      if (fromIdx === toIdx || isNaN(fromIdx) || isNaN(toIdx)) return;
+      reorderWish(fromIdx, toIdx);
+    });
+  });
+}
+
+function reorderWish(fromIdx, toIdx) {
+  const item = db.wishlist[fromIdx];
+  const target = db.wishlist[toIdx];
+  if (!item || !target) return;
+  // Remove from old position
+  db.wishlist.splice(fromIdx, 1);
+  // Find new position of target after removal
+  const newToIdx = db.wishlist.indexOf(target);
+  // Insert before target
+  db.wishlist.splice(newToIdx, 0, item);
+  // Update sort orders
+  db.wishlist.forEach((w, i) => w.sortOrder = i);
+  saveData();
+  renderWishlist();
+  // Sync sort orders to Supabase
+  db.wishlist.forEach(w => {
+    if (w.id) supa.patch('wishlist', w.id, { votes: w.votes }).catch(() => {});
+  });
 }
 
 async function addWish() {
