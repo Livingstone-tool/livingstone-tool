@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.88 -->
+<!-- Livingstone v2.89 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -633,7 +633,10 @@
     <div class="nav-item" onclick="showPage('costs')"><span class="icon">💰</span> Cost Tracker</div>
     </div>
   </div>
-  <div class="sidebar-footer">Adam Hemming · Tom<br>© 2026 Livingstone Projects</div>
+  <div class="sidebar-footer">
+    <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
+    Adam Hemming · Tom<br>© 2026 Livingstone Projects
+  </div>
 </nav>
 
 <!-- MAIN CONTENT -->
@@ -1438,11 +1441,6 @@
     </div>
   </div>
 </div>
-
-<!-- WISHLIST FAB -->
-<button class="fab-wishlist" onclick="openWishlist()" style="position:fixed;bottom:80px;right:24px;z-index:1000;">
-  💡 Feature Wishlist
-</button>
 
 <!-- JOB MODAL -->
 <div id="job-modal" class="modal-overlay" style="display:none;" onclick="closeOnOverlay(event,'job-modal')">
@@ -2657,7 +2655,7 @@ function renderDashboard() {
     const allActions = [
       ...(db.actionsQ1||[]).map((a,i) => ({...a, source:'q1', idx:i})),
       ...(db.actionsLT||[]).map((a,i) => ({...a, source:'lt', idx:i}))
-    ].filter(a => a.status !== 'Done');
+    ].filter(a => a.status !== 'Done' && a.status !== 'Completed');
     // Sort: overdue first, then by due date, then by priority
     allActions.sort((a,b) => {
       const aDate = a.due ? new Date(a.due) : new Date('9999-12-31');
