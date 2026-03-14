@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.93 -->
+<!-- Livingstone v2.95 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -690,39 +690,9 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title">Pipeline by Status</div>
-          <span class="badge badge-copper">Q1 2026</span>
         </div>
         <div class="card-body">
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            <div>
-              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;">
-                <span>Initial Enquiry <span style="color:var(--text-muted)">(11)</span></span>
-                <span style="font-weight:600;">£96,370</span>
-              </div>
-              <div class="progress-bar"><div class="progress-fill" style="width:49%;background:#adb5bd;"></div></div>
-            </div>
-            <div>
-              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;">
-                <span>Preparing Quote <span style="color:var(--text-muted)">(4)</span></span>
-                <span style="font-weight:600;">£71,800</span>
-              </div>
-              <div class="progress-bar"><div class="progress-fill" style="width:36%;background:var(--warning);"></div></div>
-            </div>
-            <div>
-              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;">
-                <span>Quoted <span style="color:var(--text-muted)">(4)</span></span>
-                <span style="font-weight:600;">£30,442</span>
-              </div>
-              <div class="progress-bar"><div class="progress-fill" style="width:15%;background:#3d57b5;"></div></div>
-            </div>
-            <div>
-              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;">
-                <span>Confirmed <span style="color:var(--text-muted)">(0)</span></span>
-                <span style="font-weight:600;">£0</span>
-              </div>
-              <div class="progress-bar"><div class="progress-fill" style="width:0%;background:var(--success);"></div></div>
-            </div>
-          </div>
+          <div id="dash-pipeline-status" style="display:flex; flex-direction:column; gap:12px;"></div>
         </div>
       </div>
 
@@ -734,32 +704,7 @@
         <div class="card-body" style="padding:0;">
           <table>
             <thead><tr><th>Job</th><th>Client</th><th>Value</th><th>Status</th></tr></thead>
-            <tbody>
-              <tr class="clickable-row" onclick="openJob('LP001')">
-                <td><strong>LP001</strong><br><span style="color:var(--text-muted);font-size:12px;">Yarlet Music Academy</span></td>
-                <td>Yarlet Trust</td>
-                <td><strong>£104,307</strong></td>
-                <td><span class="badge badge-quoted">Quoted</span></td>
-              </tr>
-              <tr class="clickable-row" onclick="openJob('LP006')">
-                <td><strong>LP006</strong><br><span style="color:var(--text-muted);font-size:12px;">Keates Ph.2</span></td>
-                <td>Keates</td>
-                <td><strong>£45,000</strong></td>
-                <td><span class="badge badge-quoted">Quoted</span></td>
-              </tr>
-              <tr class="clickable-row" onclick="openJob('LP002')">
-                <td><strong>LP002</strong><br><span style="color:var(--text-muted);font-size:12px;">Yarlet Reception</span></td>
-                <td>Yarlet Trust</td>
-                <td><strong>£23,300</strong></td>
-                <td><span class="badge badge-quoted">Quoted</span></td>
-              </tr>
-              <tr class="clickable-row" onclick="openJob('LP003')">
-                <td><strong>LP003</strong><br><span style="color:var(--text-muted);font-size:12px;">Oak House Ph.1</span></td>
-                <td>Oak House</td>
-                <td><strong>£18,282</strong></td>
-                <td><span class="badge badge-preparing">Preparing</span></td>
-              </tr>
-            </tbody>
+            <tbody id="dash-highvalue-body"></tbody>
           </table>
         </div>
       </div>
@@ -830,8 +775,8 @@
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th><th>Estimate to Client <span title="Your estimate to the client (editable)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Quote <span title="From quote builder (with margins + fees)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th><th>Est. Cost <span title="Raw cost from quote builder (before margins, PM fee and bonus)" style="cursor:help;opacity:0.4;font-size:12px;">ℹ</span></th>
-              <th>Start</th><th></th>
+              <th>Lead</th><th>Quote</th><th>Est. Cost</th><th>Margin £</th>
+              <th>Margin %</th><th>Start</th><th></th>
             </tr>
           </thead>
           <tbody id="jobs-table-body"></tbody>
@@ -2729,6 +2674,41 @@ function renderDashboard() {
     }
   }
 
+  // Pipeline by Status
+  const pipelineEl = document.getElementById('dash-pipeline-status');
+  if (pipelineEl) {
+    const statuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold'];
+    const colors = {'Initial Enquiry':'#adb5bd','Preparing Quote':'var(--warning)','Quoted':'#3d57b5','Confirmed':'var(--success)','In Progress':'var(--copper)','On Hold':'#95a5a6'};
+    const maxVal = Math.max(...statuses.map(s => activeJobs.filter(j=>j.status===s).reduce((sum,j)=>sum+(j.quoteValue||j.estimate||0),0)), 1);
+    pipelineEl.innerHTML = statuses.map(s => {
+      const sJobs = activeJobs.filter(j => j.status === s);
+      const sVal = sJobs.reduce((sum,j) => sum + (j.quoteValue||j.estimate||0), 0);
+      const pct = Math.round(sVal / maxVal * 100);
+      return '<div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;">' +
+        '<span>' + s + ' <span style="color:var(--text-muted)">(' + sJobs.length + ')</span></span>' +
+        '<span style="font-weight:600;">' + (sVal ? '£' + Math.round(sVal).toLocaleString() : '£0') + '</span>' +
+        '</div>' +
+        '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%;background:' + (colors[s]||'#adb5bd') + ';"></div></div>' +
+        '</div>';
+    }).join('');
+  }
+
+  // High Value Jobs (top 5 by value)
+  const hvBody = document.getElementById('dash-highvalue-body');
+  if (hvBody) {
+    const topJobs = [...activeJobs].sort((a,b) => (b.quoteValue||b.estimate||0) - (a.quoteValue||a.estimate||0)).slice(0, 5);
+    hvBody.innerHTML = topJobs.map(j => {
+      const val = j.quoteValue || j.estimate || 0;
+      return '<tr class="clickable-row" onclick="openJob(\'' + j.ref + '\')">' +
+        '<td><strong>' + (j.ref||'') + '</strong><br><span style="color:var(--text-muted);font-size:12px;">' + (j.name||'') + '</span></td>' +
+        '<td>' + (j.client&&j.client.name?j.client.name:'') + '</td>' +
+        '<td><strong>' + (val ? '£' + Math.round(val).toLocaleString() : 'TBC') + '</strong></td>' +
+        '<td>' + statusBadge(j.status) + '</td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">No active jobs</td></tr>';
+  }
+
   renderPipeline();
   renderJobsTable();
 }
@@ -2778,7 +2758,9 @@ function renderJobsTable() {
     var margin = quoteVal && estCost ? Math.round((quoteVal - estCost) / quoteVal * 100) : null;
     var quoteDisplay = quoteVal ? '£' + quoteVal.toLocaleString() : '--';
     var estCostDisplay = estCost ? '£' + estCost.toLocaleString() : '--';
-    var estimateDisplay = j.estimate ? ('~£' + parseFloat(j.estimate).toLocaleString()) : '--';
+    var marginVal = quoteVal && estCost ? quoteVal - estCost : null;
+    var marginValDisplay = marginVal !== null ? '<span style="color:' + (marginVal > 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;">£' + Math.round(marginVal).toLocaleString() + '</span>' : '--';
+    var marginDisplay = margin !== null ? '<span style="font-size:11px;color:' + (margin > 20 ? 'var(--success)' : margin > 10 ? '#e67e22' : 'var(--danger)') + ';">' + margin + '%</span>' : '';
     var leadName = j.lead === 'A' ? 'Adam' : 'Tom';
     var leadClass = j.lead === 'A' ? 'a' : 't';
     var refDisplay = j.ref ? '<strong>' + j.ref + '</strong>' : '<span style="color:#e74c3c;font-size:11px;font-weight:600;">⚠ NO REF</span>';
@@ -2803,29 +2785,28 @@ function renderJobsTable() {
     row += '<td>' + (j.client && j.client.name ? j.client.name : '') + '</td>';
     row += '<td>' + statusDisplay + '</td>';
     row += '<td><span class="chip chip-' + leadClass + '">' + leadName + '</span></td>';
-    row += '<td>' + estimateDisplay + '</td>';
     row += '<td>' + quoteDisplay + '</td>';
     row += '<td>' + estCostDisplay + '</td>';
+    row += '<td>' + marginValDisplay + '</td>';
+    row += '<td>' + marginDisplay + '</td>';
     row += '<td>' + (j.startDate||'--') + '</td>';
-    row += '<td onclick="event.stopPropagation()" style="padding:4px 8px;">' + marginDisplay + '</td>';
     row += '<td><button class="btn btn-sm btn-secondary" data-ref="' + (j.ref||'') + '" data-idx="' + i + '" onclick="event.stopPropagation();editJobByRef(this.dataset.ref,parseInt(this.dataset.idx))">Edit</button></td>';
     row += '</tr>';
     return row;
   }).join('');
 
   // Totals row
-  var totalEstimate = jobs.reduce(function(s,j) { return s + (parseFloat(j.estimate)||0); }, 0);
   var totalQuote = jobs.reduce(function(s,j) { return s + (j.quoteValue||0); }, 0);
   var totalCost = jobs.reduce(function(s,j) { return s + (j.estCost||0); }, 0);
-  var totalMargin = totalQuote && totalCost ? Math.round((totalQuote - totalCost) / totalQuote * 100) : null;
+  var totalMarginVal = totalQuote && totalCost ? totalQuote - totalCost : null;
+  var totalMarginPct = totalQuote && totalCost ? Math.round((totalQuote - totalCost) / totalQuote * 100) : null;
   var totalsRow = '<tr style="background:var(--limestone-dark);font-weight:700;border-top:2px solid var(--slate);">';
   totalsRow += '<td colspan="5" style="text-align:right;padding-right:12px;">' + jobs.length + ' jobs</td>';
-  totalsRow += '<td>' + (totalEstimate ? '~£' + Math.round(totalEstimate).toLocaleString() : '') + '</td>';
   totalsRow += '<td>£' + Math.round(totalQuote).toLocaleString() + '</td>';
   totalsRow += '<td>£' + Math.round(totalCost).toLocaleString() + '</td>';
-  totalsRow += '<td></td>';
-  totalsRow += '<td>' + (totalMargin !== null ? '<span style="font-size:11px;color:' + (totalMargin > 20 ? 'var(--success)' : totalMargin > 10 ? '#e67e22' : 'var(--danger)') + ';">' + totalMargin + '%</span>' : '') + '</td>';
-  totalsRow += '<td></td></tr>';
+  totalsRow += '<td>' + (totalMarginVal !== null ? '<span style="color:' + (totalMarginVal > 0 ? 'var(--success)' : 'var(--danger)') + ';">£' + Math.round(totalMarginVal).toLocaleString() + '</span>' : '') + '</td>';
+  totalsRow += '<td>' + (totalMarginPct !== null ? '<span style="font-size:11px;color:' + (totalMarginPct > 20 ? 'var(--success)' : totalMarginPct > 10 ? '#e67e22' : 'var(--danger)') + ';">' + totalMarginPct + '%</span>' : '') + '</td>';
+  totalsRow += '<td></td><td></td></tr>';
   tbody.innerHTML += totalsRow;
 }
 
