@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.92 -->
+<!-- Livingstone v2.93 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2812,6 +2812,21 @@ function renderJobsTable() {
     row += '</tr>';
     return row;
   }).join('');
+
+  // Totals row
+  var totalEstimate = jobs.reduce(function(s,j) { return s + (parseFloat(j.estimate)||0); }, 0);
+  var totalQuote = jobs.reduce(function(s,j) { return s + (j.quoteValue||0); }, 0);
+  var totalCost = jobs.reduce(function(s,j) { return s + (j.estCost||0); }, 0);
+  var totalMargin = totalQuote && totalCost ? Math.round((totalQuote - totalCost) / totalQuote * 100) : null;
+  var totalsRow = '<tr style="background:var(--limestone-dark);font-weight:700;border-top:2px solid var(--slate);">';
+  totalsRow += '<td colspan="5" style="text-align:right;padding-right:12px;">' + jobs.length + ' jobs</td>';
+  totalsRow += '<td>' + (totalEstimate ? '~£' + Math.round(totalEstimate).toLocaleString() : '') + '</td>';
+  totalsRow += '<td>£' + Math.round(totalQuote).toLocaleString() + '</td>';
+  totalsRow += '<td>£' + Math.round(totalCost).toLocaleString() + '</td>';
+  totalsRow += '<td></td>';
+  totalsRow += '<td>' + (totalMargin !== null ? '<span style="font-size:11px;color:' + (totalMargin > 20 ? 'var(--success)' : totalMargin > 10 ? '#e67e22' : 'var(--danger)') + ';">' + totalMargin + '%</span>' : '') + '</td>';
+  totalsRow += '<td></td></tr>';
+  tbody.innerHTML += totalsRow;
 }
 
 
