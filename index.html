@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.91 -->
+<!-- Livingstone v2.92 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -666,23 +666,23 @@
     <div class="grid-4" style="margin-bottom:24px;">
       <div class="stat-card">
         <div class="stat-label">Pipeline Value</div>
-        <div class="stat-value stat-copper" style="color:var(--copper)">£198,612</div>
-        <div class="stat-sub">20 active jobs</div>
+        <div class="stat-value stat-copper" style="color:var(--copper)" id="dash-pipeline-value">—</div>
+        <div class="stat-sub" id="dash-pipeline-sub">Loading...</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Est. Total Margin</div>
-        <div class="stat-value" style="color:var(--success)">£36,272</div>
-        <div class="stat-sub">18.3% avg margin</div>
+        <div class="stat-value" style="color:var(--success)" id="dash-margin-value">—</div>
+        <div class="stat-sub" id="dash-margin-sub"></div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Confirmed Jobs</div>
-        <div class="stat-value">0</div>
-        <div class="stat-sub">4 quoted, pending</div>
+        <div class="stat-value" id="dash-confirmed-value">—</div>
+        <div class="stat-sub" id="dash-confirmed-sub"></div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Quotes Sent</div>
-        <div class="stat-value" style="color:var(--slate)">£149,942</div>
-        <div class="stat-sub">3 quotes outstanding</div>
+        <div class="stat-value" style="color:var(--slate)" id="dash-quotes-value">—</div>
+        <div class="stat-sub" id="dash-quotes-sub"></div>
       </div>
     </div>
 
