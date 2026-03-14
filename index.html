@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.89 -->
+<!-- Livingstone v2.91 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1076,7 +1076,7 @@
           <div class="form-group">
             <label>Category</label>
             <select id="othercost-category">
-              <option>Waste Disposal</option><option>Machine Hire</option><option>Consultancy</option><option>Skip Hire</option><option>Other</option>
+              <option>Waste Disposal</option><option>Machine Hire</option><option>Consultancy</option><option>Other</option>
             </select>
           </div>
           <div class="form-group"><label>Rate / Cost (£)</label><input type="number" id="othercost-rate" step="0.01"></div>
@@ -1962,11 +1962,19 @@ async function loadFromSupabase() {
     } catch(e) {
       db.subs = seedSubs;
     }
-    // Other Costs: load from localStorage
+    // Other Costs: merge SEED defaults with localStorage
+    const seedOtherCosts = [
+      {name:'Skip Hire 8yd',category:'Waste Disposal',rate:280,unit:'Per skip'},
+      {name:'Day Digger Hire',category:'Machine Hire',rate:75,unit:'Per day'}
+    ];
     try {
       const localDB3 = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-      db.otherCosts = localDB3.otherCosts || [];
-    } catch(e) { db.otherCosts = []; }
+      const localOther = localDB3.otherCosts || [];
+      const seen = {};
+      seedOtherCosts.forEach(c => { if(c.name) seen[c.name.toLowerCase()] = c; });
+      localOther.forEach(c => { if(c.name) seen[c.name.toLowerCase()] = c; });
+      db.otherCosts = Object.values(seen);
+    } catch(e) { db.otherCosts = seedOtherCosts; }
     db.actionsQ1 = SEED.actionsQ1 || [];
     db.actionsLT = SEED.actionsLT || [];
     try {
@@ -2107,7 +2115,6 @@ const SEED = {
     {name:'Emulsion Paint 10L',type:'Material',rate:35,unit:'Per tin'},
     {name:'Oak Skirting 18x94mm',type:'Material',rate:8.5,unit:'Per metre'},
     {name:'Porcelain Tile 600x600',type:'Material',rate:28,unit:'Per tile'},
-    {name:'Skip Hire 8yd',type:'Skip Hire',rate:280,unit:'Per skip'},
     {name:'Scaffolding (per week)',type:'Material',rate:250,unit:'Per week'},
     {name:'Gravel',type:'Material',rate:63.8,unit:'Per tonne'},
     {name:'Gravel Board',type:'Material',rate:15,unit:'Per length'},
@@ -2187,7 +2194,40 @@ const SEED = {
     {name:'Wykamol Ultracure DPC cream',type:'Material',rate:14.3,unit:''},
     {name:'box of scres for floor',type:'Material',rate:15.79,unit:''},
     {name:'cork floor tiles',type:'Material',rate:19.99,unit:''},
-    {name:'moulding for panels',type:'Material',rate:121.8,unit:''}
+    {name:'moulding for panels',type:'Material',rate:121.8,unit:''},
+    {name:'Accesible bathroom pack',type:'Material',rate:500,unit:'Per pack'},
+    {name:'Bell Downlights',type:'Material',rate:16.38,unit:'Per light'},
+    {name:'Bonding Coat 25kg',type:'Material',rate:15.98,unit:'Per bag'},
+    {name:'British Gypsum SoundBloc 2400x1200x12.5mm',type:'Material',rate:18.12,unit:'Per board'},
+    {name:'Carpet tiles - Burmatex',type:'Material',rate:26,unit:'Per m2'},
+    {name:'CLS 2.4 38x63 timber',type:'Material',rate:3.68,unit:'Per length'},
+    {name:'CLS timber 2.4m',type:'Material',rate:3.95,unit:'Per length'},
+    {name:'Conduit',type:'Material',rate:50,unit:'Per run'},
+    {name:'Consumer Unit',type:'Material',rate:300,unit:'Per unit'},
+    {name:'Door casement',type:'Material',rate:100,unit:'Per casement'},
+    {name:'Double Socket',type:'Material',rate:2.5,unit:'Per socket'},
+    {name:'Dry wall Adhesive',type:'Material',rate:15,unit:'Per bag'},
+    {name:'Extractor Fan',type:'Material',rate:50,unit:'Per fan'},
+    {name:'Internal door - 900mm',type:'Material',rate:250,unit:'Per door'},
+    {name:'Isover Acoustic Roll',type:'Material',rate:60,unit:'Per roll'},
+    {name:'Landscaping',type:'Material',rate:2500,unit:'Per job'},
+    {name:'LED Striplight - 5ft',type:'Material',rate:20,unit:'Per light'},
+    {name:'length beading',type:'Material',rate:2,unit:'Per length'},
+    {name:'Pad Stone',type:'Material',rate:35,unit:'Per stone'},
+    {name:'Pendant Lights',type:'Material',rate:40,unit:'Per light'},
+    {name:'Plaster Board Soundbloc 2400x1200',type:'Material',rate:22,unit:'Per board'},
+    {name:'Ply wood 3mm for bathroom floor',type:'Material',rate:24,unit:'Per sheet'},
+    {name:'Plywood Boards 6mm',type:'Material',rate:16,unit:'Per sheet'},
+    {name:'Polyflor (LAID)',type:'Material',rate:50,unit:'Per m2'},
+    {name:'Self leveling compound - 25kg',type:'Material',rate:20,unit:'Per bag'},
+    {name:'Sheet 22mm floor board',type:'Material',rate:14.83,unit:'Per sheet'},
+    {name:'Stairs',type:'Material',rate:4500,unit:'Per set'},
+    {name:'Std Internal Door',type:'Material',rate:150,unit:'Per door'},
+    {name:'Steel girder',type:'Material',rate:350,unit:'Per girder'},
+    {name:'Timber acoustic door (60db)',type:'Material',rate:500,unit:'Per door'},
+    {name:'Waste pipe and fittings',type:'Material',rate:3000,unit:'Per job'},
+    {name:'Window board - Bull nose',type:'Material',rate:33,unit:'Per board'},
+    {name:'Wire',type:'Material',rate:2500,unit:'Per job'}
   ],
   tasks: [
     {jobRef:'LP003',desc:'Take Bobby and Josh to look',responsible:'',start:'2026-02-25',end:'2026-02-25',status:'Not Started'},
@@ -3059,6 +3099,8 @@ function viewQuote(idx) {
   document.getElementById('qb-address').value = qJob ? qJob.address || '' : '';
   document.getElementById('qb-desc').value = qJob ? qJob.desc || '' : '';
   window._activeQuoteRooms = JSON.parse(JSON.stringify(q.rooms||[]));
+  // Migrate legacy "Skip Hire" type to "Waste Disposal"
+  window._activeQuoteRooms.forEach(r => (r.lines||[]).forEach(l => { if(l.type==='Skip Hire') l.type='Waste Disposal'; }));
   // Recalculate withMargin on all lines in case it wasn't stored
   const lMargin = (q.labourMargin||q.margin||10)/100;
   const mMargin = (q.matMargin||q.margin||10)/100;
@@ -3184,7 +3226,7 @@ function renderQBRooms() {
         <input type="text" value="${l.desc||''}" placeholder="Description" oninput="updateLine(${ri},${li},'desc',this.value)" style="font-size:12.5px;">
         <input type="text" list="supplier-list" value="${l.supplier||''}" placeholder="Supplier / Sub" oninput="updateLine(${ri},${li},'supplier',this.value)" style="font-size:12px;">
         <select onchange="updateLine(${ri},${li},'type',this.value)" style="font-size:12px;">
-          ${['Labour','Material','Skip Hire','Machine Hire','Other'].map(t=>`<option ${t===l.type?'selected':''}>${t}</option>`).join('')}
+          ${['Labour','Material','Waste Disposal','Machine Hire','Consultancy','Other'].map(t=>`<option ${t===l.type?'selected':''} ${l.type==='Skip Hire'&&t==='Waste Disposal'?'selected':''}>${t}</option>`).join('')}
         </select>
         <input type="number" value="${l.qty||1}" min="0" step="0.5" oninput="updateLine(${ri},${li},'qty',parseFloat(this.value)||0)" style="font-size:12.5px;">
         <input type="number" value="${l.rate||0}" min="0" step="0.01" oninput="updateLine(${ri},${li},'rate',parseFloat(this.value)||0)" style="font-size:12.5px;">
@@ -3249,7 +3291,7 @@ function updateLine(ri, li, field, val) {
       line.type = 'Material';
     } else if(other) {
       line.rate = other.rate;
-      const typeMap = {'Waste Disposal':'Skip Hire','Machine Hire':'Machine Hire','Skip Hire':'Skip Hire','Consultancy':'Labour','Other':'Other'};
+      const typeMap = {'Waste Disposal':'Waste Disposal','Machine Hire':'Machine Hire','Consultancy':'Consultancy','Other':'Other'};
       line.type = typeMap[other.category] || 'Other';
     }
     if (sub || prod || other) {
@@ -3599,6 +3641,39 @@ function saveQuote() {
       supa.post('quotes', qData).then(res => { if(res&&res[0]) q.id=res[0].id; }).catch(e => console.warn('Quote insert:', e));
     });
   }
+  // Auto-add any new suppliers/products from quote lines to the correct database
+  const existingNames = new Set([
+    ...(db.products||[]).map(p => p.name.toLowerCase()),
+    ...(db.subs||[]).map(s => s.name.toLowerCase()),
+    ...(db.otherCosts||[]).map(c => c.name.toLowerCase())
+  ]);
+  let newCount = 0;
+  (saveRooms||[]).forEach(r => {
+    (r.lines||[]).forEach(l => {
+      if (l.supplier && l.supplier.trim() && !existingNames.has(l.supplier.toLowerCase())) {
+        const name = l.supplier.trim();
+        const rate = l.rate || 0;
+        if (l.type === 'Labour') {
+          // Skip — labour should be added as subs manually
+          return;
+        } else if (l.type === 'Material') {
+          db.products.push({ name, type: 'Material', rate, unit: '' });
+        } else if (l.type === 'Waste Disposal' || l.type === 'Skip Hire') {
+          db.otherCosts.push({ name, category: 'Waste Disposal', rate, unit: '' });
+        } else if (l.type === 'Machine Hire') {
+          db.otherCosts.push({ name, category: 'Machine Hire', rate, unit: '' });
+        } else if (l.type === 'Consultancy') {
+          db.otherCosts.push({ name, category: 'Consultancy', rate, unit: '' });
+        } else {
+          db.otherCosts.push({ name, category: 'Other', rate, unit: '' });
+        }
+        existingNames.add(name.toLowerCase());
+        newCount++;
+      }
+    });
+  });
+  if (newCount) { console.log('Auto-added', newCount, 'items to databases from quote'); saveData(); }
+
   // Update job quoteValue and estCost using the LP reference
   const jobRef = q.number || q.jobRef;
   if(jobRef) {
