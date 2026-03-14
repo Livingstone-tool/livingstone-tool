@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.76 -->
+<!-- Livingstone v2.77 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1726,7 +1726,8 @@ async function syncTaskToSupabase(task) {
         start_date: task.start || null,
         end_date: task.end || null,
         status: task.status,
-        sort_order: task.sortOrder || 0
+        sort_order: task.sortOrder || 0,
+        notes: task.notes || ''
       });
       if (res && res[0]) task.id = res[0].id;
     } catch(e) { console.warn('Task insert failed:', e.message); }
@@ -1737,7 +1738,8 @@ async function syncTaskToSupabase(task) {
         responsible: task.responsible || '',
         start_date: task.start || null,
         end_date: task.end || null,
-        status: task.status
+        status: task.status,
+        notes: task.notes || ''
       });
     } catch(e) { console.warn('Task update failed:', e.message); }
   }
@@ -1826,7 +1828,8 @@ async function loadFromSupabase() {
       start: t.start_date || '',
       end: t.end_date || '',
       status: t.status || 'Not Started',
-      sortOrder: t.sort_order || 0
+      sortOrder: t.sort_order || 0,
+      notes: t.notes || ''
     }));
 
     db.paymentGates = gates.map(g => ({
