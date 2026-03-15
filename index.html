@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.01 -->
+<!-- Livingstone v3.03 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1454,6 +1454,29 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="jd-status-badge"></span>
+        <div style="position:relative;">
+          <button class="btn btn-sm btn-secondary" id="jd-todo-hover-btn" style="font-size:11px;padding:4px 8px;" onclick="toggleJobTodoPanel()">✅ To Do <span id="jd-todo-count" style="font-weight:700;"></span></button>
+          <div id="jd-todo-hover-panel" style="display:none;position:absolute;right:0;top:100%;margin-top:6px;z-index:300;background:var(--slate-dark);color:white;border-radius:8px;padding:14px 16px;min-width:340px;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.3);font-size:12px;line-height:1.6;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-weight:600;color:var(--copper-light);">To Do List</div>
+              <button onclick="toggleJobTodoPanel()" style="border:none;background:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:16px;">×</button>
+            </div>
+            <div id="jd-todo-hover-items" style="max-height:250px;overflow-y:auto;">Loading...</div>
+            <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;">
+              <input type="text" id="jd-todo-hover-input" placeholder="What needs doing..." style="width:100%;font-size:12px;padding:6px 8px;border-radius:4px;border:none;margin-bottom:6px;" onkeydown="if(event.key==='Enter')addJobTodoFromHover()">
+              <div style="display:flex;gap:6px;margin-bottom:6px;">
+                <select id="jd-todo-hover-who" style="flex:1;font-size:11px;padding:4px 6px;border-radius:4px;border:none;">
+                  <option value="">Who?</option>
+                  <option value="Adam">Adam</option>
+                  <option value="Tom">Tom</option>
+                  <option value="Both">Both</option>
+                </select>
+                <input type="date" id="jd-todo-hover-due" style="flex:1;font-size:11px;padding:4px 6px;border-radius:4px;border:none;">
+              </div>
+              <button onclick="addJobTodoFromHover()" style="width:100%;border:none;background:var(--copper);color:white;border-radius:4px;padding:6px;cursor:pointer;font-size:12px;font-weight:600;">Add To Do</button>
+            </div>
+          </div>
+        </div>
         <button class="modal-close" onclick="closeModal('job-detail-modal')">×</button>
       </div>
     </div>
@@ -3074,6 +3097,12 @@ function openJob(ref) {
   document.querySelectorAll('#job-detail-modal .tab-content').forEach((t,i)=>{t.classList.toggle('active',i===0)});
   window._currentJobRef = ref;
   document.getElementById('job-detail-modal').style.display='flex';
+  // Load to-do count for hover button
+  loadJobTodos(ref).then(todos => {
+    const open = todos.filter(t => !t.done).length;
+    const countEl = document.getElementById('jd-todo-count');
+    if(countEl) countEl.textContent = open > 0 ? '(' + open + ')' : '';
+  });
 }
 
 function statusDot(s) {
@@ -4436,7 +4465,7 @@ async function loadJobTodos(ref) {
       headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
     });
     const data = await res.json();
-    _jobTodosCache[ref] = (data||[]).map(t => ({ id: t.id, text: t.text, done: t.done, added: t.added }));
+    _jobTodosCache[ref] = (data||[]).map(t => ({ id: t.id, text: t.text, done: t.done, added: t.added, assigned_to: t.assigned_to||'', due_date: t.due_date||'' }));
   } catch(e) {
     console.warn('Failed to load todos:', e);
     _jobTodosCache[ref] = _jobTodosCache[ref] || [];
@@ -4464,6 +4493,79 @@ function renderJobTodos() {
         '</div>';
     }).join('');
   });
+}
+
+function toggleJobTodoPanel() {
+  const panel = document.getElementById('jd-todo-hover-panel');
+  if (!panel) return;
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    showJobTodoHover();
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function showJobTodoHover() {
+  const ref = window._currentJobRef;
+  if (!ref) return;
+  const items = document.getElementById('jd-todo-hover-items');
+  if (!items) return;
+  const todos = await loadJobTodos(ref);
+  const countEl = document.getElementById('jd-todo-count');
+  const open = todos.filter(t => !t.done).length;
+  if (countEl) countEl.textContent = open > 0 ? '(' + open + ')' : '';
+  if (!todos.length) {
+    items.innerHTML = '<div style="color:rgba(255,255,255,0.5);">No items yet</div>';
+    return;
+  }
+  items.innerHTML = todos.map(t => {
+    const checked = t.done ? 'checked' : '';
+    const strike = t.done ? 'text-decoration:line-through;opacity:0.4;' : '';
+    const fmtD = t.due_date ? new Date(t.due_date).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+    const isOverdue = t.due_date && !t.done && new Date(t.due_date) < new Date();
+    const dueColor = isOverdue ? '#e74c3c' : 'rgba(255,255,255,0.4)';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;' + strike + '">' +
+      '<input type="checkbox" ' + checked + ' onchange="toggleJobTodoHover(\'' + t.id + '\',' + !t.done + ')" style="width:14px;height:14px;cursor:pointer;flex-shrink:0;">' +
+      '<span style="flex:1;">' + t.text + '</span>' +
+      (t.assigned_to ? '<span style="font-size:10px;color:rgba(255,255,255,0.5);">' + t.assigned_to + '</span>' : '') +
+      (fmtD ? '<span style="font-size:10px;color:' + dueColor + ';">' + fmtD + '</span>' : '') +
+      '</div>';
+  }).join('');
+}
+
+async function toggleJobTodoHover(id, newDone) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ done: newDone })
+    });
+  } catch(e) {}
+  showJobTodoHover();
+}
+
+async function addJobTodoFromHover() {
+  const ref = window._currentJobRef;
+  const input = document.getElementById('jd-todo-hover-input');
+  const who = document.getElementById('jd-todo-hover-who');
+  const due = document.getElementById('jd-todo-hover-due');
+  const text = input.value.trim();
+  if (!text || !ref) return;
+  const body = { job_ref: ref, text: text, done: false };
+  if (who && who.value) body.assigned_to = who.value;
+  if (due && due.value) body.due_date = due.value;
+  input.value = '';
+  if (who) who.value = '';
+  if (due) due.value = '';
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify(body)
+    });
+  } catch(e) { console.warn('Todo add failed:', e); }
+  showJobTodoHover();
 }
 
 async function addJobTodo() {
