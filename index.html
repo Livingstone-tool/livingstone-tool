@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.96 -->
+<!-- Livingstone v2.99 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1453,6 +1453,7 @@
         <div class="tab" onclick="switchTab('jd','tasks',this)">Tasks</div>
         <div class="tab" onclick="switchTab('jd','payments',this)">Payments</div>
         <div class="tab" onclick="switchTab('jd','costs',this);loadJobCostsTab()">Costs</div>
+        <div class="tab" onclick="switchTab('jd','todos',this);renderJobTodos()">To Do</div>
       </div>
       <div id="jd-tab-overview" class="tab-content active" id="jd-tab-overview">
         <div class="grid-2" style="gap:20px;margin-bottom:16px;">
@@ -1503,6 +1504,13 @@
       </div>
       <div id="jd-tab-costs" class="tab-content">
         <div id="jd-costs-content" style="min-height:100px;"><div style="color:var(--text-muted);font-size:13px;padding:16px 0;">Loading costs...</div></div>
+      </div>
+      <div id="jd-tab-todos" class="tab-content">
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <input type="text" id="jd-todo-input" placeholder="Add a to-do item..." onkeydown="if(event.key==='Enter')addJobTodo()" style="flex:1;">
+          <button class="btn btn-primary btn-sm" onclick="addJobTodo()">Add</button>
+        </div>
+        <div id="jd-todos-list"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1768,14 +1776,18 @@ async function loadFromSupabase() {
     document.body.appendChild(_overlay);
 
     // Load all data in parallel
-    const [jobs, tasks, gates, quotes, weekly, costEntries, wishlistItems] = await Promise.all([
+    const [jobs, tasks, gates, quotes, weekly, costEntries, wishlistItems, supaProducts, supaSubs, supaOtherCosts, supaActions] = await Promise.all([
       supa.get('jobs', 'order=sort_order.asc'),
       supa.get('tasks', 'order=sort_order.asc'),
       supa.get('payment_gates', 'order=sort_order.asc'),
       supa.get('quotes', 'order=created_at.desc'),
       supa.get('weekly_entries', 'order=entry_date.asc'),
       supa.get('cost_entries', 'order=created_at.asc').catch(() => []),
-      supa.get('wishlist', 'order=votes.desc').catch(() => [])
+      supa.get('wishlist', 'order=votes.desc').catch(() => []),
+      supa.get('products', 'order=name.asc').catch(() => []),
+      supa.get('subs', 'order=name.asc').catch(() => []),
+      supa.get('other_costs', 'order=name.asc').catch(() => []),
+      supa.get('actions', 'order=sort_order.asc').catch(() => [])
     ]);
 
     // Map Supabase column names to app's internal format
@@ -1880,48 +1892,60 @@ async function loadFromSupabase() {
       notes: w.notes || ''
     }));
 
-    // Merge SEED products with localStorage — SEED provides the base, local edits/additions override
+    // Products: Supabase first, fall back to SEED
     const seedProducts = SEED.products || [];
-    try {
-      const localDB = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-      const localProducts = localDB.products || [];
-      // Build a map: start with SEED, then overlay local edits (by name match)
-      const seen = {};
-      seedProducts.forEach(p => { if(p.name) seen[p.name.toLowerCase()] = p; });
-      // Local products override SEED by name, and add any new ones
-      localProducts.forEach(p => { if(p.name) seen[p.name.toLowerCase()] = p; });
-      db.products = Object.values(seen);
-    } catch(e) {
+    if (supaProducts && supaProducts.length > 0) {
+      db.products = supaProducts.map(p => ({ id: p.id, name: p.name, type: p.type || 'Material', rate: parseFloat(p.rate)||0, unit: p.unit || '' }));
+    } else {
       db.products = seedProducts;
+      // Auto-migrate SEED to Supabase
+      seedProducts.forEach(p => {
+        supa.post('products', { name: p.name, type: p.type||'Material', rate: p.rate||0, unit: p.unit||'' }).catch(() => {});
+      });
+      console.log('Migrated', seedProducts.length, 'SEED products to Supabase');
     }
     db.subcontractors = SEED.subcontractors || [];
-    // Subs: use localStorage as source of truth if available, otherwise SEED
+    // Subs: Supabase first, fall back to SEED
     const seedSubs = SEED.subs || [];
-    try {
-      const localDB2 = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-      const localSubs = localDB2.subs || [];
-      const seen = {};
-      seedSubs.forEach(s => { if(s.name) seen[s.name.toLowerCase()] = s; });
-      localSubs.forEach(s => { if(s.name) seen[s.name.toLowerCase()] = s; });
-      db.subs = Object.values(seen);
-    } catch(e) {
+    if (supaSubs && supaSubs.length > 0) {
+      db.subs = supaSubs.map(s => ({ id: s.id, name: s.name, trade: s.trade||'', dayRate: parseFloat(s.day_rate)||0, reliability: s.reliability||0, quality: s.quality||0, costScore: s.cost_score||0 }));
+    } else {
       db.subs = seedSubs;
+      seedSubs.forEach(s => {
+        supa.post('subs', { name: s.name, trade: s.trade||'', day_rate: s.dayRate||0, reliability: s.reliability||0, quality: s.quality||0, cost_score: s.costScore||0 }).catch(() => {});
+      });
+      console.log('Migrated', seedSubs.length, 'SEED subs to Supabase');
     }
-    // Other Costs: merge SEED defaults with localStorage
+    // Other Costs: Supabase first, fall back to SEED
     const seedOtherCosts = [
       {name:'Skip Hire 8yd',category:'Waste Disposal',rate:280,unit:'Per skip'},
       {name:'Day Digger Hire',category:'Machine Hire',rate:75,unit:'Per day'}
     ];
-    try {
-      const localDB3 = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-      const localOther = localDB3.otherCosts || [];
-      const seen = {};
-      seedOtherCosts.forEach(c => { if(c.name) seen[c.name.toLowerCase()] = c; });
-      localOther.forEach(c => { if(c.name) seen[c.name.toLowerCase()] = c; });
-      db.otherCosts = Object.values(seen);
-    } catch(e) { db.otherCosts = seedOtherCosts; }
-    db.actionsQ1 = SEED.actionsQ1 || [];
-    db.actionsLT = SEED.actionsLT || [];
+    if (supaOtherCosts && supaOtherCosts.length > 0) {
+      db.otherCosts = supaOtherCosts.map(c => ({ id: c.id, name: c.name, category: c.category||'Other', rate: parseFloat(c.rate)||0, unit: c.unit||'' }));
+    } else {
+      db.otherCosts = seedOtherCosts;
+      seedOtherCosts.forEach(c => {
+        supa.post('other_costs', { name: c.name, category: c.category, rate: c.rate, unit: c.unit||'' }).catch(() => {});
+      });
+      console.log('Migrated SEED other costs to Supabase');
+    }
+    // Actions: Supabase first, fall back to SEED
+    if (supaActions && supaActions.length > 0) {
+      db.actionsQ1 = supaActions.filter(a => a.list_type === 'q1').map(a => ({ id: a.id, desc: a.description||'', owner: a.owner||'', due: a.due||'', priority: a.priority||'Medium', status: a.status||'To Do', notes: a.notes||'' }));
+      db.actionsLT = supaActions.filter(a => a.list_type === 'lt').map(a => ({ id: a.id, desc: a.description||'', owner: a.owner||'', due: a.due||'', priority: a.priority||'Medium', status: a.status||'To Do', notes: a.notes||'' }));
+    } else {
+      db.actionsQ1 = SEED.actionsQ1 || [];
+      db.actionsLT = SEED.actionsLT || [];
+      // Auto-migrate SEED actions to Supabase
+      (SEED.actionsQ1||[]).forEach((a,i) => {
+        supa.post('actions', { list_type:'q1', description: a.desc, owner: a.owner||'', due: a.due||'', priority: a.priority||'Medium', status: a.status||'To Do', notes: a.notes||'', sort_order: i }).catch(() => {});
+      });
+      (SEED.actionsLT||[]).forEach((a,i) => {
+        supa.post('actions', { list_type:'lt', description: a.desc, owner: a.owner||'', due: a.due||'', priority: a.priority||'Medium', status: a.status||'To Do', notes: a.notes||'', sort_order: i }).catch(() => {});
+      });
+      console.log('Migrated SEED actions to Supabase');
+    }
     try {
       const _wl = localStorage.getItem('livingstoneWishlist');
       const localWishlist = _wl ? JSON.parse(_wl) : [];
@@ -3650,18 +3674,27 @@ function saveQuote() {
         const name = l.supplier.trim();
         const rate = l.rate || 0;
         if (l.type === 'Labour') {
-          // Skip — labour should be added as subs manually
           return;
         } else if (l.type === 'Material') {
-          db.products.push({ name, type: 'Material', rate, unit: '' });
+          const item = { name, type: 'Material', rate, unit: '' };
+          db.products.push(item);
+          supa.post('products', item).then(res => { if(res&&res[0]) item.id = res[0].id; }).catch(() => {});
         } else if (l.type === 'Waste Disposal' || l.type === 'Skip Hire') {
-          db.otherCosts.push({ name, category: 'Waste Disposal', rate, unit: '' });
+          const item = { name, category: 'Waste Disposal', rate, unit: '' };
+          db.otherCosts.push(item);
+          supa.post('other_costs', item).catch(() => {});
         } else if (l.type === 'Machine Hire') {
-          db.otherCosts.push({ name, category: 'Machine Hire', rate, unit: '' });
+          const item = { name, category: 'Machine Hire', rate, unit: '' };
+          db.otherCosts.push(item);
+          supa.post('other_costs', item).catch(() => {});
         } else if (l.type === 'Consultancy') {
-          db.otherCosts.push({ name, category: 'Consultancy', rate, unit: '' });
+          const item = { name, category: 'Consultancy', rate, unit: '' };
+          db.otherCosts.push(item);
+          supa.post('other_costs', item).catch(() => {});
         } else {
-          db.otherCosts.push({ name, category: 'Other', rate, unit: '' });
+          const item = { name, category: 'Other', rate, unit: '' };
+          db.otherCosts.push(item);
+          supa.post('other_costs', item).catch(() => {});
         }
         existingNames.add(name.toLowerCase());
         newCount++;
@@ -3884,11 +3917,14 @@ function saveSub() {
     costScore: parseInt(document.getElementById('sub-cost').value)||null,
     notes: document.getElementById('sub-notes').value
   };
+  const supaData = { name: sub.name, trade: sub.trade, day_rate: sub.dayRate, reliability: sub.reliability||0, quality: sub.quality||0, cost_score: sub.costScore||0 };
   if(idx>=0 && idx < db.subs.length) {
-    console.log('Updating sub at index', idx, ':', db.subs[idx].name, '→', sub.name);
-    db.subs[idx] = sub;
+    const existing = db.subs[idx];
+    const id = existing.id;
+    Object.assign(existing, sub);
+    if(id) { existing.id = id; supa.patch('subs', id, supaData).catch(e => console.warn('Sub update failed:', e)); }
   } else {
-    console.log('Adding new sub:', sub.name);
+    supa.post('subs', supaData).then(res => { if(res&&res[0]) sub.id = res[0].id; }).catch(e => console.warn('Sub insert failed:', e));
     db.subs.push(sub);
   }
   saveData();
@@ -3898,6 +3934,8 @@ function saveSub() {
 
 function deleteSub(i) {
   if(!confirm('Remove this subcontractor?')) return;
+  const s = db.subs[i];
+  if(s && s.id) supa.delete('subs', s.id).catch(e => console.warn('Sub delete failed:', e));
   db.subs.splice(i,1);
   saveData();
   renderSubs();
@@ -3958,8 +3996,14 @@ function saveProduct() {
     rate: parseFloat(document.getElementById('product-rate').value)||0,
     unit: document.getElementById('product-unit').value
   };
-  if(idx>=0) db.products[idx]=prod;
-  else db.products.push(prod);
+  if(idx>=0) {
+    const existing = db.products[idx];
+    Object.assign(existing, prod);
+    if(existing.id) supa.patch('products', existing.id, { name: prod.name, type: prod.type, rate: prod.rate, unit: prod.unit }).catch(e => console.warn('Product update failed:', e));
+  } else {
+    supa.post('products', { name: prod.name, type: prod.type, rate: prod.rate, unit: prod.unit }).then(res => { if(res&&res[0]) prod.id = res[0].id; }).catch(e => console.warn('Product insert failed:', e));
+    db.products.push(prod);
+  }
   saveData();
   clearProductForm();
   renderProducts();
@@ -3967,6 +4011,8 @@ function saveProduct() {
 
 function deleteProduct(i) {
   if(!confirm('Remove this product/rate?')) return;
+  const p = db.products[i];
+  if(p && p.id) supa.delete('products', p.id).catch(e => console.warn('Product delete failed:', e));
   db.products.splice(i,1);
   saveData();
   renderProducts();
@@ -4022,9 +4068,14 @@ function saveOtherCost() {
     unit: document.getElementById('othercost-unit').value
   };
   if (!item.name) { alert('Please enter a name.'); return; }
+  const supaData = { name: item.name, category: item.category, rate: item.rate, unit: item.unit };
   if (idx >= 0 && idx < db.otherCosts.length) {
-    db.otherCosts[idx] = item;
+    const existing = db.otherCosts[idx];
+    const id = existing.id;
+    Object.assign(existing, item);
+    if(id) { existing.id = id; supa.patch('other_costs', id, supaData).catch(e => console.warn('OtherCost update failed:', e)); }
   } else {
+    supa.post('other_costs', supaData).then(res => { if(res&&res[0]) item.id = res[0].id; }).catch(e => console.warn('OtherCost insert failed:', e));
     db.otherCosts.push(item);
   }
   saveData();
@@ -4034,6 +4085,8 @@ function saveOtherCost() {
 
 function deleteOtherCost(i) {
   if (!confirm('Remove this item?')) return;
+  const c = db.otherCosts[i];
+  if(c && c.id) supa.delete('other_costs', c.id).catch(e => console.warn('OtherCost delete failed:', e));
   db.otherCosts.splice(i, 1);
   saveData();
   renderOtherCosts();
@@ -4104,8 +4157,11 @@ function renderActionsLT() {
 }
 
 function updateActionStatus(type, i, val) {
-  if(type==='q1') db.actionsQ1[i].status=val;
-  else db.actionsLT[i].status=val;
+  const list = type==='q1' ? db.actionsQ1 : db.actionsLT;
+  if(list[i]) {
+    list[i].status = val;
+    if(list[i].id) supa.patch('actions', list[i].id, { status: val }).catch(e => console.warn('Action status sync failed:', e));
+  }
   saveData();
 }
 
@@ -4130,12 +4186,16 @@ function saveAction() {
     status: document.getElementById('action-status').value,
     notes: document.getElementById('action-notes').value
   };
-  if(type==='q1') {
-    if(idx>=0) db.actionsQ1[idx]=action;
-    else db.actionsQ1.push(action);
+  const supaData = { list_type: type, description: action.desc, owner: action.owner, due: action.due||null, priority: action.priority, status: action.status, notes: action.notes };
+  const list = type==='q1' ? db.actionsQ1 : db.actionsLT;
+  if(idx>=0) {
+    const existing = list[idx];
+    const id = existing.id;
+    Object.assign(existing, action);
+    if(id) { existing.id = id; supa.patch('actions', id, supaData).catch(e => console.warn('Action update failed:', e)); }
   } else {
-    if(idx>=0) db.actionsLT[idx]=action;
-    else db.actionsLT.push(action);
+    supa.post('actions', { ...supaData, sort_order: list.length }).then(res => { if(res&&res[0]) action.id = res[0].id; }).catch(e => console.warn('Action insert failed:', e));
+    list.push(action);
   }
   saveData();
   closeModal('action-modal');
@@ -4144,8 +4204,10 @@ function saveAction() {
 
 function deleteAction(type, i) {
   if(!confirm('Delete this action?')) return;
-  if(type==='q1') db.actionsQ1.splice(i,1);
-  else db.actionsLT.splice(i,1);
+  const list = type==='q1' ? db.actionsQ1 : db.actionsLT;
+  const a = list[i];
+  if(a && a.id) supa.delete('actions', a.id).catch(e => console.warn('Action delete failed:', e));
+  list.splice(i,1);
   saveData();
   renderActions();
 }
@@ -4350,6 +4412,84 @@ function switchTab(prefix, tabName, el) {
   modal.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   modal.querySelector(`#${prefix}-tab-${tabName}`).classList.add('active');
+}
+
+// ============================================================
+// JOB TO-DO LIST (Supabase-backed)
+// ============================================================
+let _jobTodosCache = {};
+
+async function loadJobTodos(ref) {
+  try {
+    const res = await fetch(SUPA_URL + '/rest/v1/job_todos?job_ref=eq.' + encodeURIComponent(ref) + '&order=added.asc', {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+    const data = await res.json();
+    _jobTodosCache[ref] = (data||[]).map(t => ({ id: t.id, text: t.text, done: t.done, added: t.added }));
+  } catch(e) {
+    console.warn('Failed to load todos:', e);
+    _jobTodosCache[ref] = _jobTodosCache[ref] || [];
+  }
+  return _jobTodosCache[ref];
+}
+
+function renderJobTodos() {
+  const ref = window._currentJobRef;
+  const el = document.getElementById('jd-todos-list');
+  if (!el || !ref) return;
+  el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:12px 0;text-align:center;">Loading...</div>';
+  loadJobTodos(ref).then(todos => {
+    if (!todos.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:12px 0;text-align:center;">No to-do items yet</div>';
+      return;
+    }
+    el.innerHTML = todos.map((t, i) => {
+      const checked = t.done ? 'checked' : '';
+      const strikeStyle = t.done ? 'text-decoration:line-through;color:var(--text-muted);' : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
+        '<input type="checkbox" ' + checked + ' onchange="toggleJobTodo(\'' + t.id + '\',' + !t.done + ')" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">' +
+        '<div style="flex:1;' + strikeStyle + '">' + t.text + '</div>' +
+        '<button onclick="deleteJobTodo(\'' + t.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:13px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button>' +
+        '</div>';
+    }).join('');
+  });
+}
+
+async function addJobTodo() {
+  const ref = window._currentJobRef;
+  const input = document.getElementById('jd-todo-input');
+  const text = input.value.trim();
+  if (!text || !ref) return;
+  input.value = '';
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ job_ref: ref, text: text, done: false })
+    });
+  } catch(e) { console.warn('Todo add failed:', e); }
+  renderJobTodos();
+}
+
+async function toggleJobTodo(id, newDone) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ done: newDone })
+    });
+  } catch(e) { console.warn('Todo toggle failed:', e); }
+  renderJobTodos();
+}
+
+async function deleteJobTodo(id) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+  } catch(e) { console.warn('Todo delete failed:', e); }
+  renderJobTodos();
 }
 
 function loadJobCostsTab() {
