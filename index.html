@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.06 -->
+<!-- Livingstone v3.07 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1454,12 +1454,11 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="jd-status-badge"></span>
-        <div style="position:relative;">
-          <button class="btn btn-sm btn-secondary" id="jd-todo-hover-btn" style="font-size:11px;padding:4px 8px;" onclick="toggleJobTodoPanel()">✅ To Do <span id="jd-todo-count" style="font-weight:700;"></span></button>
-          <div id="jd-todo-hover-panel" style="display:none;position:absolute;right:0;top:100%;margin-top:6px;z-index:300;background:var(--slate-dark);color:white;border-radius:8px;padding:14px 16px;min-width:340px;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.3);font-size:12px;line-height:1.6;">
+        <div style="position:relative;" onmouseenter="showJobTodoHover();document.getElementById('jd-todo-hover-panel').style.display='block';clearTimeout(window._jdTodoHideTimer)" onmouseleave="window._jdTodoHideTimer=setTimeout(()=>{document.getElementById('jd-todo-hover-panel').style.display='none';},300)">
+          <button class="btn btn-sm btn-secondary" id="jd-todo-hover-btn" style="font-size:11px;padding:4px 8px;">✅ To Do <span id="jd-todo-count" style="font-weight:700;"></span></button>
+          <div id="jd-todo-hover-panel" style="display:none;position:absolute;right:0;top:100%;margin-top:6px;z-index:300;background:var(--slate-dark);color:white;border-radius:8px;padding:14px 16px;min-width:340px;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.3);font-size:12px;line-height:1.6;" onmouseenter="clearTimeout(window._jdTodoHideTimer)" onmouseleave="document.getElementById('jd-todo-hover-panel').style.display='none';">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
               <div style="font-weight:600;color:var(--copper-light);">To Do List</div>
-              <button onclick="toggleJobTodoPanel()" style="border:none;background:none;color:rgba(255,255,255,0.5);cursor:pointer;font-size:16px;">×</button>
             </div>
             <div id="jd-todo-hover-items" style="max-height:250px;overflow-y:auto;">Loading...</div>
             <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;">
@@ -4795,6 +4794,29 @@ async function showPlanTodoHover(ref) {
   }).join('') || '<div style="color:rgba(255,255,255,0.5);">All done ✅</div>';
 }
 
+async function addPlanTodoFromHover(ref) {
+  const input = document.getElementById('plan-todo-hover-input');
+  const who = document.getElementById('plan-todo-hover-who');
+  const due = document.getElementById('plan-todo-hover-due');
+  const text = input.value.trim();
+  if (!text || !ref) return;
+  const body = { job_ref: ref, text: text, done: false };
+  if (who && who.value) body.assigned_to = who.value;
+  if (due && due.value) body.due_date = due.value;
+  input.value = '';
+  if (who) who.value = '';
+  if (due) due.value = '';
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify(body)
+    });
+  } catch(e) { console.warn('Todo add failed:', e); }
+  delete _jobTodosCache[ref];
+  showPlanTodoHover(ref);
+}
+
 // Job Plan To-Do helpers (reuses same Supabase table as job detail to-dos)
 async function loadJobPlanTodos(ref) {
   const el = document.getElementById('jobplan-todos-list');
@@ -5496,7 +5518,17 @@ function renderJobPlan() {
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                 <div style="font-weight:600;color:var(--copper-light);">To Do — ${job.ref}</div>
               </div>
-              <div id="plan-todo-hover-items" style="max-height:250px;overflow-y:auto;">Loading...</div>
+              <div id="plan-todo-hover-items" style="max-height:200px;overflow-y:auto;">Loading...</div>
+              <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;">
+                <input type="text" id="plan-todo-hover-input" placeholder="What needs doing..." style="width:100%;font-size:12px;padding:6px 8px;border-radius:4px;border:none;margin-bottom:6px;" onkeydown="if(event.key==='Enter')addPlanTodoFromHover('${job.ref}')">
+                <div style="display:flex;gap:6px;margin-bottom:6px;">
+                  <select id="plan-todo-hover-who" style="flex:1;font-size:11px;padding:4px 6px;border-radius:4px;border:none;">
+                    <option value="">Who?</option><option value="Adam">Adam</option><option value="Tom">Tom</option><option value="Both">Both</option>
+                  </select>
+                  <input type="date" id="plan-todo-hover-due" style="flex:1;font-size:11px;padding:4px 6px;border-radius:4px;border:none;">
+                </div>
+                <button onclick="addPlanTodoFromHover('${job.ref}')" style="width:100%;border:none;background:var(--copper);color:white;border-radius:4px;padding:6px;cursor:pointer;font-size:12px;font-weight:600;">Add To Do</button>
+              </div>
             </div>
           </div>
           <button class="btn btn-sm btn-secondary" onclick="editJobByRef('${job.ref}')">Edit Job</button>
