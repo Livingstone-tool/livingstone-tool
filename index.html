@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v2.99 -->
+<!-- Livingstone v3.01 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1230,6 +1230,7 @@
       <div class="tab active" onclick="switchPlanningTab('gantt',this)">Master Gantt</div>
       <div class="tab" onclick="switchPlanningTab('jobplan',this)">Job Project Plans</div>
       <div class="tab" onclick="switchPlanningTab('weekly',this)">Weekly Schedule</div>
+      <div class="tab" onclick="switchPlanningTab('todos',this)">To Do</div>
     </div>
     <div id="plan-tab-gantt">
       <div class="card" style="margin-bottom:16px;">
@@ -1290,6 +1291,16 @@
         <button class="btn btn-sm btn-primary" onclick="addWeeklyEntryModal()">+ Add Entry</button>
       </div>
       <div class="card"><div id="weekly-grid" style="overflow-x:auto;min-height:200px;"></div></div>
+    </div>
+    <div id="plan-tab-todos" style="display:none;">
+      <div style="display:flex;gap:12px;margin-bottom:20px;align-items:center;">
+        <select id="todo-job-select" style="width:300px;" onchange="loadPlanningTodos()">
+          <option value="">-- Select a job --</option>
+        </select>
+      </div>
+      <div id="planning-todos-area">
+        <div class="empty-state"><div style="font-size:40px;opacity:0.3;margin-bottom:12px;">✅</div><p>Select a job above to see its to-do list</p></div>
+      </div>
     </div>
   </div>
 
@@ -4492,6 +4503,149 @@ async function deleteJobTodo(id) {
   renderJobTodos();
 }
 
+function populateTodoJobDropdown() {
+  const sel = document.getElementById('todo-job-select');
+  if (!sel) return;
+  const activeStatuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold'];
+  const jobs = db.jobs.filter(j => activeStatuses.includes(j.status));
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- Select a job --</option>' +
+    jobs.map(j => `<option value="${j.ref}" ${j.ref===current?'selected':''}>${j.ref} — ${j.name}</option>`).join('');
+  if (current) loadPlanningTodos();
+}
+
+async function loadPlanningTodos() {
+  const ref = document.getElementById('todo-job-select')?.value;
+  const area = document.getElementById('planning-todos-area');
+  if (!area) return;
+  if (!ref) {
+    area.innerHTML = '<div class="empty-state"><div style="font-size:40px;opacity:0.3;margin-bottom:12px;">✅</div><p>Select a job above to see its to-do list</p></div>';
+    return;
+  }
+  area.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;">Loading...</div>';
+  const todos = await loadJobTodos(ref);
+  const job = db.jobs.find(j => j.ref === ref);
+  const jobName = job ? job.name : ref;
+
+  let html = '<div class="card"><div class="card-header"><div class="card-title">To Do — ' + ref + ' ' + jobName + '</div></div>';
+  html += '<div class="card-body" style="padding:12px 16px;">';
+  html += '<div style="display:flex;gap:8px;margin-bottom:12px;">';
+  html += '<input type="text" id="planning-todo-input" placeholder="Add a to-do item..." onkeydown="if(event.key===\'Enter\')addPlanningTodo(\'' + ref + '\')" style="flex:1;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="addPlanningTodo(\'' + ref + '\')">Add</button></div>';
+
+  if (todos.length) {
+    html += todos.map(t => {
+      const checked = t.done ? 'checked' : '';
+      const strike = t.done ? 'text-decoration:line-through;color:var(--text-muted);' : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
+        '<input type="checkbox" ' + checked + ' onchange="togglePlanningTodo(\'' + ref + '\',\'' + t.id + '\',' + !t.done + ')" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">' +
+        '<div style="flex:1;' + strike + '">' + t.text + '</div>' +
+        '<button onclick="deletePlanningTodo(\'' + ref + '\',\'' + t.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:13px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button>' +
+        '</div>';
+    }).join('');
+  } else {
+    html += '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:8px 0;">No to-do items yet</div>';
+  }
+  html += '</div></div>';
+  area.innerHTML = html;
+}
+
+async function addPlanningTodo(ref) {
+  const input = document.getElementById('planning-todo-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ job_ref: ref, text: text, done: false })
+    });
+  } catch(e) { console.warn('Todo add failed:', e); }
+  loadPlanningTodos();
+}
+
+async function togglePlanningTodo(ref, id, newDone) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ done: newDone })
+    });
+  } catch(e) { console.warn('Todo toggle failed:', e); }
+  loadPlanningTodos();
+}
+
+async function deletePlanningTodo(ref, id) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+  } catch(e) { console.warn('Todo delete failed:', e); }
+  loadPlanningTodos();
+}
+
+// Job Plan To-Do helpers (reuses same Supabase table as job detail to-dos)
+async function loadJobPlanTodos(ref) {
+  const el = document.getElementById('jobplan-todos-list');
+  if (!el) return;
+  try {
+    const todos = await loadJobTodos(ref);
+    if (!todos.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;text-align:center;">No to-do items yet</div>';
+      return;
+    }
+    el.innerHTML = todos.map(t => {
+      const checked = t.done ? 'checked' : '';
+      const strikeStyle = t.done ? 'text-decoration:line-through;color:var(--text-muted);' : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
+        '<input type="checkbox" ' + checked + ' onchange="toggleJobPlanTodo(\'' + ref + '\',\'' + t.id + '\',' + !t.done + ')" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">' +
+        '<div style="flex:1;' + strikeStyle + '">' + t.text + '</div>' +
+        '<button onclick="deleteJobPlanTodo(\'' + ref + '\',\'' + t.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:13px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button>' +
+        '</div>';
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Failed to load to-dos</div>';
+  }
+}
+
+async function addJobPlanTodo(ref) {
+  const input = document.getElementById('jobplan-todo-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify({ job_ref: ref, text: text, done: false })
+    });
+  } catch(e) { console.warn('Todo add failed:', e); }
+  loadJobPlanTodos(ref);
+}
+
+async function toggleJobPlanTodo(ref, id, newDone) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ done: newDone })
+    });
+  } catch(e) { console.warn('Todo toggle failed:', e); }
+  loadJobPlanTodos(ref);
+}
+
+async function deleteJobPlanTodo(ref, id) {
+  try {
+    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+  } catch(e) { console.warn('Todo delete failed:', e); }
+  loadJobPlanTodos(ref);
+}
+
 function loadJobCostsTab() {
   const ref = window._currentJobRef;
   const el = document.getElementById('jd-costs-content');
@@ -4613,13 +4767,14 @@ function renderPlanning() {
 function switchPlanningTab(tab, el) {
   document.querySelectorAll('#page-planning .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['gantt','jobplan','weekly'].forEach(t => {
+  ['gantt','jobplan','weekly','todos'].forEach(t => {
     const el2 = document.getElementById('plan-tab-' + t);
     if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
   if (tab === 'gantt') renderGantt();
   if (tab === 'weekly') renderWeekly();
   if (tab === 'jobplan') renderJobPlan();
+  if (tab === 'todos') populateTodoJobDropdown();
 }
 
 // ============================================================
