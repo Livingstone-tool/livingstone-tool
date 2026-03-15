@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.03 -->
+<!-- Livingstone v3.04 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1540,8 +1540,15 @@
         <div id="jd-costs-content" style="min-height:100px;"><div style="color:var(--text-muted);font-size:13px;padding:16px 0;">Loading costs...</div></div>
       </div>
       <div id="jd-tab-todos" class="tab-content">
-        <div style="display:flex;gap:8px;margin-bottom:16px;">
-          <input type="text" id="jd-todo-input" placeholder="Add a to-do item..." onkeydown="if(event.key==='Enter')addJobTodo()" style="flex:1;">
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <input type="text" id="jd-todo-input" placeholder="What needs doing..." onkeydown="if(event.key==='Enter')addJobTodo()" style="flex:1;min-width:200px;">
+          <select id="jd-todo-who" style="width:auto;font-size:13px;padding:6px 10px;">
+            <option value="">Who?</option>
+            <option value="Adam">Adam</option>
+            <option value="Tom">Tom</option>
+            <option value="Both">Both</option>
+          </select>
+          <input type="date" id="jd-todo-due" style="font-size:13px;padding:6px 8px;">
           <button class="btn btn-primary btn-sm" onclick="addJobTodo()">Add</button>
         </div>
         <div id="jd-todos-list"></div>
@@ -4461,8 +4468,8 @@ let _jobTodosCache = {};
 
 async function loadJobTodos(ref) {
   try {
-    const res = await fetch(SUPA_URL + '/rest/v1/job_todos?job_ref=eq.' + encodeURIComponent(ref) + '&order=added.asc', {
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    const res = await fetch(SUPABASE_URL + '/rest/v1/job_todos?job_ref=eq.' + encodeURIComponent(ref) + '&order=added.asc', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
     });
     const data = await res.json();
     _jobTodosCache[ref] = (data||[]).map(t => ({ id: t.id, text: t.text, done: t.done, added: t.added, assigned_to: t.assigned_to||'', due_date: t.due_date||'' }));
@@ -4486,9 +4493,14 @@ function renderJobTodos() {
     el.innerHTML = todos.map((t, i) => {
       const checked = t.done ? 'checked' : '';
       const strikeStyle = t.done ? 'text-decoration:line-through;color:var(--text-muted);' : '';
+      const fmtD = t.due_date ? new Date(t.due_date).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+      const isOverdue = t.due_date && !t.done && new Date(t.due_date) < new Date();
+      const dueColor = isOverdue ? 'var(--danger)' : 'var(--text-muted)';
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
         '<input type="checkbox" ' + checked + ' onchange="toggleJobTodo(\'' + t.id + '\',' + !t.done + ')" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">' +
         '<div style="flex:1;' + strikeStyle + '">' + t.text + '</div>' +
+        (t.assigned_to ? '<span style="font-size:11px;color:var(--text-muted);background:var(--limestone);padding:2px 6px;border-radius:3px;">' + t.assigned_to + '</span>' : '') +
+        (fmtD ? '<span style="font-size:11px;color:' + dueColor + ';font-weight:' + (isOverdue?'600':'400') + ';">' + (isOverdue?'⚠ ':'') + fmtD + '</span>' : '') +
         '<button onclick="deleteJobTodo(\'' + t.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:13px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button>' +
         '</div>';
     }).join('');
@@ -4536,9 +4548,9 @@ async function showJobTodoHover() {
 
 async function toggleJobTodoHover(id, newDone) {
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos?id=eq.' + id, {
       method: 'PATCH',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ done: newDone })
     });
   } catch(e) {}
@@ -4559,9 +4571,9 @@ async function addJobTodoFromHover() {
   if (who) who.value = '';
   if (due) due.value = '';
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos', {
       method: 'POST',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
       body: JSON.stringify(body)
     });
   } catch(e) { console.warn('Todo add failed:', e); }
@@ -4571,14 +4583,21 @@ async function addJobTodoFromHover() {
 async function addJobTodo() {
   const ref = window._currentJobRef;
   const input = document.getElementById('jd-todo-input');
+  const who = document.getElementById('jd-todo-who');
+  const due = document.getElementById('jd-todo-due');
   const text = input.value.trim();
   if (!text || !ref) return;
+  const body = { job_ref: ref, text: text, done: false };
+  if (who && who.value) body.assigned_to = who.value;
+  if (due && due.value) body.due_date = due.value;
   input.value = '';
+  if (who) who.value = '';
+  if (due) due.value = '';
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos', {
       method: 'POST',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-      body: JSON.stringify({ job_ref: ref, text: text, done: false })
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      body: JSON.stringify(body)
     });
   } catch(e) { console.warn('Todo add failed:', e); }
   renderJobTodos();
@@ -4586,9 +4605,9 @@ async function addJobTodo() {
 
 async function toggleJobTodo(id, newDone) {
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos?id=eq.' + id, {
       method: 'PATCH',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ done: newDone })
     });
   } catch(e) { console.warn('Todo toggle failed:', e); }
@@ -4597,9 +4616,9 @@ async function toggleJobTodo(id, newDone) {
 
 async function deleteJobTodo(id) {
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos?id=eq.' + id, {
       method: 'DELETE',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
     });
   } catch(e) { console.warn('Todo delete failed:', e); }
   renderJobTodos();
@@ -4658,9 +4677,9 @@ async function addPlanningTodo(ref) {
   if (!text) return;
   input.value = '';
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos', {
       method: 'POST',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
       body: JSON.stringify({ job_ref: ref, text: text, done: false })
     });
   } catch(e) { console.warn('Todo add failed:', e); }
@@ -4669,9 +4688,9 @@ async function addPlanningTodo(ref) {
 
 async function togglePlanningTodo(ref, id, newDone) {
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos?id=eq.' + id, {
       method: 'PATCH',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ done: newDone })
     });
   } catch(e) { console.warn('Todo toggle failed:', e); }
@@ -4680,9 +4699,9 @@ async function togglePlanningTodo(ref, id, newDone) {
 
 async function deletePlanningTodo(ref, id) {
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos?id=eq.' + id, {
       method: 'DELETE',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
     });
   } catch(e) { console.warn('Todo delete failed:', e); }
   loadPlanningTodos();
@@ -4718,9 +4737,9 @@ async function addJobPlanTodo(ref) {
   if (!text) return;
   input.value = '';
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos', {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos', {
       method: 'POST',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
       body: JSON.stringify({ job_ref: ref, text: text, done: false })
     });
   } catch(e) { console.warn('Todo add failed:', e); }
@@ -4729,9 +4748,9 @@ async function addJobPlanTodo(ref) {
 
 async function toggleJobPlanTodo(ref, id, newDone) {
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos?id=eq.' + id, {
       method: 'PATCH',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ done: newDone })
     });
   } catch(e) { console.warn('Todo toggle failed:', e); }
@@ -4740,9 +4759,9 @@ async function toggleJobPlanTodo(ref, id, newDone) {
 
 async function deleteJobPlanTodo(ref, id) {
   try {
-    await fetch(SUPA_URL + '/rest/v1/job_todos?id=eq.' + id, {
+    await fetch(SUPABASE_URL + '/rest/v1/job_todos?id=eq.' + id, {
       method: 'DELETE',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
     });
   } catch(e) { console.warn('Todo delete failed:', e); }
   loadJobPlanTodos(ref);
