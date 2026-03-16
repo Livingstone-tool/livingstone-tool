@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.08 -->
+<!-- Livingstone v3.09 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -814,6 +814,7 @@
           <div style="display:flex;gap:8px;">
             <button class="btn btn-sm btn-secondary" onclick="closeQuoteBuilder()">Close</button>
             <button class="btn btn-sm btn-slate" onclick="saveQuote()">Save Quote</button>
+            <button class="btn btn-sm btn-secondary" onclick="addToShoppingList()" title="Add materials from this quote to the shopping list">🛒 Shopping List</button>
             <button class="btn btn-sm btn-primary" onclick="exportQuotePDF()" style="background:var(--copper);border-color:var(--copper);">⬇ Export PDF</button>
           </div>
         </div>
@@ -1231,6 +1232,7 @@
       <div class="tab" onclick="switchPlanningTab('jobplan',this)">Job Project Plans</div>
       <div class="tab" onclick="switchPlanningTab('weekly',this)">Weekly Schedule</div>
       <div class="tab" onclick="switchPlanningTab('todos',this)">To Do</div>
+      <div class="tab" onclick="switchPlanningTab('shopping',this)">🛒 Shopping List</div>
     </div>
     <div id="plan-tab-gantt">
       <div class="card" style="margin-bottom:16px;">
@@ -1302,8 +1304,18 @@
         <div class="empty-state"><div style="font-size:40px;opacity:0.3;margin-bottom:12px;">✅</div><p>Select a job above to see its to-do list</p></div>
       </div>
     </div>
+    <div id="plan-tab-shopping" style="display:none;">
+      <div style="display:flex;gap:12px;margin-bottom:20px;align-items:center;flex-wrap:wrap;">
+        <select id="shopping-job-select" style="width:300px;" onchange="loadShoppingList()">
+          <option value="">-- Select a job --</option>
+        </select>
+        <button class="btn btn-sm btn-secondary" onclick="printShoppingList()">🖨 Print</button>
+      </div>
+      <div id="shopping-list-area">
+        <div class="empty-state"><div style="font-size:40px;opacity:0.3;margin-bottom:12px;">🛒</div><p>Select a job to see its shopping list.<br><span style="font-size:12px;color:var(--text-muted);">Add items from the Quote Builder using the 🛒 Shopping List button.</span></p></div>
+      </div>
+    </div>
   </div>
-
 
 <div id="page-costs" class="page content">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
@@ -4877,6 +4889,177 @@ async function deleteJobPlanTodo(ref, id) {
   loadJobPlanTodos(ref);
 }
 
+// ============================================================
+// SHOPPING LIST (Supabase-backed)
+// ============================================================
+function populateShoppingJobDropdown() {
+  const sel = document.getElementById('shopping-job-select');
+  if (!sel) return;
+  const activeStatuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold'];
+  const jobs = db.jobs.filter(j => activeStatuses.includes(j.status));
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- Select a job --</option>' +
+    jobs.map(j => `<option value="${j.ref}" ${j.ref===current?'selected':''}>${j.ref} — ${j.name}</option>`).join('');
+  if (current) loadShoppingList();
+}
+
+async function loadShoppingList() {
+  const ref = document.getElementById('shopping-job-select')?.value;
+  const area = document.getElementById('shopping-list-area');
+  if (!area) return;
+  if (!ref) {
+    area.innerHTML = '<div class="empty-state"><div style="font-size:40px;opacity:0.3;margin-bottom:12px;">🛒</div><p>Select a job to see its shopping list</p></div>';
+    return;
+  }
+  area.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;">Loading...</div>';
+  let items = [];
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/shopping_list?job_ref=eq.' + encodeURIComponent(ref) + '&order=room.asc,item.asc', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    items = await res.json();
+  } catch(e) { console.warn('Shopping list load failed:', e); }
+
+  const job = db.jobs.find(j => j.ref === ref);
+  const jobName = job ? job.name : ref;
+  const toBuy = items.filter(i => !i.purchased);
+  const bought = items.filter(i => i.purchased);
+
+  let html = '<div class="card"><div class="card-header"><div class="card-title">🛒 Shopping List — ' + ref + ' ' + jobName + '</div>';
+  html += '<span style="font-size:12px;color:var(--text-muted);">' + toBuy.length + ' to buy, ' + bought.length + ' purchased</span></div>';
+  html += '<div class="card-body" style="padding:0;">';
+
+  if (toBuy.length) {
+    // Group by room
+    const rooms = {};
+    toBuy.forEach(i => { const r = i.room || 'General'; if(!rooms[r]) rooms[r]=[]; rooms[r].push(i); });
+    html += '<table style="font-size:12.5px;width:100%;border-collapse:collapse;">';
+    html += '<thead><tr style="background:var(--limestone);"><th style="padding:8px 12px;text-align:left;">Item</th><th>Supplier</th><th>Qty</th><th>Rate</th><th>Est. Cost</th><th>Room</th><th></th></tr></thead><tbody>';
+    Object.keys(rooms).forEach(room => {
+      rooms[room].forEach(i => {
+        const cost = (i.qty||0) * (i.rate||0);
+        html += '<tr style="border-bottom:1px solid var(--border);">';
+        html += '<td style="padding:6px 12px;"><input type="checkbox" onchange="toggleShoppingItem(\'' + i.id + '\',true)" style="margin-right:8px;cursor:pointer;">' + (i.item||'') + '</td>';
+        html += '<td style="padding:6px 8px;color:var(--text-muted);">' + (i.supplier||'') + '</td>';
+        html += '<td style="padding:6px 8px;text-align:center;">' + (i.qty||'') + '</td>';
+        html += '<td style="padding:6px 8px;">£' + (i.rate||0).toFixed(2) + '</td>';
+        html += '<td style="padding:6px 8px;font-weight:600;">£' + cost.toFixed(2) + '</td>';
+        html += '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">' + (i.room||'') + '</td>';
+        html += '<td style="padding:6px 8px;"><button onclick="deleteShoppingItem(\'' + i.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:12px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button></td>';
+        html += '</tr>';
+      });
+    });
+    const totalCost = toBuy.reduce((s,i) => s + (i.qty||0)*(i.rate||0), 0);
+    html += '</tbody></table>';
+    html += '<div style="padding:10px 14px;background:var(--limestone);border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:13px;">';
+    html += '<span style="color:var(--text-muted);">Estimated Materials Cost</span><strong>£' + totalCost.toFixed(2) + '</strong></div>';
+  } else {
+    html += '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No items to buy. Add materials from the Quote Builder.</div>';
+  }
+
+  if (bought.length) {
+    html += '<div style="padding:12px 14px;border-top:2px solid var(--border);">';
+    html += '<div style="font-size:12px;font-weight:600;color:var(--success);margin-bottom:8px;">✅ Purchased (' + bought.length + ')</div>';
+    bought.forEach(i => {
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;opacity:0.5;">';
+      html += '<input type="checkbox" checked onchange="toggleShoppingItem(\'' + i.id + '\',false)" style="cursor:pointer;">';
+      html += '<span style="text-decoration:line-through;flex:1;">' + (i.item||'') + ' × ' + (i.qty||'') + '</span>';
+      html += '<span>£' + ((i.qty||0)*(i.rate||0)).toFixed(2) + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+  area.innerHTML = html;
+}
+
+async function addToShoppingList() {
+  const ref = window._activeQuoteRef || document.getElementById('qb-number')?.value;
+  if (!ref) { alert('No job selected in the quote builder.'); return; }
+  const rooms = window._activeQuoteRooms || [];
+  const materialLines = [];
+  rooms.forEach(r => {
+    (r.lines||[]).forEach(l => {
+      if (l.type !== 'Labour' && l.supplier && l.qty > 0) {
+        materialLines.push({
+          job_ref: ref,
+          room: r.name || 'General',
+          item: l.supplier || l.desc,
+          supplier: l.supplier || '',
+          qty: l.qty || 0,
+          rate: l.rate || 0,
+          purchased: false
+        });
+      }
+    });
+  });
+  if (!materialLines.length) { alert('No materials found in this quote.'); return; }
+
+  // Check for existing items to avoid duplicates
+  let existing = [];
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/shopping_list?job_ref=eq.' + encodeURIComponent(ref) + '&select=item,room', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    existing = await res.json();
+  } catch(e) {}
+  const existingKeys = new Set(existing.map(e => (e.room+'|'+e.item).toLowerCase()));
+  const newItems = materialLines.filter(l => !existingKeys.has((l.room+'|'+l.item).toLowerCase()));
+
+  if (!newItems.length) {
+    alert('All ' + materialLines.length + ' materials are already on the shopping list for ' + ref + '.');
+    return;
+  }
+
+  if (!confirm('Add ' + newItems.length + ' material items to the shopping list for ' + ref + '?\n(' + (materialLines.length - newItems.length) + ' already on list, skipped)')) return;
+
+  let added = 0;
+  for (const item of newItems) {
+    try {
+      await fetch(SUPABASE_URL + '/rest/v1/shopping_list', {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      });
+      added++;
+    } catch(e) { console.warn('Shopping item insert failed:', e); }
+  }
+  alert('Added ' + added + ' items to shopping list for ' + ref + '.');
+}
+
+async function toggleShoppingItem(id, purchased) {
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/shopping_list?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purchased: purchased })
+    });
+  } catch(e) {}
+  loadShoppingList();
+}
+
+async function deleteShoppingItem(id) {
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/shopping_list?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+  } catch(e) {}
+  loadShoppingList();
+}
+
+function printShoppingList() {
+  const area = document.getElementById('shopping-list-area');
+  if (!area) return;
+  const w = window.open('', '_blank');
+  w.document.write('<html><head><title>Shopping List</title><style>body{font-family:sans-serif;font-size:13px;padding:20px;}table{border-collapse:collapse;width:100%;}th,td{padding:6px 10px;border:1px solid #ddd;text-align:left;}th{background:#f5f0e8;font-weight:600;}@media print{button{display:none;}}</style></head><body>');
+  w.document.write(area.innerHTML);
+  w.document.write('</body></html>');
+  w.document.close();
+  w.print();
+}
+
 function loadJobCostsTab() {
   const ref = window._currentJobRef;
   const el = document.getElementById('jd-costs-content');
@@ -4998,7 +5181,7 @@ function renderPlanning() {
 function switchPlanningTab(tab, el) {
   document.querySelectorAll('#page-planning .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['gantt','jobplan','weekly','todos'].forEach(t => {
+  ['gantt','jobplan','weekly','todos','shopping'].forEach(t => {
     const el2 = document.getElementById('plan-tab-' + t);
     if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
@@ -5006,6 +5189,7 @@ function switchPlanningTab(tab, el) {
   if (tab === 'weekly') renderWeekly();
   if (tab === 'jobplan') renderJobPlan();
   if (tab === 'todos') populateTodoJobDropdown();
+  if (tab === 'shopping') populateShoppingJobDropdown();
 }
 
 // ============================================================
