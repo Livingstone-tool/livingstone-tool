@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.11 -->
+<!-- Livingstone v3.12 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1309,6 +1309,12 @@
         <select id="shopping-job-select" style="width:300px;" onchange="loadShoppingList()">
           <option value="">-- Select a job --</option>
         </select>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <button class="btn btn-sm" id="shop-view-room" onclick="setShopView('room')" style="background:var(--slate);color:white;">By Room</button>
+          <button class="btn btn-sm btn-secondary" id="shop-view-total" onclick="setShopView('total')">Totals</button>
+        </div>
+        <button class="btn btn-sm btn-secondary" onclick="selectAllShopping()">☑ Select All</button>
+        <button class="btn btn-sm btn-danger" id="shop-delete-selected" style="display:none;" onclick="deleteSelectedShopping()">🗑 Delete Selected</button>
         <button class="btn btn-sm btn-secondary" onclick="printShoppingList()">🖨 Print</button>
       </div>
       <div id="shopping-list-area">
@@ -4903,6 +4909,47 @@ function populateShoppingJobDropdown() {
   if (current) loadShoppingList();
 }
 
+window._shopView = 'room';
+window._shopItems = [];
+
+function setShopView(view) {
+  window._shopView = view;
+  document.getElementById('shop-view-room').className = view === 'room' ? 'btn btn-sm' : 'btn btn-sm btn-secondary';
+  document.getElementById('shop-view-room').style.background = view === 'room' ? 'var(--slate)' : '';
+  document.getElementById('shop-view-room').style.color = view === 'room' ? 'white' : '';
+  document.getElementById('shop-view-total').className = view === 'total' ? 'btn btn-sm' : 'btn btn-sm btn-secondary';
+  document.getElementById('shop-view-total').style.background = view === 'total' ? 'var(--slate)' : '';
+  document.getElementById('shop-view-total').style.color = view === 'total' ? 'white' : '';
+  loadShoppingList();
+}
+
+function selectAllShopping() {
+  document.querySelectorAll('.shop-check').forEach(c => c.checked = true);
+  updateShopDeleteBtn();
+}
+
+function updateShopDeleteBtn() {
+  const checked = document.querySelectorAll('.shop-check:checked').length;
+  const btn = document.getElementById('shop-delete-selected');
+  if (btn) btn.style.display = checked > 0 ? '' : 'none';
+  if (btn && checked) btn.textContent = '🗑 Delete Selected (' + checked + ')';
+}
+
+async function deleteSelectedShopping() {
+  const ids = [...document.querySelectorAll('.shop-check:checked')].map(c => c.dataset.id);
+  if (!ids.length) return;
+  if (!confirm('Delete ' + ids.length + ' items from the shopping list?')) return;
+  for (const id of ids) {
+    try {
+      await fetch(SUPABASE_URL + '/rest/v1/shopping_list?id=eq.' + id, {
+        method: 'DELETE',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+      });
+    } catch(e) {}
+  }
+  loadShoppingList();
+}
+
 async function loadShoppingList() {
   const ref = document.getElementById('shopping-job-select')?.value;
   const area = document.getElementById('shopping-list-area');
@@ -4919,39 +4966,69 @@ async function loadShoppingList() {
     });
     items = await res.json();
   } catch(e) { console.warn('Shopping list load failed:', e); }
+  window._shopItems = items;
 
   const job = db.jobs.find(j => j.ref === ref);
   const jobName = job ? job.name : ref;
   const toBuy = items.filter(i => !i.purchased);
   const bought = items.filter(i => i.purchased);
+  const view = window._shopView || 'room';
 
   let html = '<div class="card"><div class="card-header"><div class="card-title">🛒 Shopping List — ' + ref + ' ' + jobName + '</div>';
   html += '<span style="font-size:12px;color:var(--text-muted);">' + toBuy.length + ' to buy, ' + bought.length + ' purchased</span></div>';
   html += '<div class="card-body" style="padding:0;">';
 
   if (toBuy.length) {
-    const rooms = {};
-    toBuy.forEach(i => { const r = i.room || 'General'; if(!rooms[r]) rooms[r]=[]; rooms[r].push(i); });
-    html += '<table style="font-size:12.5px;width:100%;border-collapse:collapse;">';
-    html += '<thead><tr style="background:var(--limestone);"><th style="padding:8px 12px;text-align:center;width:70px;">Bought?</th><th style="text-align:left;">Item</th><th>Supplier</th><th>Qty</th><th>Rate</th><th>Est. Cost</th><th>Room</th><th></th></tr></thead><tbody>';
-    Object.keys(rooms).forEach(room => {
-      html += '<tr><td colspan="8" style="padding:6px 12px;font-weight:700;background:rgba(184,115,51,0.08);font-size:12px;color:var(--copper);">' + room + '</td></tr>';
-      rooms[room].forEach(i => {
-        const cost = (i.qty||0) * (i.rate||0);
+    if (view === 'total') {
+      // Totals view — aggregate same items across rooms
+      const totals = {};
+      toBuy.forEach(i => {
+        const key = (i.item||'').toLowerCase();
+        if (!totals[key]) totals[key] = { item: i.item, supplier: i.supplier, rate: i.rate||0, qty: 0, ids: [] };
+        totals[key].qty += (i.qty||0);
+        totals[key].ids.push(i.id);
+      });
+      const sorted = Object.values(totals).sort((a,b) => a.item.localeCompare(b.item));
+      html += '<table style="font-size:12.5px;width:100%;border-collapse:collapse;">';
+      html += '<thead><tr style="background:var(--limestone);"><th style="padding:8px 6px;width:30px;"></th><th style="padding:8px 12px;text-align:left;">Item</th><th>Supplier</th><th>Total Qty</th><th>Rate</th><th>Est. Cost</th><th></th></tr></thead><tbody>';
+      sorted.forEach(t => {
+        const cost = t.qty * t.rate;
         html += '<tr style="border-bottom:1px solid var(--border);">';
-        html += '<td style="padding:6px 12px;text-align:center;"><button onclick="purchaseShoppingItem(\'' + i.id + '\',' + (i.qty||0) + ',' + (i.rate||0) + ',\'' + (i.item||'').replace(/'/g,"\\'") + '\')" style="border:1px solid var(--border);background:white;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'white\'">✓ Buy</button></td>';
-        html += '<td style="padding:6px 12px;">' + (i.item||'') + '</td>';
-        html += '<td style="padding:6px 8px;color:var(--text-muted);">' + (i.supplier||'') + '</td>';
-        html += '<td style="padding:6px 8px;text-align:center;">' + (i.qty||'') + '</td>';
-        html += '<td style="padding:6px 8px;">£' + (i.rate||0).toFixed(2) + '</td>';
+        html += '<td style="padding:6px;text-align:center;"><input type="checkbox" class="shop-check" data-id="' + t.ids[0] + '" onchange="updateShopDeleteBtn()"></td>';
+        html += '<td style="padding:6px 12px;font-weight:600;">' + t.item + '</td>';
+        html += '<td style="padding:6px 8px;color:var(--text-muted);">' + t.supplier + '</td>';
+        html += '<td style="padding:6px 8px;text-align:center;font-weight:700;font-size:14px;">' + t.qty + '</td>';
+        html += '<td style="padding:6px 8px;">£' + t.rate.toFixed(2) + '</td>';
         html += '<td style="padding:6px 8px;font-weight:600;">£' + cost.toFixed(2) + '</td>';
-        html += '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">' + (i.room||'') + '</td>';
-        html += '<td style="padding:6px 8px;"><button onclick="deleteShoppingItem(\'' + i.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:12px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4" title="Remove from list">✕</button></td>';
+        html += '<td style="padding:6px 8px;"><button onclick="purchaseShoppingItem(\'' + t.ids[0] + '\',' + t.qty + ',' + t.rate + ',\'' + t.item.replace(/'/g,"\\'") + '\')" style="border:1px solid var(--border);background:white;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'white\'">✓ Buy</button></td>';
         html += '</tr>';
       });
-    });
+      html += '</tbody></table>';
+    } else {
+      // Room view
+      const rooms = {};
+      toBuy.forEach(i => { const r = i.room || 'General'; if(!rooms[r]) rooms[r]=[]; rooms[r].push(i); });
+      html += '<table style="font-size:12.5px;width:100%;border-collapse:collapse;">';
+      html += '<thead><tr style="background:var(--limestone);"><th style="padding:8px 6px;width:30px;"></th><th style="padding:8px 12px;text-align:center;width:70px;">Bought?</th><th style="text-align:left;">Item</th><th>Supplier</th><th>Qty</th><th>Rate</th><th>Est. Cost</th><th></th></tr></thead><tbody>';
+      Object.keys(rooms).forEach(room => {
+        html += '<tr><td colspan="8" style="padding:6px 12px;font-weight:700;background:rgba(184,115,51,0.08);font-size:12px;color:var(--copper);">' + room + '</td></tr>';
+        rooms[room].forEach(i => {
+          const cost = (i.qty||0) * (i.rate||0);
+          html += '<tr style="border-bottom:1px solid var(--border);">';
+          html += '<td style="padding:6px;text-align:center;"><input type="checkbox" class="shop-check" data-id="' + i.id + '" onchange="updateShopDeleteBtn()"></td>';
+          html += '<td style="padding:6px 12px;text-align:center;"><button onclick="purchaseShoppingItem(\'' + i.id + '\',' + (i.qty||0) + ',' + (i.rate||0) + ',\'' + (i.item||'').replace(/'/g,"\\'") + '\')" style="border:1px solid var(--border);background:white;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'white\'">✓ Buy</button></td>';
+          html += '<td style="padding:6px 12px;">' + (i.item||'') + '</td>';
+          html += '<td style="padding:6px 8px;color:var(--text-muted);">' + (i.supplier||'') + '</td>';
+          html += '<td style="padding:6px 8px;text-align:center;">' + (i.qty||'') + '</td>';
+          html += '<td style="padding:6px 8px;">£' + (i.rate||0).toFixed(2) + '</td>';
+          html += '<td style="padding:6px 8px;font-weight:600;">£' + cost.toFixed(2) + '</td>';
+          html += '<td style="padding:6px 8px;"><button onclick="deleteShoppingItem(\'' + i.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:12px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4" title="Remove">✕</button></td>';
+          html += '</tr>';
+        });
+      });
+      html += '</tbody></table>';
+    }
     const totalCost = toBuy.reduce((s,i) => s + (i.qty||0)*(i.rate||0), 0);
-    html += '</tbody></table>';
     html += '<div style="padding:10px 14px;background:var(--limestone);border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:13px;">';
     html += '<span style="color:var(--text-muted);">Estimated Materials Cost</span><strong>£' + totalCost.toFixed(2) + '</strong></div>';
   } else {
