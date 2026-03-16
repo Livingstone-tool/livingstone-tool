@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.12 -->
+<!-- Livingstone v3.13 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -903,6 +903,15 @@
               </div>
             </div>
           </div>
+
+          <!-- Attach Documents for Quote PDF -->
+          <div style="margin-top:24px;background:var(--limestone);border-radius:8px;padding:20px;">
+            <div style="font-weight:600;font-size:14px;margin-bottom:12px;">📎 Attach Documents to Quote</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Tick the documents you want to include at the end of the PDF. Upload documents from the job's Documents tab first.</div>
+            <div id="qb-doc-attachments" style="min-height:40px;">
+              <div style="color:var(--text-muted);font-size:12px;">Select a job to see available documents</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1505,6 +1514,7 @@
         <div class="tab" onclick="switchTab('jd','payments',this)">Payments</div>
         <div class="tab" onclick="switchTab('jd','costs',this);loadJobCostsTab()">Costs</div>
         <div class="tab" onclick="switchTab('jd','todos',this);renderJobTodos()">To Do</div>
+        <div class="tab" onclick="switchTab('jd','docs',this);loadJobDocs()">Documents</div>
       </div>
       <div id="jd-tab-overview" class="tab-content active" id="jd-tab-overview">
         <div class="grid-2" style="gap:20px;margin-bottom:16px;">
@@ -1569,6 +1579,24 @@
           <button class="btn btn-primary btn-sm" onclick="addJobTodo()">Add</button>
         </div>
         <div id="jd-todos-list"></div>
+      </div>
+      <div id="jd-tab-docs" class="tab-content">
+        <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+          <label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0;">
+            📎 Upload Files
+            <input type="file" id="jd-doc-upload" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="uploadJobDocs(this.files)" style="display:none;">
+          </label>
+          <select id="jd-doc-category" style="font-size:13px;padding:6px 10px;">
+            <option value="Site Photos">Site Photos</option>
+            <option value="Plans/Drawings">Plans/Drawings</option>
+            <option value="Quotes">Quotes</option>
+            <option value="Invoices">Invoices</option>
+            <option value="Contracts">Contracts</option>
+            <option value="General">General</option>
+          </select>
+          <span style="font-size:11px;color:var(--text-muted);">Select category then upload</span>
+        </div>
+        <div id="jd-docs-list" style="min-height:60px;">Loading...</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -3202,6 +3230,7 @@ function viewQuote(idx) {
   setQuoteMode(window._quoteMode);
   document.getElementById('quote-builder-area').style.display='block';
   document.getElementById('active-quote-card').scrollIntoView({behavior:'smooth'});
+  loadQuoteDocAttachments(q.number || q.jobRef);
 }
 
 function populateQuoteJobDropdown(selectedRef) {
@@ -3254,6 +3283,7 @@ function quoteJobSelected(ref) {
     document.getElementById('qb-title').textContent = ref + ' — ' + job.name;
     document.getElementById('qb-subtitle').textContent = job.client?.name||'';
   }
+  loadQuoteDocAttachments(ref);
 }
 
 
@@ -5210,6 +5240,127 @@ function printShoppingList() {
   w.document.write('</body></html>');
   w.document.close();
   w.print();
+}
+
+// ============================================================
+// JOB DOCUMENTS (Supabase Storage + DB)
+// ============================================================
+const STORAGE_BUCKET = 'job-documents';
+
+async function uploadJobDocs(files) {
+  const ref = window._currentJobRef;
+  if (!ref || !files.length) return;
+  const category = document.getElementById('jd-doc-category')?.value || 'General';
+  const el = document.getElementById('jd-docs-list');
+  if (el) el.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:13px;">Uploading ' + files.length + ' file(s)...</div>';
+
+  let uploaded = 0;
+  for (const file of files) {
+    const safeName = ref + '/' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    try {
+      // Upload to Supabase Storage
+      const uploadRes = await fetch(SUPABASE_URL + '/storage/v1/object/' + STORAGE_BUCKET + '/' + safeName, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': file.type || 'application/octet-stream',
+          'x-upsert': 'true'
+        },
+        body: file
+      });
+      if (!uploadRes.ok) { console.warn('Upload failed:', await uploadRes.text()); continue; }
+
+      const publicUrl = SUPABASE_URL + '/storage/v1/object/public/' + STORAGE_BUCKET + '/' + safeName;
+
+      // Save metadata to DB
+      await fetch(SUPABASE_URL + '/rest/v1/job_documents', {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_ref: ref,
+          filename: file.name,
+          url: publicUrl,
+          file_type: file.type || '',
+          category: category,
+          notes: ''
+        })
+      });
+      uploaded++;
+    } catch(e) { console.warn('Upload error:', e); }
+  }
+  // Reset file input
+  document.getElementById('jd-doc-upload').value = '';
+  loadJobDocs();
+}
+
+async function loadJobDocs() {
+  const ref = window._currentJobRef;
+  const el = document.getElementById('jd-docs-list');
+  if (!el || !ref) return;
+  el.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:13px;">Loading...</div>';
+
+  let docs = [];
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/job_documents?job_ref=eq.' + encodeURIComponent(ref) + '&order=category.asc,created_at.desc', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    docs = await res.json();
+  } catch(e) { console.warn('Docs load failed:', e); }
+
+  if (!docs.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No documents uploaded yet.<br>Use the upload button above to add site photos, plans, quotes, etc.</div>';
+    return;
+  }
+
+  // Group by category
+  const cats = {};
+  docs.forEach(d => { const c = d.category || 'General'; if(!cats[c]) cats[c]=[]; cats[c].push(d); });
+
+  let html = '';
+  Object.keys(cats).sort().forEach(cat => {
+    html += '<div style="margin-bottom:16px;">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--copper);text-transform:uppercase;letter-spacing:0.06em;padding:0 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px;">' + cat + ' (' + cats[cat].length + ')</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:12px;">';
+    cats[cat].forEach(d => {
+      const isImage = (d.file_type||'').startsWith('image/');
+      const isPDF = (d.file_type||'').includes('pdf');
+      const icon = isImage ? '' : isPDF ? '📄' : '📎';
+      html += '<div style="width:140px;text-align:center;position:relative;" class="doc-thumb">';
+      if (isImage) {
+        html += '<a href="' + d.url + '" target="_blank"><img src="' + d.url + '" style="width:140px;height:100px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" title="' + d.filename + '"></a>';
+      } else {
+        html += '<a href="' + d.url + '" target="_blank" style="display:flex;align-items:center;justify-content:center;width:140px;height:100px;background:var(--limestone);border-radius:6px;border:1px solid var(--border);font-size:36px;text-decoration:none;cursor:pointer;" title="' + d.filename + '">' + icon + '</a>';
+      }
+      html += '<div style="font-size:11px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);" title="' + d.filename + '">' + d.filename + '</div>';
+      html += '<div style="font-size:10px;color:var(--text-muted);">' + new Date(d.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + '</div>';
+      html += '<button onclick="deleteJobDoc(\'' + d.id + '\',\'' + d.url.split('/').pop() + '\')" style="position:absolute;top:2px;right:2px;border:none;background:rgba(0,0,0,0.5);color:white;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:20px;text-align:center;" title="Delete">×</button>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
+}
+
+async function deleteJobDoc(id, storagePath) {
+  if (!confirm('Delete this document?')) return;
+  const ref = window._currentJobRef;
+  try {
+    // Delete from storage
+    await fetch(SUPABASE_URL + '/storage/v1/object/' + STORAGE_BUCKET + '/' + ref + '/' + storagePath, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+  } catch(e) { console.warn('Storage delete failed:', e); }
+  try {
+    // Delete metadata
+    await fetch(SUPABASE_URL + '/rest/v1/job_documents?id=eq.' + id, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+  } catch(e) { console.warn('Doc record delete failed:', e); }
+  loadJobDocs();
 }
 
 function loadJobCostsTab() {
@@ -7387,14 +7538,83 @@ function exportQuotePDF() {
   </div>
 </div>
 </div>
+
+${(() => {
+  const checks = document.querySelectorAll('.qb-doc-check:checked');
+  if (!checks.length) return '';
+  let docHtml = '<div style="page-break-before:always;padding:40px 50px;">';
+  docHtml += '<h2 style="font-family:Playfair Display,serif;font-size:20px;margin-bottom:20px;color:#1a2530;">Appendix — Supporting Documents</h2>';
+  checks.forEach(chk => {
+    const url = chk.dataset.url;
+    const name = chk.dataset.name;
+    const type = chk.dataset.type || '';
+    if (type.startsWith('image/')) {
+      docHtml += '<div style="margin-bottom:24px;text-align:center;">';
+      docHtml += '<img src="' + url + '" style="max-width:100%;max-height:700px;border:1px solid #e8e0d5;border-radius:4px;">';
+      docHtml += '<div style="font-size:11px;color:#6b7e8e;margin-top:6px;">' + name + '</div>';
+      docHtml += '</div>';
+    } else {
+      docHtml += '<div style="margin-bottom:12px;padding:10px 14px;border:1px solid #e8e0d5;border-radius:4px;">';
+      docHtml += '<span style="color:#B87333;font-weight:600;">📄 ' + name + '</span>';
+      docHtml += '</div>';
+    }
+  });
+  docHtml += '</div>';
+  return docHtml;
+})()}
+
 </body>
 </html>`;
 
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
-  // Trigger print dialog after a short delay for styles to load
   setTimeout(() => win.print(), 500);
+}
+
+// Load job documents as checkboxes for quote attachment
+async function loadQuoteDocAttachments(ref) {
+  const el = document.getElementById('qb-doc-attachments');
+  if (!el || !ref) return;
+  el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Loading documents...</div>';
+
+  let docs = [];
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/job_documents?job_ref=eq.' + encodeURIComponent(ref) + '&order=category.asc,created_at.desc', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    docs = await res.json();
+  } catch(e) { console.warn('Doc attachments load failed:', e); }
+
+  if (!docs.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">No documents uploaded for this job yet. Go to the job\'s Documents tab to upload.</div>';
+    return;
+  }
+
+  const cats = {};
+  docs.forEach(d => { const c = d.category || 'General'; if(!cats[c]) cats[c]=[]; cats[c].push(d); });
+
+  let html = '';
+  Object.keys(cats).sort().forEach(cat => {
+    html += '<div style="margin-bottom:10px;">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--copper);margin-bottom:4px;">' + cat + '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+    cats[cat].forEach(d => {
+      const isImage = (d.file_type||'').startsWith('image/');
+      html += '<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:white;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;" onmouseover="this.style.borderColor=\'var(--copper)\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
+      html += '<input type="checkbox" class="qb-doc-check" data-url="' + d.url + '" data-name="' + d.filename + '" data-type="' + (d.file_type||'') + '">';
+      if (isImage) {
+        html += '<img src="' + d.url + '" style="width:36px;height:28px;object-fit:cover;border-radius:3px;">';
+      } else {
+        html += '<span style="font-size:18px;">📄</span>';
+      }
+      html += '<span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + d.filename + '</span>';
+      html += '</label>';
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
 }
 </script>
 </html>
