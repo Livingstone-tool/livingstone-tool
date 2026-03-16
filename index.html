@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.09 -->
+<!-- Livingstone v3.11 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -4930,22 +4930,23 @@ async function loadShoppingList() {
   html += '<div class="card-body" style="padding:0;">';
 
   if (toBuy.length) {
-    // Group by room
     const rooms = {};
     toBuy.forEach(i => { const r = i.room || 'General'; if(!rooms[r]) rooms[r]=[]; rooms[r].push(i); });
     html += '<table style="font-size:12.5px;width:100%;border-collapse:collapse;">';
-    html += '<thead><tr style="background:var(--limestone);"><th style="padding:8px 12px;text-align:left;">Item</th><th>Supplier</th><th>Qty</th><th>Rate</th><th>Est. Cost</th><th>Room</th><th></th></tr></thead><tbody>';
+    html += '<thead><tr style="background:var(--limestone);"><th style="padding:8px 12px;text-align:center;width:70px;">Bought?</th><th style="text-align:left;">Item</th><th>Supplier</th><th>Qty</th><th>Rate</th><th>Est. Cost</th><th>Room</th><th></th></tr></thead><tbody>';
     Object.keys(rooms).forEach(room => {
+      html += '<tr><td colspan="8" style="padding:6px 12px;font-weight:700;background:rgba(184,115,51,0.08);font-size:12px;color:var(--copper);">' + room + '</td></tr>';
       rooms[room].forEach(i => {
         const cost = (i.qty||0) * (i.rate||0);
         html += '<tr style="border-bottom:1px solid var(--border);">';
-        html += '<td style="padding:6px 12px;"><input type="checkbox" onchange="toggleShoppingItem(\'' + i.id + '\',true)" style="margin-right:8px;cursor:pointer;">' + (i.item||'') + '</td>';
+        html += '<td style="padding:6px 12px;text-align:center;"><button onclick="purchaseShoppingItem(\'' + i.id + '\',' + (i.qty||0) + ',' + (i.rate||0) + ',\'' + (i.item||'').replace(/'/g,"\\'") + '\')" style="border:1px solid var(--border);background:white;border-radius:4px;cursor:pointer;padding:3px 8px;font-size:11px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'white\'">✓ Buy</button></td>';
+        html += '<td style="padding:6px 12px;">' + (i.item||'') + '</td>';
         html += '<td style="padding:6px 8px;color:var(--text-muted);">' + (i.supplier||'') + '</td>';
         html += '<td style="padding:6px 8px;text-align:center;">' + (i.qty||'') + '</td>';
         html += '<td style="padding:6px 8px;">£' + (i.rate||0).toFixed(2) + '</td>';
         html += '<td style="padding:6px 8px;font-weight:600;">£' + cost.toFixed(2) + '</td>';
         html += '<td style="padding:6px 8px;font-size:11px;color:var(--text-muted);">' + (i.room||'') + '</td>';
-        html += '<td style="padding:6px 8px;"><button onclick="deleteShoppingItem(\'' + i.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:12px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4">✕</button></td>';
+        html += '<td style="padding:6px 8px;"><button onclick="deleteShoppingItem(\'' + i.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.4;font-size:12px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4" title="Remove from list">✕</button></td>';
         html += '</tr>';
       });
     });
@@ -4960,13 +4961,19 @@ async function loadShoppingList() {
   if (bought.length) {
     html += '<div style="padding:12px 14px;border-top:2px solid var(--border);">';
     html += '<div style="font-size:12px;font-weight:600;color:var(--success);margin-bottom:8px;">✅ Purchased (' + bought.length + ')</div>';
+    const boughtTotal = bought.reduce((s,i) => s + (i.actual_cost || (i.qty||0)*(i.rate||0)), 0);
     bought.forEach(i => {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;opacity:0.5;">';
-      html += '<input type="checkbox" checked onchange="toggleShoppingItem(\'' + i.id + '\',false)" style="cursor:pointer;">';
-      html += '<span style="text-decoration:line-through;flex:1;">' + (i.item||'') + ' × ' + (i.qty||'') + '</span>';
-      html += '<span>£' + ((i.qty||0)*(i.rate||0)).toFixed(2) + '</span>';
+      const cost = i.actual_cost || (i.qty||0)*(i.rate||0);
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;border-bottom:1px solid rgba(0,0,0,0.05);">';
+      html += '<span style="color:var(--success);font-size:14px;">✓</span>';
+      html += '<span style="flex:1;color:var(--text-muted);">' + (i.item||'') + ' × ' + (i.qty||'') + '</span>';
+      html += '<span style="font-weight:600;">£' + cost.toFixed(2) + '</span>';
+      html += '<button onclick="toggleShoppingItem(\'' + i.id + '\',false)" style="border:none;background:none;cursor:pointer;color:var(--text-muted);opacity:0.4;font-size:11px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.4" title="Undo purchase">↩</button>';
+      html += '<button onclick="deleteShoppingItem(\'' + i.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:0.3;font-size:12px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.3" title="Delete">✕</button>';
       html += '</div>';
     });
+    html += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:600;border-top:1px solid var(--border);margin-top:4px;">';
+    html += '<span style="color:var(--success);">Total Purchased</span><span>£' + boughtTotal.toFixed(2) + '</span></div>';
     html += '</div>';
   }
 
@@ -4996,25 +5003,39 @@ async function addToShoppingList() {
   });
   if (!materialLines.length) { alert('No materials found in this quote.'); return; }
 
-  // Check for existing items to avoid duplicates
+  // Check for existing items — merge quantities for duplicates
   let existing = [];
   try {
-    const res = await fetch(SUPABASE_URL + '/rest/v1/shopping_list?job_ref=eq.' + encodeURIComponent(ref) + '&select=item,room', {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/shopping_list?job_ref=eq.' + encodeURIComponent(ref) + '&select=id,item,room,qty', {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
     });
     existing = await res.json();
   } catch(e) {}
-  const existingKeys = new Set(existing.map(e => (e.room+'|'+e.item).toLowerCase()));
-  const newItems = materialLines.filter(l => !existingKeys.has((l.room+'|'+l.item).toLowerCase()));
+  const existingMap = {};
+  existing.forEach(e => { existingMap[(e.room+'|'+e.item).toLowerCase()] = e; });
 
-  if (!newItems.length) {
-    alert('All ' + materialLines.length + ' materials are already on the shopping list for ' + ref + '.');
-    return;
-  }
+  const newItems = [];
+  const updateItems = [];
+  materialLines.forEach(l => {
+    const key = (l.room+'|'+l.item).toLowerCase();
+    const ex = existingMap[key];
+    if (ex) {
+      updateItems.push({ id: ex.id, qty: (ex.qty||0) + (l.qty||0) });
+    } else {
+      newItems.push(l);
+      existingMap[key] = l; // prevent dupes within the same quote
+    }
+  });
 
-  if (!confirm('Add ' + newItems.length + ' material items to the shopping list for ' + ref + '?\n(' + (materialLines.length - newItems.length) + ' already on list, skipped)')) return;
+  const totalChanges = newItems.length + updateItems.length;
+  if (!totalChanges) { alert('Shopping list already up to date.'); return; }
 
-  let added = 0;
+  let msg = '';
+  if (newItems.length) msg += newItems.length + ' new items';
+  if (updateItems.length) msg += (msg ? ', ' : '') + updateItems.length + ' items with quantities updated';
+  if (!confirm('Shopping list for ' + ref + ':\n' + msg + '\n\nProceed?')) return;
+
+  let ok = 0;
   for (const item of newItems) {
     try {
       await fetch(SUPABASE_URL + '/rest/v1/shopping_list', {
@@ -5022,10 +5043,63 @@ async function addToShoppingList() {
         headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify(item)
       });
-      added++;
+      ok++;
     } catch(e) { console.warn('Shopping item insert failed:', e); }
   }
-  alert('Added ' + added + ' items to shopping list for ' + ref + '.');
+  for (const upd of updateItems) {
+    try {
+      await fetch(SUPABASE_URL + '/rest/v1/shopping_list?id=eq.' + upd.id, {
+        method: 'PATCH',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qty: upd.qty })
+      });
+      ok++;
+    } catch(e) { console.warn('Shopping item update failed:', e); }
+  }
+  alert('Done — ' + ok + ' items processed.');
+}
+
+async function purchaseShoppingItem(id, qty, rate, itemName) {
+  const estCost = (qty * rate).toFixed(2);
+  const actualCostStr = prompt('Confirm actual cost for "' + itemName + '" (qty ' + qty + '):\n\nEstimated: £' + estCost, estCost);
+  if (actualCostStr === null) return;
+  const actualCost = parseFloat(actualCostStr) || parseFloat(estCost);
+
+  // Mark as purchased in shopping list
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/shopping_list?id=eq.' + id, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purchased: true, actual_cost: actualCost })
+    });
+  } catch(e) { console.warn('Purchase toggle failed:', e); }
+
+  // Add to cost tracker
+  const ref = document.getElementById('shopping-job-select')?.value;
+  if (ref) {
+    const costEntry = {
+      date: new Date().toISOString().split('T')[0],
+      type: 'Material',
+      description: itemName,
+      notes: 'From shopping list',
+      amount: actualCost,
+      supplier: itemName,
+      allocations: JSON.stringify([{ jobRef: ref, mode: 'P', pct: 100, amount: actualCost }])
+    };
+    try {
+      const res = await supa.post('cost_entries', costEntry);
+      if (res && res[0]) {
+        costEntry.id = res[0].id;
+        costEntry.allocations = [{ jobRef: ref, mode: 'P', pct: 100, amount: actualCost }];
+        if (!db.costs) db.costs = [];
+        db.costs.push(costEntry);
+        saveData();
+        console.log('Cost entry added for', itemName, '£' + actualCost);
+      }
+    } catch(e) { console.warn('Cost entry failed:', e); }
+  }
+
+  loadShoppingList();
 }
 
 async function toggleShoppingItem(id, purchased) {
@@ -5040,6 +5114,7 @@ async function toggleShoppingItem(id, purchased) {
 }
 
 async function deleteShoppingItem(id) {
+  if (!confirm('Remove this item from the shopping list?')) return;
   try {
     await fetch(SUPABASE_URL + '/rest/v1/shopping_list?id=eq.' + id, {
       method: 'DELETE',
