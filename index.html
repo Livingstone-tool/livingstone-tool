@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.13 -->
+<!-- Livingstone v3.15 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1994,7 +1994,7 @@ async function loadFromSupabase() {
     // Subs: Supabase first, fall back to SEED
     const seedSubs = SEED.subs || [];
     if (supaSubs && supaSubs.length > 0) {
-      db.subs = supaSubs.map(s => ({ id: s.id, name: s.name, trade: s.trade||'', dayRate: parseFloat(s.day_rate)||0, reliability: s.reliability||0, quality: s.quality||0, costScore: s.cost_score||0 }));
+      db.subs = supaSubs.map(s => ({ id: s.id, name: s.name, trade: s.trade||'', dayRate: parseFloat(s.day_rate)||0, phone: s.phone||'', email: s.email||'', reliability: s.reliability||0, quality: s.quality||0, costScore: s.cost_score||0, notes: s.notes||'' }));
     } else {
       db.subs = seedSubs;
       seedSubs.forEach(s => {
@@ -3315,6 +3315,35 @@ function addRoom() {
   renderQBRooms();
 }
 
+function duplicateRoom(ri) {
+  const rooms = window._activeQuoteRooms || [];
+  const source = rooms[ri];
+  if (!source) return;
+  const newName = prompt('Name for the duplicated room:', source.name + ' (copy)');
+  if (!newName) return;
+  const clone = JSON.parse(JSON.stringify(source));
+  clone.name = newName;
+  rooms.splice(ri + 1, 0, clone);
+  renderQBRooms();
+}
+
+function renameRoom(ri) {
+  const rooms = window._activeQuoteRooms || [];
+  if (!rooms[ri]) return;
+  const newName = prompt('Rename room:', rooms[ri].name);
+  if (newName === null) return;
+  rooms[ri].name = newName;
+  renderQBRooms();
+}
+
+function removeRoom(ri) {
+  const rooms = window._activeQuoteRooms || [];
+  if (!rooms[ri]) return;
+  if (!confirm('Remove "' + rooms[ri].name + '" and all its line items?')) return;
+  rooms.splice(ri, 1);
+  renderQBRooms();
+}
+
 function renderQBRooms() {
   // Populate supplier autocomplete from 3 databases: Subs, Products, Other Costs
   const dl = document.getElementById('supplier-list');
@@ -3351,7 +3380,12 @@ function renderQBRooms() {
     return `<div class="qb-room-section">
       <div class="qb-room-header">
         <span>${room.name}</span>
-        <span class="qb-room-total">£${roomTotal.toFixed(2)}</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="qb-room-total">£${roomTotal.toFixed(2)}</span>
+          <button onclick="duplicateRoom(${ri})" style="border:none;background:rgba(255,255,255,0.15);color:white;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;" title="Duplicate this room">📋 Duplicate</button>
+          <button onclick="renameRoom(${ri})" style="border:none;background:rgba(255,255,255,0.15);color:white;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;" title="Rename">✏</button>
+          <button onclick="removeRoom(${ri})" style="border:none;background:rgba(255,255,255,0.15);color:white;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;" title="Remove room">✕</button>
+        </div>
       </div>
       <div class="qb-line qb-line-header">
         <span></span>
@@ -4011,7 +4045,7 @@ function saveSub() {
     costScore: parseInt(document.getElementById('sub-cost').value)||null,
     notes: document.getElementById('sub-notes').value
   };
-  const supaData = { name: sub.name, trade: sub.trade, day_rate: sub.dayRate, reliability: sub.reliability||0, quality: sub.quality||0, cost_score: sub.costScore||0 };
+  const supaData = { name: sub.name, trade: sub.trade, day_rate: sub.dayRate, phone: sub.phone||'', email: sub.email||'', reliability: sub.reliability||0, quality: sub.quality||0, cost_score: sub.costScore||0, notes: sub.notes||'' };
   if(idx>=0 && idx < db.subs.length) {
     const existing = db.subs[idx];
     const id = existing.id;
