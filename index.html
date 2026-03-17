@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.15 -->
+<!-- Livingstone v3.16 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7402,7 +7402,7 @@ function initQBDrag() {
 }
 
 // ── PDF EXPORT ────────────────────────────────────────────────────────────
-function exportQuotePDF() {
+async function exportQuotePDF() {
   const rooms = window._activeQuoteRooms || [];
   const jobRef = document.getElementById('qb-number')?.value || document.getElementById('qb-job-ref')?.value || '';
   const jobName = document.getElementById('qb-job-name')?.value || '';
@@ -7604,6 +7604,43 @@ ${(() => {
   win.document.write(html);
   win.document.close();
   setTimeout(() => win.print(), 500);
+
+  // Auto-save quote to job documents
+  const ref = jobRef || window._activeQuoteRef || document.getElementById('qb-number')?.value;
+  if (ref) {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = 'Quote_' + ref + '_' + timestamp + '.html';
+    const safeName = ref + '/' + Date.now() + '_' + filename;
+    const blob = new Blob([html], { type: 'text/html' });
+    try {
+      const uploadRes = await fetch(SUPABASE_URL + '/storage/v1/object/' + STORAGE_BUCKET + '/' + safeName, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': 'text/html',
+          'x-upsert': 'true'
+        },
+        body: blob
+      });
+      if (uploadRes.ok) {
+        const publicUrl = SUPABASE_URL + '/storage/v1/object/public/' + STORAGE_BUCKET + '/' + safeName;
+        await fetch(SUPABASE_URL + '/rest/v1/job_documents', {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_ref: ref,
+            filename: filename,
+            url: publicUrl,
+            file_type: 'text/html',
+            category: 'Quotes',
+            notes: 'Auto-saved on export — ' + grandTotal
+          })
+        });
+        console.log('Quote saved to documents:', filename);
+      }
+    } catch(e) { console.warn('Quote auto-save failed:', e); }
+  }
 }
 
 // Load job documents as checkboxes for quote attachment
