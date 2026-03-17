@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.16 -->
+<!-- Livingstone v3.17 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5359,10 +5359,13 @@ async function loadJobDocs() {
     cats[cat].forEach(d => {
       const isImage = (d.file_type||'').startsWith('image/');
       const isPDF = (d.file_type||'').includes('pdf');
-      const icon = isImage ? '' : isPDF ? '📄' : '📎';
+      const isHTML = (d.file_type||'').includes('html');
+      const icon = isImage ? '' : isHTML ? '📋' : isPDF ? '📄' : '📎';
       html += '<div style="width:140px;text-align:center;position:relative;" class="doc-thumb">';
       if (isImage) {
         html += '<a href="' + d.url + '" target="_blank"><img src="' + d.url + '" style="width:140px;height:100px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" title="' + d.filename + '"></a>';
+      } else if (isHTML) {
+        html += '<div onclick="openQuoteDoc(\'' + d.url + '\')" style="display:flex;align-items:center;justify-content:center;width:140px;height:100px;background:var(--limestone);border-radius:6px;border:1px solid var(--border);font-size:36px;cursor:pointer;" title="' + d.filename + '">' + icon + '</div>';
       } else {
         html += '<a href="' + d.url + '" target="_blank" style="display:flex;align-items:center;justify-content:center;width:140px;height:100px;background:var(--limestone);border-radius:6px;border:1px solid var(--border);font-size:36px;text-decoration:none;cursor:pointer;" title="' + d.filename + '">' + icon + '</a>';
       }
@@ -5375,6 +5378,19 @@ async function loadJobDocs() {
   });
 
   el.innerHTML = html;
+}
+
+async function openQuoteDoc(url) {
+  try {
+    const res = await fetch(url);
+    const htmlText = await res.text();
+    const win = window.open('', '_blank');
+    win.document.write(htmlText);
+    win.document.close();
+  } catch(e) {
+    console.warn('Failed to open quote doc:', e);
+    window.open(url, '_blank');
+  }
 }
 
 async function deleteJobDoc(id, storagePath) {
