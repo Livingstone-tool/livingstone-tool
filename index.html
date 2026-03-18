@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.18 -->
+<!-- Livingstone v3.19 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1981,6 +1981,7 @@ async function loadFromSupabase() {
       description: (q.description||'').replace(/^NUM:[^|]*\|/,''),
       rooms: typeof q.rooms === 'string' ? JSON.parse(q.rooms || '[]') : (q.rooms || []),
       pmFee: parseFloat(q.pm_fee)||0,
+      paymentTerms: q.payment_terms || '25% at 4 stages',
       total: parseFloat(q.total) || 0,
       status: q.status || 'Draft'
     }));
@@ -3790,7 +3791,8 @@ function saveQuote() {
     labour_margin: parseFloat(document.getElementById('qb-labour-margin')?.value)||10,
     mat_margin: parseFloat(document.getElementById('qb-mat-margin')?.value)||10,
     valid_days: parseInt(document.getElementById('qb-valid-days')?.value)||30,
-    pm_fee: parseFloat(document.getElementById('qb-pm-fee')?.value)||0
+    pm_fee: parseFloat(document.getElementById('qb-pm-fee')?.value)||0,
+    payment_terms: document.getElementById('qb-payment')?.value || '25% at 4 stages'
   };
   if (q.id) {
     // We have the Supabase ID - do a direct patch
