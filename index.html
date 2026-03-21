@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.21 -->
+<!-- Livingstone v3.22 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -879,6 +879,8 @@
 
           <div style="display:flex;gap:10px;margin-top:16px;">
             <button class="btn btn-secondary" onclick="addRoom()">+ Add Room / Section</button>
+            <button class="btn btn-secondary" onclick="collapseAllRooms()" style="font-size:12px;">▶ Collapse All</button>
+            <button class="btn btn-secondary" onclick="expandAllRooms()" style="font-size:12px;">▼ Expand All</button>
           </div>
 
           <!-- Totals Summary -->
@@ -3333,6 +3335,26 @@ function addRoom() {
   renderQBRooms();
 }
 
+window._collapsedRooms = {};
+
+function toggleRoomCollapse(ri) {
+  if (!window._collapsedRooms) window._collapsedRooms = {};
+  window._collapsedRooms[ri] = !window._collapsedRooms[ri];
+  renderQBRooms();
+}
+
+function collapseAllRooms() {
+  const rooms = window._activeQuoteRooms || [];
+  window._collapsedRooms = {};
+  rooms.forEach((r, i) => { window._collapsedRooms[i] = true; });
+  renderQBRooms();
+}
+
+function expandAllRooms() {
+  window._collapsedRooms = {};
+  renderQBRooms();
+}
+
 function duplicateRoom(ri) {
   const rooms = window._activeQuoteRooms || [];
   const source = rooms[ri];
@@ -3395,27 +3417,33 @@ function renderQBRooms() {
         <button class="del-btn" onclick="removeLine(${ri},${li})">🗑</button>
       </div>`).join('');
 
+    const collapsed = window._collapsedRooms && window._collapsedRooms[ri];
+    const chevron = collapsed ? '▶' : '▼';
+    const bodyDisplay = collapsed ? 'none' : 'block';
     return `<div class="qb-room-section" draggable="true" data-room-idx="${ri}" style="cursor:default;">
-      <div class="qb-room-header">
+      <div class="qb-room-header" style="cursor:pointer;" onclick="toggleRoomCollapse(${ri})">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span class="room-drag-handle" draggable="true" style="cursor:grab;color:rgba(255,255,255,0.5);font-size:18px;user-select:none;" title="Drag to reorder room">⠿</span>
-          <span>${room.name}</span>
+          <span class="room-drag-handle" draggable="true" style="cursor:grab;color:rgba(255,255,255,0.5);font-size:18px;user-select:none;" title="Drag to reorder room" onclick="event.stopPropagation()">⠿</span>
+          <span style="font-size:13px;color:rgba(255,255,255,0.6);">${chevron}</span>
+          <span>${room.name} <span style="font-size:11px;color:rgba(255,255,255,0.5);">(${room.lines.length} items)</span></span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;" onclick="event.stopPropagation()">
           <span class="qb-room-total">£${roomTotal.toFixed(2)}</span>
           <button onclick="duplicateRoom(${ri})" style="border:none;background:rgba(255,255,255,0.15);color:white;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;" title="Duplicate this room">📋 Duplicate</button>
           <button onclick="renameRoom(${ri})" style="border:none;background:rgba(255,255,255,0.15);color:white;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;" title="Rename">✏</button>
           <button onclick="removeRoom(${ri})" style="border:none;background:rgba(255,255,255,0.15);color:white;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;" title="Remove room">✕</button>
         </div>
       </div>
-      <div class="qb-line qb-line-header">
-        <span></span>
-        <span>Description</span><span>Supplier/Sub</span><span>Type</span>
-        <span>Qty/Days</span><span>Rate/Unit £</span><span>Total (inc.margin)</span><span></span>
-      </div>
-      ${lines}
-      <div class="qb-totals">
-        <button class="btn btn-sm btn-secondary" onclick="addLine(${ri})">+ Add Line</button>
+      <div class="qb-room-body" style="display:${bodyDisplay};">
+        <div class="qb-line qb-line-header">
+          <span></span>
+          <span>Description</span><span>Supplier/Sub</span><span>Type</span>
+          <span>Qty/Days</span><span>Rate/Unit £</span><span>Total (inc.margin)</span><span></span>
+        </div>
+        ${lines}
+        <div class="qb-totals">
+          <button class="btn btn-sm btn-secondary" onclick="addLine(${ri})">+ Add Line</button>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -3554,22 +3582,22 @@ function setQuoteMode(mode) {
 }
 
 function renderQBRoomSimple() {
-  // By Room mode - just room name + total price per room
   const rooms = window._activeQuoteRooms || [];
   const container = document.getElementById('qb-rooms-container');
-  const margin = parseFloat(document.getElementById('qb-labour-margin')?.value||10)/100;
   container.innerHTML = `
     <div style="margin-bottom:8px;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:var(--bg-secondary);">
+          <th style="padding:8px 4px;border-bottom:2px solid var(--border);width:30px;"></th>
           <th style="padding:8px 12px;text-align:left;border-bottom:2px solid var(--border);">Room / Area</th>
           <th style="padding:8px 12px;text-align:right;border-bottom:2px solid var(--border);">Price (inc. margin)</th>
           <th style="padding:8px 12px;text-align:right;border-bottom:2px solid var(--border);">Notes</th>
           <th style="padding:8px;border-bottom:2px solid var(--border);"></th>
         </tr></thead>
-        <tbody>
+        <tbody id="byroom-tbody">
           ${rooms.map((room,ri) => `
-            <tr style="border-bottom:1px solid var(--border);">
+            <tr data-room-ri="${ri}" style="border-bottom:1px solid var(--border);">
+              <td style="padding:8px 4px;text-align:center;"><span class="byroom-drag" draggable="true" style="cursor:grab;color:var(--text-muted);font-size:16px;user-select:none;" title="Drag to reorder">⠿</span></td>
               <td style="padding:8px 12px;">
                 <input type="text" value="${room.name}" placeholder="Room / Area name"
                   oninput="window._activeQuoteRooms[${ri}].name=this.value;recalcQuote();"
@@ -3590,6 +3618,7 @@ function renderQBRoomSimple() {
               </td>
             </tr>`).join('')}
           <tr style="background:var(--bg-secondary);font-weight:700;">
+            <td></td>
             <td style="padding:8px 12px;">Total</td>
             <td style="padding:8px 12px;text-align:right;" id="byroom-total">£0.00</td>
             <td colspan="2"></td>
@@ -3599,6 +3628,39 @@ function renderQBRoomSimple() {
     </div>
     <button class="btn btn-sm btn-secondary" onclick="window._activeQuoteRooms.push({name:'New Area',simpleTotal:0,notes:'',lines:[]});renderQBRooms();">+ Add Room / Area</button>`;
   recalcQuote();
+  // Init drag for by-room rows
+  const tbody = document.getElementById('byroom-tbody');
+  if (!tbody) return;
+  let dragRi = null;
+  tbody.querySelectorAll('.byroom-drag').forEach(handle => {
+    const row = handle.closest('tr');
+    handle.addEventListener('dragstart', function(e) {
+      dragRi = parseInt(row.dataset.roomRi);
+      row.style.opacity = '0.4';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', function() {
+      this.style.opacity = '1';
+      tbody.querySelectorAll('tr').forEach(r => r.style.borderTop = '');
+    });
+    row.addEventListener('dragover', function(e) {
+      if (dragRi === null) return;
+      e.preventDefault();
+      tbody.querySelectorAll('tr').forEach(r => r.style.borderTop = '');
+      this.style.borderTop = '3px solid var(--copper)';
+    });
+    row.addEventListener('drop', function(e) {
+      if (dragRi === null) return;
+      e.preventDefault();
+      const destRi = parseInt(this.dataset.roomRi);
+      if (isNaN(destRi) || dragRi === destRi) { dragRi = null; return; }
+      const rooms = window._activeQuoteRooms;
+      const [moved] = rooms.splice(dragRi, 1);
+      rooms.splice(destRi, 0, moved);
+      dragRi = null;
+      renderQBRooms();
+    });
+  });
 }
 
 function renderQBRoomByType() {
