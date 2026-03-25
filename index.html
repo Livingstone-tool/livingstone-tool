@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.22 -->
+<!-- Livingstone v3.24 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6340,16 +6340,18 @@ function renderJobPlan() {
               <th style="width:80px;">Start</th>
               <th style="width:80px;">End</th>
               <th style="width:70px;">Days</th>
-              <th style="width:70px;">Status</th>
+              <th style="width:110px;">Status</th>
               <th style="min-width:150px;">Notes</th>
               <th style="width:30px;"></th>
             </tr></thead>
             <tbody>${tasks.map((t,i) => {
               const realIdx = db.tasks.indexOf(t);
               const days = t.start && t.end ? countWorkingDays(t.start, t.end) : 0;
-              return `<tr style="border-bottom:1px solid var(--border);" data-taskidx="${realIdx}">
+              const statusBg = {'Not Started':'transparent','In Progress':'rgba(184,115,51,0.06)','Completed':'rgba(46,204,113,0.08)','Blocked':'rgba(231,76,60,0.06)'}[t.status] || 'transparent';
+              const statusColor = {'Not Started':'#adb5bd','In Progress':'#B87333','Completed':'#2ecc71','Blocked':'#e74c3c'}[t.status] || '#adb5bd';
+              return `<tr style="border-bottom:1px solid var(--border);background:${statusBg};" data-taskidx="${realIdx}">
                 <td style="text-align:center;"><input type="checkbox" class="task-check" data-idx="${realIdx}" onchange="updateBulkDeleteBtn()"></td>
-                <td><input type="text" value="${(t.desc||'').replace(/"/g,'&quot;')}" style="font-size:11px;padding:2px 4px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskDesc(${realIdx},this.value)"></td>
+                <td><input type="text" value="${(t.desc||'').replace(/"/g,'&quot;')}" style="font-size:11px;padding:2px 4px;width:100%;border:1px solid var(--border);border-radius:4px;${t.status==='Completed'?'text-decoration:line-through;color:var(--text-muted);':''}" onchange="updateTaskDesc(${realIdx},this.value)"></td>
                 <td><input type="date" value="${t.start||''}" style="font-size:11px;padding:2px 3px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskDate(${realIdx},'start',this.value)"></td>
                 <td><input type="date" value="${t.end||''}" style="font-size:11px;padding:2px 3px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskDate(${realIdx},'end',this.value)"></td>
                 <td style="text-align:center;">
@@ -6359,9 +6361,11 @@ function renderJobPlan() {
                     <button onclick="adjustTaskDays(${realIdx},1)" style="border:none;background:var(--limestone);border-radius:3px;cursor:pointer;padding:1px 5px;font-size:13px;">▶</button>
                   </div>
                 </td>
-                <td>
-                  <select style="width:100%;padding:2px 3px;font-size:10.5px;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskStatus(${realIdx},this.value)">
-                    ${['Not Started','In Progress','Completed','Blocked'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}
+                <td style="min-width:110px;">
+                  <select style="width:100%;padding:4px 6px;font-size:11px;font-weight:600;border:2px solid ${statusColor};border-radius:5px;color:${statusColor};background:white;cursor:pointer;" onchange="updateTaskStatus(${realIdx},this.value)">
+                    ${['Not Started','In Progress','Completed','Blocked'].map(s=>`<option ${s===t.status?'selected':''} style="color:${{
+                      'Not Started':'#adb5bd','In Progress':'#B87333','Completed':'#2ecc71','Blocked':'#e74c3c'
+                    }[s]};font-weight:600;">${s}</option>`).join('')}
                   </select>
                 </td>
                 <td><input type="text" value="${(t.notes||'').replace(/"/g,'&quot;')}" placeholder="..." style="font-size:10.5px;padding:2px 4px;width:100%;border:1px solid var(--border);border-radius:4px;" onchange="updateTaskNotes(${realIdx},this.value)"></td>
@@ -6730,10 +6734,15 @@ function sortTasksByDate(jobRef) {
   saveData();
 }
 
-function updateTaskStatus(idx, val) {
-  db.tasks[idx].status = val;
+async function updateTaskStatus(idx, val) {
+  const task = db.tasks[idx];
+  if (!task) { console.warn('No task at index', idx); return; }
+  task.status = val;
   saveData();
-  syncTaskToSupabase(db.tasks[idx]);
+  try {
+    await syncTaskToSupabase(task);
+    console.log('Task status synced:', task.desc, '→', val, '(id:', task.id, ')');
+  } catch(e) { console.warn('Task status sync failed:', e); }
   renderJobPlan();
 }
 
