@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.26 -->
+<!-- Livingstone v3.27 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1969,6 +1969,24 @@ async function loadFromSupabase() {
       if (!seen[norm] || j.ref.includes('-')) seen[norm] = j;
     });
     db.jobs = Object.values(seen);
+
+    // Merge any localStorage-only jobs that aren't in Supabase yet
+    try {
+      const cached = JSON.parse(localStorage.getItem('livingstoneDB'));
+      if (cached && cached.jobs && cached.jobs.length > 0) {
+        const supaRefs = new Set(db.jobs.map(j => j.ref.replace(/-/g, '').toUpperCase()));
+        const missingJobs = cached.jobs.filter(j => j.ref && !supaRefs.has(j.ref.replace(/-/g, '').toUpperCase()));
+        if (missingJobs.length > 0) {
+          console.log('Found', missingJobs.length, 'jobs in localStorage missing from Supabase — merging and syncing:', missingJobs.map(j=>j.ref).join(', '));
+          missingJobs.forEach(j => {
+            db.jobs.push(j);
+            // Auto-sync to Supabase
+            syncJobToSupabase(j.ref).catch(e => console.warn('Auto-sync job failed:', j.ref, e));
+          });
+        }
+      }
+    } catch(e) { console.warn('localStorage merge failed:', e); }
+
     // If Supabase returned no jobs, fall back to localStorage
     if (db.jobs.length === 0) {
       try {
