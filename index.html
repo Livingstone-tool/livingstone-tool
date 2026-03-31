@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.28 -->
+<!-- Livingstone v3.29 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2927,6 +2927,10 @@ function renderJobsTable() {
   var leadF = document.getElementById('job-filter-lead') ? document.getElementById('job-filter-lead').value : '';
   var jobs = db.jobs.filter(function(j) {
     return (!statusF || j.status === statusF) && (!leadF || j.lead === leadF);
+  }).sort(function(a, b) {
+    var na = parseInt((a.ref||'').replace(/\D/g, '')) || 0;
+    var nb = parseInt((b.ref||'').replace(/\D/g, '')) || 0;
+    return na - nb;
   });
   var tbody = document.getElementById('jobs-table-body');
   if (!tbody) return;
