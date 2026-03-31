@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.25 -->
+<!-- Livingstone v3.26 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1820,24 +1820,54 @@ function saveData() {
 async function syncJobToSupabase(ref) {
   const job = db.jobs.find(j => j.ref === ref);
   if (!job) return;
+  const payload = {
+    ref: ref,
+    name: job.name,
+    description: job.desc || '',
+    client_name: job.client?.name || '',
+    client_phone: job.client?.phone || '',
+    client_email: job.client?.email || '',
+    status: job.status,
+    lead: job.lead,
+    scale: job.scale,
+    estimate: job.estimate || 0,
+    est_cost: job.estCost || 0,
+    start_date: job.startDate || null,
+    end_date: job.endDate || null,
+    notes: job.notes || '',
+    address: job.address || '',
+    sort_order: job.sort_order || db.jobs.indexOf(job)
+  };
   try {
-    await supa.patchByRef('jobs', ref, {
-      name: job.name,
-      description: job.desc || '',
-      client_name: job.client?.name || '',
-      client_phone: job.client?.phone || '',
-      client_email: job.client?.email || '',
-      status: job.status,
-      lead: job.lead,
-      scale: job.scale,
-      estimate: job.estimate || 0,
-      est_cost: job.estCost || 0,
-      start_date: job.startDate || null,
-      end_date: job.endDate || null,
-      notes: job.notes || '',
-      address: job.address || ''
-    });
-  } catch(e) { console.warn('Supabase sync failed:', e.message); }
+    if (job.id) {
+      // Has Supabase ID — patch directly
+      await supa.patch('jobs', job.id, payload);
+    } else {
+      // Try patch by ref first (might exist without local ID)
+      const res = await supa.patchByRef('jobs', ref, payload);
+      if (res && res.length > 0) {
+        job.id = res[0].id;
+      } else {
+        // Doesn't exist — insert
+        const insertRes = await supa.post('jobs', payload);
+        if (insertRes && insertRes[0]) {
+          job.id = insertRes[0].id;
+          saveData();
+        }
+        console.log('New job inserted to Supabase:', ref);
+      }
+    }
+  } catch(e) {
+    // patchByRef failed (no matching row) — insert instead
+    try {
+      const insertRes = await supa.post('jobs', payload);
+      if (insertRes && insertRes[0]) {
+        job.id = insertRes[0].id;
+        saveData();
+      }
+      console.log('New job inserted to Supabase (fallback):', ref);
+    } catch(e2) { console.warn('Job insert failed:', e2.message); }
+  }
 }
 
 async function syncTaskToSupabase(task) {
