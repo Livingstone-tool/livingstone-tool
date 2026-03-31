@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.24 -->
+<!-- Livingstone v3.25 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2995,7 +2995,14 @@ async function reseedJobsFromBackup() {
 function newJobModal() {
   document.getElementById('job-modal-title').textContent = 'New Job';
   document.getElementById('job-edit-ref').value = '';
-  document.getElementById('job-ref').value = '';
+  // Auto-generate next LP-XXX reference
+  const existingNums = db.jobs.map(j => {
+    const m = (j.ref||'').match(/LP-?(\d+)/i);
+    return m ? parseInt(m[1]) : 0;
+  });
+  const nextNum = Math.max(0, ...existingNums) + 1;
+  const nextRef = 'LP-' + String(nextNum).padStart(3, '0');
+  document.getElementById('job-ref').value = nextRef;
   document.getElementById('job-ref').disabled = false;
   document.getElementById('job-name').value = '';
   document.getElementById('job-status').value = 'Initial Enquiry';
