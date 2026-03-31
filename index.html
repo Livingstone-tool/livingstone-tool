@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.27 -->
+<!-- Livingstone v3.28 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5614,6 +5614,44 @@ window.addEventListener('load', async () => {
   } catch(e) {
     console.error('Load failed:', e);
   }
+
+  // Recover orphaned quotes — create stub jobs for any quote refs that don't have a matching job
+  try {
+    const jobRefs = new Set(db.jobs.map(j => j.ref.replace(/-/g, '').toUpperCase()));
+    const orphanQuotes = (db.quotes||[]).filter(q => {
+      const qRef = (q.number || q.jobRef || '').replace(/-/g, '').toUpperCase();
+      return qRef && !jobRefs.has(qRef);
+    });
+    if (orphanQuotes.length > 0) {
+      console.log('Recovering', orphanQuotes.length, 'orphaned quotes:', orphanQuotes.map(q => q.number||q.jobRef).join(', '));
+      for (const q of orphanQuotes) {
+        const ref = q.number || q.jobRef;
+        if (!ref) continue;
+        // Format ref consistently as LP-XXX
+        const fmtRef = ref.includes('-') ? ref : ref.replace(/^(LP)(\d+)$/i, '$1-$2');
+        const stubJob = {
+          ref: fmtRef,
+          name: '',
+          desc: '',
+          client: { name: q.client || '', phone: '', email: '' },
+          status: 'Quoted',
+          lead: 'A',
+          scale: 5,
+          estimate: 0,
+          startDate: '',
+          endDate: '',
+          notes: 'Auto-recovered from orphaned quote',
+          address: '',
+          sort_order: db.jobs.length
+        };
+        db.jobs.push(stubJob);
+        jobRefs.add(fmtRef.replace(/-/g, '').toUpperCase());
+        syncJobToSupabase(fmtRef).catch(e => console.warn('Recovery sync failed:', fmtRef, e));
+      }
+      saveData();
+      console.log('Created stub jobs — please edit them to add names and details.');
+    }
+  } catch(e) { console.warn('Orphan quote recovery failed:', e); }
   
   // Remove loading overlay
   const overlay = document.getElementById('loading-overlay');
