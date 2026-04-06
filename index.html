@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.41 -->
+<!-- Livingstone v3.42 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1167,6 +1167,47 @@
   <!-- PLANNING PAGE -->
 
 <!-- COST ENTRY MODAL -->
+<!-- Kanban Task Edit Modal -->
+<div id="kanban-edit-modal" class="modal-overlay" style="display:none;" onclick="closeOnOverlay(event,'kanban-edit-modal')">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-header">
+      <div class="modal-title">Edit Task</div>
+      <button class="modal-close" onclick="closeModal('kanban-edit-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="kb-edit-idx">
+      <div class="form-group"><label>Description</label><input type="text" id="kb-edit-desc"></div>
+      <div class="grid-2" style="gap:12px;">
+        <div class="form-group"><label>Assigned To</label>
+          <select id="kb-edit-responsible" style="width:100%;">
+            <option value="">-- Unassigned --</option>
+            <option value="Adam Hemming">Adam</option>
+            <option value="Tom">Tom</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Status</label>
+          <select id="kb-edit-status" style="width:100%;">
+            <option>Not Started</option>
+            <option>In Progress</option>
+            <option>Completed</option>
+            <option>Blocked</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2" style="gap:12px;">
+        <div class="form-group"><label>Start Date</label><input type="date" id="kb-edit-start"></div>
+        <div class="form-group"><label>End Date</label><input type="date" id="kb-edit-end"></div>
+      </div>
+      <div class="form-group"><label>Notes</label><textarea id="kb-edit-notes" rows="2"></textarea></div>
+      <div id="kb-edit-subs-area" style="margin-top:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveKanbanTaskEdit()">Save</button>
+      <button class="btn btn-secondary" onclick="closeModal('kanban-edit-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="cost-modal" class="modal-overlay" style="display:none;" onclick="closeOnOverlay(event,'cost-modal')">
   <div class="modal" style="max-width:620px;" onclick="e=>e.stopPropagation()">
     <div class="modal-header">
@@ -5709,7 +5750,7 @@ function renderKanban() {
       // The task card spanning its days
       rowsHtml += '<td colspan="' + span + '" style="padding:2px 4px;">';
       rowsHtml += '<div draggable="true" ondragstart="window._kanbanLastDrop=Date.now();event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" ondragend="window._kanbanLastDrop=Date.now()" style="width:100%;background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:6px 10px;font-size:11px;cursor:grab;' + stk + 'box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;align-items:center;gap:8px;justify-content:space-between;">';
-      rowsHtml += '<div style="flex:1;min-width:0;">';
+      rowsHtml += '<div style="flex:1;min-width:0;cursor:pointer;" onclick="event.stopPropagation();openKanbanTaskEdit(' + ri + ')">';
       rowsHtml += '<span style="font-weight:600;">' + (t.desc||'') + '</span>';
       if (t.responsible) rowsHtml += ' <span style="font-size:10px;color:var(--text-muted);">\ud83d\udc77 ' + t.responsible + '</span>';
       if (span > 1) rowsHtml += ' <span style="font-size:9px;color:var(--copper);font-weight:600;">(' + span + 'd)</span>';
@@ -5807,6 +5848,47 @@ function addKanbanTaskForJob(jobRef) {
   const nt = { jobRef: jobRef, desc, responsible: '', start: di, end: di, status: 'Not Started', sortOrder: db.tasks.length, notes: '' };
   db.tasks.push(nt); saveData(); syncTaskToSupabase(nt);
   _kanbanExpanded[jobRef] = true;
+  renderKanban();
+}
+
+function openKanbanTaskEdit(taskIdx) {
+  const t = db.tasks[taskIdx];
+  if (!t) return;
+  document.getElementById('kb-edit-idx').value = taskIdx;
+  document.getElementById('kb-edit-desc').value = t.desc || '';
+  document.getElementById('kb-edit-status').value = t.status || 'Not Started';
+  document.getElementById('kb-edit-start').value = t.start || '';
+  document.getElementById('kb-edit-end').value = t.end || '';
+  document.getElementById('kb-edit-notes').value = t.notes || '';
+  // Populate responsible dropdown with subs + Adam/Tom
+  const sel = document.getElementById('kb-edit-responsible');
+  sel.innerHTML = '<option value="">-- Unassigned --</option>';
+  sel.innerHTML += '<option value="Adam Hemming"' + (t.responsible==='Adam Hemming'?' selected':'') + '>Adam</option>';
+  sel.innerHTML += '<option value="Tom"' + (t.responsible==='Tom'?' selected':'') + '>Tom</option>';
+  (db.subs||[]).forEach(s => {
+    const selected = t.responsible === s.name ? ' selected' : '';
+    sel.innerHTML += '<option value="' + s.name + '"' + selected + '>' + s.name + (s.trade ? ' (' + s.trade + ')' : '') + '</option>';
+  });
+  // If current responsible doesn't match any option, add it
+  if (t.responsible && !sel.querySelector('option[value="' + t.responsible + '"]')) {
+    sel.innerHTML += '<option value="' + t.responsible + '" selected>' + t.responsible + '</option>';
+  }
+  document.getElementById('kanban-edit-modal').style.display = 'flex';
+}
+
+async function saveKanbanTaskEdit() {
+  const idx = parseInt(document.getElementById('kb-edit-idx').value);
+  const t = db.tasks[idx];
+  if (!t) return;
+  t.desc = document.getElementById('kb-edit-desc').value;
+  t.responsible = document.getElementById('kb-edit-responsible').value;
+  t.status = document.getElementById('kb-edit-status').value;
+  t.start = document.getElementById('kb-edit-start').value;
+  t.end = document.getElementById('kb-edit-end').value;
+  t.notes = document.getElementById('kb-edit-notes').value;
+  saveData();
+  await syncTaskToSupabase(t);
+  closeModal('kanban-edit-modal');
   renderKanban();
 }
 
