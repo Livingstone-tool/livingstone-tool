@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.48 -->
+<!-- Livingstone v3.49 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5746,13 +5746,22 @@ function renderKanban() {
       const ri = db.tasks.indexOf(t);
       if (ri < 0) return;
       const te = t.end || t.start;
-      // DST-safe: find day index by comparing ISO date strings
       const dayISOs = days.map(d => fmtISO(d));
-      let startDi = dayISOs.findIndex(d => d >= t.start);
-      if (startDi < 0) startDi = 0;
+      // Skip if task doesn't actually overlap this week
+      if (te < dayISOs[0] || t.start > dayISOs[6]) return;
+      // Find which day column the task starts in
+      let startDi = -1;
+      for (let k = 0; k < 7; k++) {
+        if (t.start <= dayISOs[k]) { startDi = k; break; }
+      }
+      if (startDi < 0) startDi = 0; // started before this week, show from Monday
+      // If task started before this week, clamp to day 0
       if (t.start < dayISOs[0]) startDi = 0;
-      let endDi = 0;
-      for (let k = 6; k >= 0; k--) { if (dayISOs[k] <= te) { endDi = k; break; } }
+      // Find which day column the task ends in
+      let endDi = 6;
+      for (let k = 6; k >= 0; k--) {
+        if (te >= dayISOs[k]) { endDi = k; break; }
+      }
       endDi = Math.max(startDi, Math.min(6, endDi));
       startDi = Math.max(0, Math.min(6, startDi));
       const span = Math.max(1, Math.min(7 - startDi, endDi - startDi + 1));
@@ -5797,16 +5806,18 @@ function renderKanban() {
 
   });
   rowsHtml += '<tr><td colspan="8" style="padding:12px;text-align:center;"><button class="btn btn-sm btn-secondary" onclick="addKanbanTask()">+ Add Task</button></td></tr>';
-  board.innerHTML = '<div style="display:flex;position:sticky;top:0;z-index:10;background:var(--slate);border-radius:6px 6px 0 0;">' +
-    '<div style="width:15%;padding:10px 8px;color:white;font-size:12px;font-weight:600;">Job</div>' +
-    days.map(d => {
-      const isToday = fmtISO(d) === fmtISO(new Date());
-      return '<div style="flex:1;padding:10px 6px;text-align:center;font-size:11px;font-weight:600;color:white;' + (isToday?'background:var(--copper);':'') + '">' +
-        d.toLocaleDateString('en-GB',{weekday:'short'}) + '<br><span style="font-size:10px;font-weight:400;">' +
-        d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + '</span></div>';
-    }).join('') +
-    '</div>' +
-    '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><tbody>' + rowsHtml + '</tbody></table>';
+  const dayHeaderCells = days.map(d => {
+    const isToday = fmtISO(d) === fmtISO(new Date());
+    return '<th style="padding:10px 6px;text-align:center;font-size:11px;font-weight:600;color:white;' + (isToday?'background:var(--copper);':'background:var(--slate);') + '">' +
+      d.toLocaleDateString('en-GB',{weekday:'short'}) + '<br><span style="font-size:10px;font-weight:400;">' +
+      d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + '</span></th>';
+  }).join('');
+
+  board.innerHTML = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">' +
+    '<thead><tr style="position:sticky;top:0;z-index:10;">' +
+    '<th style="width:15%;padding:10px 8px;background:var(--slate);color:white;font-size:12px;font-weight:600;text-align:left;">Job</th>' +
+    dayHeaderCells +
+    '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
 }
 
 async function kanbanDrop(event, jobRef, dayISO) {
