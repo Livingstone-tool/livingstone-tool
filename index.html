@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.40 -->
+<!-- Livingstone v3.41 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2763,16 +2763,20 @@ function renderDashboard() {
   const activeJobs = db.jobs.filter(j => activeStatuses.includes(j.status));
   const pipelineVal = activeJobs.reduce((s,j) => s + (j.quoteValue || j.estimate || 0), 0);
   const totalCost = activeJobs.reduce((s,j) => s + (j.estCost || 0), 0);
-  const totalMargin = pipelineVal - totalCost;
-  const marginPct = pipelineVal ? (totalMargin/pipelineVal*100).toFixed(1) : 0;
+  // Margin uses only jobs with actual quotes and est costs
+  const marginJobs = activeJobs.filter(j => j.quoteValue && j.estCost);
+  const marginQuoteVal = marginJobs.reduce((s,j) => s + j.quoteValue, 0);
+  const marginCostVal = marginJobs.reduce((s,j) => s + j.estCost, 0);
+  const totalMargin = marginQuoteVal - marginCostVal;
+  const marginPct = marginQuoteVal ? (totalMargin/marginQuoteVal*100).toFixed(1) : 0;
   const confirmedJobs = db.jobs.filter(j => j.status === 'Confirmed' || j.status === 'In Progress');
   const quotedJobs = db.jobs.filter(j => j.status === 'Quoted');
   const quotedVal = quotedJobs.reduce((s,j) => s + (j.quoteValue || 0), 0);
 
   set('dash-pipeline-value', pipelineVal ? '£' + Math.round(pipelineVal).toLocaleString() : '—');
   set('dash-pipeline-sub', activeJobs.length + ' active jobs');
-  set('dash-margin-value', totalCost ? '£' + Math.round(totalMargin).toLocaleString() : '—');
-  set('dash-margin-sub', totalCost ? marginPct + '% avg margin' : 'Add est. costs to jobs');
+  set('dash-margin-value', marginQuoteVal ? '£' + Math.round(totalMargin).toLocaleString() : '—');
+  set('dash-margin-sub', marginQuoteVal ? marginPct + '% avg margin' : 'Add est. costs to jobs');
   set('dash-confirmed-value', confirmedJobs.length);
   set('dash-confirmed-sub', quotedJobs.length + ' quoted, pending');
   set('dash-quotes-value', quotedVal ? '£' + Math.round(quotedVal).toLocaleString() : '—');
