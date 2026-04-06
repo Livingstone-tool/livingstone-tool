@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.29 -->
+<!-- Livingstone v3.30 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1257,6 +1257,7 @@
       <div class="tab active" onclick="switchPlanningTab('gantt',this)">Master Gantt</div>
       <div class="tab" onclick="switchPlanningTab('jobplan',this)">Job Project Plans</div>
       <div class="tab" onclick="switchPlanningTab('weekly',this)">Weekly Schedule</div>
+      <div class="tab" onclick="switchPlanningTab('kanban',this)">📋 Week Planner</div>
       <div class="tab" onclick="switchPlanningTab('todos',this)">To Do</div>
       <div class="tab" onclick="switchPlanningTab('shopping',this)">🛒 Shopping List</div>
     </div>
@@ -1331,6 +1332,19 @@
       <div id="planning-todos-area">
         <div class="empty-state"><div style="font-size:40px;opacity:0.3;margin-bottom:12px;">✅</div><p>Select a job above to see its to-do list</p></div>
       </div>
+    </div>
+    <div id="plan-tab-kanban" style="display:none;">
+      <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-secondary" onclick="shiftKanbanWeek(-1)">◀ Prev</button>
+        <div id="kanban-week-label" style="font-weight:600;font-size:14px;min-width:220px;text-align:center;"></div>
+        <button class="btn btn-sm btn-secondary" onclick="shiftKanbanWeek(1)">Next ▶</button>
+        <button class="btn btn-sm btn-secondary" onclick="kanbanToThisWeek()">This Week</button>
+        <select id="kanban-lead-filter" style="width:auto;font-size:13px;padding:4px 8px;" onchange="renderKanban()">
+          <option value="">All</option><option value="A">Adam</option><option value="T">Tom</option>
+        </select>
+        <button class="btn btn-sm btn-secondary" onclick="toggleKanbanHideJobs()">👁 Show/Hide Jobs</button>
+      </div>
+      <div id="kanban-board" style="overflow-x:auto;"></div>
     </div>
     <div id="plan-tab-shopping" style="display:none;">
       <div style="display:flex;gap:12px;margin-bottom:20px;align-items:center;flex-wrap:wrap;">
@@ -5605,6 +5619,116 @@ function globalSearch(q) {
 }
 
 // ============================================================
+// WEEK PLANNER (KANBAN)
+// ============================================================
+let _kanbanWeekStart = null;
+let _kanbanHiddenJobs = {};
+
+function getKanbanWeekStart() {
+  if (!_kanbanWeekStart) {
+    const d = new Date();
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    d.setHours(0,0,0,0);
+    _kanbanWeekStart = d;
+  }
+  return new Date(_kanbanWeekStart);
+}
+function shiftKanbanWeek(n) { const d = getKanbanWeekStart(); d.setDate(d.getDate() + n * 7); _kanbanWeekStart = d; renderKanban(); }
+function kanbanToThisWeek() { _kanbanWeekStart = null; renderKanban(); }
+
+function toggleKanbanHideJobs() {
+  const activeJobs = db.jobs.filter(j => ['Confirmed','In Progress','Quoted','Preparing Quote'].includes(j.status));
+  const names = activeJobs.map(j => (j.ref + ' — ' + j.name + (_kanbanHiddenJobs[j.ref] ? ' [HIDDEN]' : ' [VISIBLE]'))).join('\n');
+  const input = prompt('Enter job refs to toggle visibility (comma-separated):\n\n' + names);
+  if (!input) return;
+  input.split(',').forEach(r => { const ref = r.trim(); if (ref) _kanbanHiddenJobs[ref] = !_kanbanHiddenJobs[ref]; });
+  renderKanban();
+}
+
+function renderKanban() {
+  const board = document.getElementById('kanban-board');
+  if (!board) return;
+  const weekStart = getKanbanWeekStart();
+  const days = [];
+  for (let i = 0; i < 5; i++) { const d = new Date(weekStart); d.setDate(d.getDate() + i); days.push(d); }
+  const fmtISO = d => d.toISOString().split('T')[0];
+  const weekStartISO = fmtISO(days[0]);
+  const weekEndISO = fmtISO(days[4]);
+  const label = document.getElementById('kanban-week-label');
+  if (label) { const fmt = d => d.toLocaleDateString('en-GB', {day:'numeric',month:'short'}); label.textContent = 'Week: ' + fmt(days[0]) + ' — ' + fmt(days[4]) + ', ' + days[0].getFullYear(); }
+  const leadFilter = document.getElementById('kanban-lead-filter')?.value || '';
+  const activeJobs = db.jobs.filter(j => ['Confirmed','In Progress','Quoted','Preparing Quote'].includes(j.status) && !_kanbanHiddenJobs[j.ref] && (!leadFilter || j.lead === leadFilter)
+  ).sort((a,b) => (parseInt((a.ref||'').replace(/\D/g,''))||0) - (parseInt((b.ref||'').replace(/\D/g,''))||0));
+  const dayHeaders = days.map(d => { const isToday = fmtISO(d) === fmtISO(new Date()); return '<th style="width:17%;padding:10px 6px;text-align:center;font-size:11px;font-weight:600;' + (isToday?'background:var(--copper);color:white;':'background:var(--slate);color:white;') + '">' + d.toLocaleDateString('en-GB',{weekday:'short'}) + '<br><span style="font-size:10px;font-weight:400;">' + d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + '</span></th>'; }).join('');
+  let rowsHtml = '';
+  activeJobs.forEach(job => {
+    const jobTasks = db.tasks.filter(t => t.jobRef === job.ref && t.start);
+    const weekTasks = jobTasks.filter(t => { const te = t.end || t.start; return t.start <= weekEndISO && te >= weekStartISO; });
+    const statusCol = {'Confirmed':'var(--success)','In Progress':'var(--copper)','Quoted':'var(--slate)','Preparing Quote':'#adb5bd'}[job.status] || '#adb5bd';
+    const cid = 'kb-' + job.ref.replace(/[^a-zA-Z0-9]/g,'');
+    rowsHtml += '<tr style="border-top:2px solid var(--border);"><td style="padding:8px 10px;background:var(--limestone);font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;" onclick="var el=document.getElementById(\'' + cid + '\');el.style.display=el.style.display===\'none\'?\'\':\'none\'">';
+    rowsHtml += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + statusCol + ';margin-right:6px;"></span>';
+    rowsHtml += job.ref + ' — ' + (job.name||'') + '<span style="color:var(--text-muted);font-weight:400;font-size:11px;margin-left:6px;">' + weekTasks.length + ' task' + (weekTasks.length!==1?'s':'') + '</span>';
+    rowsHtml += '<span style="float:right;color:var(--text-muted);font-size:13px;">▾</span></td>';
+    days.forEach(d => { rowsHtml += '<td style="padding:4px;background:var(--limestone);" data-kanban-drop="' + job.ref + '|' + fmtISO(d) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.15)\'" ondragleave="this.style.background=\'var(--limestone)\'" ondrop="kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(d) + '\');this.style.background=\'var(--limestone)\'"></td>'; });
+    rowsHtml += '</tr>';
+    rowsHtml += '<tr id="' + cid + '"' + (weekTasks.length?'':' style="display:none;"') + '><td></td>';
+    days.forEach((d, di) => {
+      const dayISO = fmtISO(d);
+      const startCards = weekTasks.filter(t => { if (t.start === dayISO) return true; if (t.start < weekStartISO && di === 0 && (t.end||t.start) >= dayISO) return true; return false; });
+      let cellHtml = '';
+      startCards.forEach(t => {
+        const ri = db.tasks.indexOf(t);
+        const te = t.end || t.start;
+        const sD = new Date(Math.max(new Date(t.start), days[0]));
+        const eD = new Date(Math.min(new Date(te), days[4]));
+        const span = Math.max(1, Math.round((eD - sD) / 86400000) + 1);
+        const wp = span > 1 ? (span * 100) + '%' : '100%';
+        const sBg = {'Not Started':'#f5f0e8','In Progress':'rgba(184,115,51,0.12)','Completed':'rgba(46,204,113,0.15)','Blocked':'rgba(231,76,60,0.12)'}[t.status] || '#f5f0e8';
+        const sBo = {'Not Started':'#ccc','In Progress':'var(--copper)','Completed':'var(--success)','Blocked':'var(--danger)'}[t.status] || '#ccc';
+        const stk = t.status === 'Completed' ? 'text-decoration:line-through;opacity:0.5;' : '';
+        cellHtml += '<div draggable="true" ondragstart="event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" style="position:relative;width:' + wp + ';background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:11px;cursor:grab;' + stk + 'z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.08);">';
+        cellHtml += '<div style="font-weight:600;line-height:1.3;">' + (t.desc||'') + '</div>';
+        if (t.responsible) cellHtml += '<div style="font-size:10px;color:var(--text-muted);margin-top:1px;">👷 ' + t.responsible + '</div>';
+        if (span > 1) cellHtml += '<div style="font-size:9px;color:var(--text-muted);">' + span + ' days</div>';
+        cellHtml += '</div>';
+      });
+      rowsHtml += '<td style="padding:4px;vertical-align:top;min-height:40px;border-right:1px solid rgba(0,0,0,0.05);" data-kanban-drop="' + job.ref + '|' + dayISO + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.1)\'" ondragleave="this.style.background=\'\'" ondrop="kanbanDrop(event,\'' + job.ref + '\',\'' + dayISO + '\');this.style.background=\'\'">' + cellHtml + '</td>';
+    });
+    rowsHtml += '</tr>';
+  });
+  rowsHtml += '<tr><td colspan="6" style="padding:12px;text-align:center;"><button class="btn btn-sm btn-secondary" onclick="addKanbanTask()">+ Add Task</button></td></tr>';
+  board.innerHTML = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr><th style="width:15%;padding:10px 8px;background:var(--slate);color:white;font-size:12px;">Job</th>' + dayHeaders + '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+}
+
+async function kanbanDrop(event, jobRef, dayISO) {
+  event.preventDefault();
+  const task = db.tasks[parseInt(event.dataTransfer.getData('text'))];
+  if (!task) return;
+  const dur = task.start && task.end ? Math.max(0, Math.round((new Date(task.end) - new Date(task.start)) / 86400000)) : 0;
+  task.start = dayISO;
+  const ne = new Date(dayISO); ne.setDate(ne.getDate() + dur); task.end = ne.toISOString().split('T')[0];
+  if (task.jobRef !== jobRef) task.jobRef = jobRef;
+  saveData(); await syncTaskToSupabase(task); renderKanban();
+}
+
+function addKanbanTask() {
+  const ws = getKanbanWeekStart();
+  const aj = db.jobs.filter(j => ['Confirmed','In Progress','Quoted','Preparing Quote'].includes(j.status));
+  const jobRef = prompt('Job ref:\n\n' + aj.map(j => j.ref + ' — ' + j.name).join('\n'));
+  if (!jobRef) return;
+  const job = db.jobs.find(j => j.ref.replace(/-/g,'').toUpperCase() === jobRef.replace(/-/g,'').toUpperCase());
+  if (!job) { alert('Job not found'); return; }
+  const desc = prompt('Task description:');
+  if (!desc) return;
+  const dn = parseInt(prompt('Day (1=Mon..5=Fri):','1')) || 1;
+  const td = new Date(ws); td.setDate(td.getDate() + Math.max(0, Math.min(4, dn-1)));
+  const di = td.toISOString().split('T')[0];
+  const nt = { jobRef: job.ref, desc, responsible: '', start: di, end: di, status: 'Not Started', sortOrder: db.tasks.length, notes: '' };
+  db.tasks.push(nt); saveData(); syncTaskToSupabase(nt); renderKanban();
+}
+
+// ============================================================
 // INIT
 // ============================================================
 window.addEventListener('load', async () => {
@@ -5856,13 +5980,14 @@ function exportProjectPlanPDF() {
 function switchPlanningTab(tab, el) {
   document.querySelectorAll('#page-planning .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['gantt','jobplan','weekly','todos','shopping'].forEach(t => {
+  ['gantt','jobplan','weekly','kanban','todos','shopping'].forEach(t => {
     const el2 = document.getElementById('plan-tab-' + t);
     if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
   if (tab === 'gantt') renderGantt();
   if (tab === 'weekly') renderWeekly();
   if (tab === 'jobplan') renderJobPlan();
+  if (tab === 'kanban') renderKanban();
   if (tab === 'todos') populateTodoJobDropdown();
   if (tab === 'shopping') populateShoppingJobDropdown();
 }
