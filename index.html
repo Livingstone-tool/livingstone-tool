@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.50 -->
+<!-- Livingstone v3.51 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5715,7 +5715,7 @@ function renderKanban() {
   const weekStart = getKanbanWeekStart();
   const days = [];
   for (let i = 0; i < 7; i++) { const d = new Date(weekStart); d.setDate(d.getDate() + i); days.push(d); }
-  const fmtISO = d => d.toISOString().split('T')[0];
+  const fmtISO = d => { const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+dd; };
   const weekStartISO = fmtISO(days[0]);
   const weekEndISO = fmtISO(days[6]);
   const label = document.getElementById('kanban-week-label');
