@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.37 -->
+<!-- Livingstone v3.39 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5649,8 +5649,8 @@ let _kanbanExpanded = {};
 
 function toggleKanbanJob(cid, ref) {
   _kanbanExpanded[ref] = !_kanbanExpanded[ref];
-  var el = document.getElementById(cid);
-  if (el) el.style.display = _kanbanExpanded[ref] ? '' : 'none';
+  const show = _kanbanExpanded[ref];
+  document.querySelectorAll('.' + cid + '-row').forEach(r => { r.style.display = show ? '' : 'none'; });
 }
 
 function renderKanban() {
@@ -5684,36 +5684,50 @@ function renderKanban() {
     rowsHtml += '</td>';
     days.forEach(d => { rowsHtml += '<td style="padding:4px;background:var(--limestone);" data-kanban-drop="' + job.ref + '|' + fmtISO(d) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.15)\'" ondragleave="this.style.background=\'var(--limestone)\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(d) + '\');this.style.background=\'var(--limestone)\'"></td>'; });
     rowsHtml += '</tr>';
-    rowsHtml += '<tr id="' + cid + '"' + (isExpanded?'':' style="display:none;"') + '><td></td>';
-    rowsHtml += '<td colspan="5" style="padding:0;">';
-    rowsHtml += '<div style="display:flex;min-height:' + Math.max(50, weekTasks.length * 44) + 'px;">';
-    days.forEach((d, di) => {
-      const dayISO = fmtISO(d);
-      rowsHtml += '<div style="flex:1;padding:4px;border-right:1px solid rgba(0,0,0,0.05);min-height:40px;" data-kanban-drop="' + job.ref + '|' + dayISO + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.1)\'" ondragleave="this.style.background=\'\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + dayISO + '\');this.style.background=\'\'">';
-      const startCards = weekTasks.filter(t => { if (t.start === dayISO) return true; if (t.start < weekStartISO && di === 0 && (t.end||t.start) >= dayISO) return true; return false; });
-      startCards.forEach(t => {
-        const ri = db.tasks.indexOf(t);
-        const te = t.end || t.start;
-        const sD = new Date(Math.max(new Date(t.start), days[0]));
-        const eD = new Date(Math.min(new Date(te), days[4]));
-        const span = Math.max(1, Math.round((eD - sD) / 86400000) + 1);
-        const sBg = {'Not Started':'#f5f0e8','In Progress':'rgba(184,115,51,0.12)','Completed':'rgba(46,204,113,0.15)','Blocked':'rgba(231,76,60,0.12)'}[t.status] || '#f5f0e8';
-        const sBo = {'Not Started':'#ccc','In Progress':'var(--copper)','Completed':'var(--success)','Blocked':'var(--danger)'}[t.status] || '#ccc';
-        const stk = t.status === 'Completed' ? 'text-decoration:line-through;opacity:0.5;' : '';
-        const wSt = span > 1 ? 'width:calc(' + (span*100) + '% + ' + ((span-1)*8) + 'px);overflow:visible;' : 'width:100%;';
-        rowsHtml += '<div draggable="true" ondragstart="window._kanbanLastDrop=Date.now();event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" ondragend="window._kanbanLastDrop=Date.now()" style="' + wSt + 'background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:11px;cursor:grab;' + stk + 'z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.08);position:relative;">';
-        rowsHtml += '<div style="font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (t.desc||'') + '</div>';
-        if (t.responsible) rowsHtml += '<div style="font-size:10px;color:var(--text-muted);margin-top:1px;">\uD83D\uDC77 ' + t.responsible + '</div>';
-        if (span > 1) rowsHtml += '<div style="font-size:9px;color:var(--copper);font-weight:600;">' + span + ' days</div>';
-        rowsHtml += '<div style="display:flex;gap:2px;margin-top:3px;justify-content:flex-end;">';
-        rowsHtml += '<button onclick="event.stopPropagation();shiftTaskWeek(' + ri + ',-1)" style="border:none;background:rgba(0,0,0,0.08);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--text-muted);" title="Move to previous week">\u25C0 wk</button>';
-        rowsHtml += '<button onclick="event.stopPropagation();shiftTaskWeek(' + ri + ',1)" style="border:none;background:rgba(0,0,0,0.08);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--text-muted);" title="Move to next week">wk \u25B6</button>';
-        rowsHtml += '<button onclick="event.stopPropagation();deleteKanbanTask(' + ri + ')" style="border:none;background:rgba(231,76,60,0.15);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--danger);" title="Delete task">\u2715</button>';
-        rowsHtml += '</div></div>';
-      });
+    // Each task gets its own row — spanning across day columns
+    weekTasks.sort((a,b) => (a.start||'').localeCompare(b.start||''));
+    weekTasks.forEach((t, ti) => {
+      const ri = db.tasks.indexOf(t);
+      const te = t.end || t.start;
+      const sD = new Date(Math.max(new Date(t.start), days[0]));
+      const eD = new Date(Math.min(new Date(te), days[4]));
+      const startDi = Math.max(0, Math.round((sD - days[0]) / 86400000));
+      const endDi = Math.min(4, Math.round((eD - days[0]) / 86400000));
+      const span = endDi - startDi + 1;
+      const sBg = {'Not Started':'#f5f0e8','In Progress':'rgba(184,115,51,0.15)','Completed':'rgba(46,204,113,0.15)','Blocked':'rgba(231,76,60,0.12)'}[t.status] || '#f5f0e8';
+      const sBo = {'Not Started':'#ccc','In Progress':'var(--copper)','Completed':'var(--success)','Blocked':'var(--danger)'}[t.status] || '#ccc';
+      const stk = t.status === 'Completed' ? 'text-decoration:line-through;opacity:0.5;' : '';
+      const vis = isExpanded ? '' : 'display:none;';
+      rowsHtml += '<tr class="' + cid + '-row" style="' + vis + '">';
+      rowsHtml += '<td style="padding:0;"></td>';
+      // Empty cells before the task
+      if (startDi > 0) rowsHtml += '<td colspan="' + startDi + '" style="padding:2px;border-right:1px solid rgba(0,0,0,0.05);" data-kanban-drop="' + job.ref + '|' + fmtISO(days[startDi > 0 ? startDi-1 : 0]) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.1)\'" ondragleave="this.style.background=\'\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(days[startDi > 0 ? startDi-1 : 0]) + '\');this.style.background=\'\'"></td>';
+      // The task card spanning its days
+      rowsHtml += '<td colspan="' + span + '" style="padding:2px 4px;">';
+      rowsHtml += '<div draggable="true" ondragstart="window._kanbanLastDrop=Date.now();event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" ondragend="window._kanbanLastDrop=Date.now()" style="width:100%;background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:6px 10px;font-size:11px;cursor:grab;' + stk + 'box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;align-items:center;gap:8px;justify-content:space-between;">';
+      rowsHtml += '<div style="flex:1;min-width:0;">';
+      rowsHtml += '<span style="font-weight:600;">' + (t.desc||'') + '</span>';
+      if (t.responsible) rowsHtml += ' <span style="font-size:10px;color:var(--text-muted);">\ud83d\udc77 ' + t.responsible + '</span>';
+      if (span > 1) rowsHtml += ' <span style="font-size:9px;color:var(--copper);font-weight:600;">(' + span + 'd)</span>';
       rowsHtml += '</div>';
+      rowsHtml += '<div style="display:flex;gap:2px;flex-shrink:0;">';
+      rowsHtml += '<button onclick="event.stopPropagation();shiftTaskWeek(' + ri + ',-1)" style="border:none;background:rgba(0,0,0,0.08);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--text-muted);" title="Prev week">\u25c0wk</button>';
+      rowsHtml += '<button onclick="event.stopPropagation();shiftTaskWeek(' + ri + ',1)" style="border:none;background:rgba(0,0,0,0.08);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--text-muted);" title="Next week">wk\u25b6</button>';
+      rowsHtml += '<button onclick="event.stopPropagation();deleteKanbanTask(' + ri + ')" style="border:none;background:rgba(231,76,60,0.15);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--danger);" title="Delete">\u2715</button>';
+      rowsHtml += '</div></div></td>';
+      // Empty cells after the task
+      const afterCols = 4 - endDi;
+      if (afterCols > 0) rowsHtml += '<td colspan="' + afterCols + '" style="padding:2px;border-right:1px solid rgba(0,0,0,0.05);" data-kanban-drop="' + job.ref + '|' + fmtISO(days[endDi < 4 ? endDi+1 : 4]) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.1)\'" ondragleave="this.style.background=\'\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(days[endDi < 4 ? endDi+1 : 4]) + '\');this.style.background=\'\'"></td>';
+      rowsHtml += '</tr>';
     });
-    rowsHtml += '</div></td></tr>';
+    // Empty drop row if no tasks
+    if (!weekTasks.length) {
+      const vis2 = isExpanded ? '' : 'display:none;';
+      rowsHtml += '<tr class="' + cid + '-row" style="' + vis2 + '"><td></td>';
+      days.forEach(d => { rowsHtml += '<td style="padding:4px;min-height:30px;border-right:1px solid rgba(0,0,0,0.05);" data-kanban-drop="' + job.ref + '|' + fmtISO(d) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.1)\'" ondragleave="this.style.background=\'\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(d) + '\');this.style.background=\'\'"></td>'; });
+      rowsHtml += '</tr>';
+    }
+
   });
   rowsHtml += '<tr><td colspan="6" style="padding:12px;text-align:center;"><button class="btn btn-sm btn-secondary" onclick="addKanbanTask()">+ Add Task</button></td></tr>';
   board.innerHTML = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr><th style="width:15%;padding:10px 8px;background:var(--slate);color:white;font-size:12px;">Job</th>' + dayHeaders + '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
