@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.34 -->
+<!-- Livingstone v3.35 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5645,8 +5645,9 @@ function toggleKanbanHideJobs() {
   renderKanban();
 }
 
-function toggleKanbanJob(cid) {
-  if (window._kanbanDragSuppress) return;
+function toggleKanbanJob(cid, event) {
+  // Only toggle if this was a genuine click, not after a drag
+  if (window._kanbanLastDrop && (Date.now() - window._kanbanLastDrop) < 1000) return;
   var el = document.getElementById(cid);
   if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
@@ -5694,7 +5695,7 @@ function renderKanban() {
         const sBg = {'Not Started':'#f5f0e8','In Progress':'rgba(184,115,51,0.12)','Completed':'rgba(46,204,113,0.15)','Blocked':'rgba(231,76,60,0.12)'}[t.status] || '#f5f0e8';
         const sBo = {'Not Started':'#ccc','In Progress':'var(--copper)','Completed':'var(--success)','Blocked':'var(--danger)'}[t.status] || '#ccc';
         const stk = t.status === 'Completed' ? 'text-decoration:line-through;opacity:0.5;' : '';
-        cellHtml += '<div draggable="true" ondragstart="window._kanbanDragSuppress=true;event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" ondragend="setTimeout(()=>{window._kanbanDragSuppress=false},500)" style="position:relative;width:' + wp + ';background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:11px;cursor:grab;' + stk + 'z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.08);">';
+        cellHtml += '<div draggable="true" ondragstart="window._kanbanLastDrop=Date.now();event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" ondragend="window._kanbanLastDrop=Date.now()" style="position:relative;width:' + wp + ';background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:11px;cursor:grab;' + stk + 'z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.08);">';
         cellHtml += '<div style="font-weight:600;line-height:1.3;">' + (t.desc||'') + '</div>';
         if (t.responsible) cellHtml += '<div style="font-size:10px;color:var(--text-muted);margin-top:1px;">👷 ' + t.responsible + '</div>';
         if (span > 1) cellHtml += '<div style="font-size:9px;color:var(--text-muted);">' + span + ' days</div>';
@@ -5716,8 +5717,7 @@ function renderKanban() {
 async function kanbanDrop(event, jobRef, dayISO) {
   event.preventDefault();
   event.stopPropagation();
-  window._kanbanDragging = true;
-  setTimeout(() => { window._kanbanDragging = false; }, 100);
+  window._kanbanLastDrop = Date.now();
   const task = db.tasks[parseInt(event.dataTransfer.getData('text'))];
   if (!task) return;
   const dur = task.start && task.end ? Math.max(0, Math.round((new Date(task.end) - new Date(task.start)) / 86400000)) : 0;
