@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.49 -->
+<!-- Livingstone v3.50 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5814,8 +5814,9 @@ function renderKanban() {
   }).join('');
 
   board.innerHTML = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">' +
+    '<colgroup><col style="width:15%;">' + days.map(() => '<col style="width:' + (85/7).toFixed(2) + '%;">').join('') + '</colgroup>' +
     '<thead><tr style="position:sticky;top:0;z-index:10;">' +
-    '<th style="width:15%;padding:10px 8px;background:var(--slate);color:white;font-size:12px;font-weight:600;text-align:left;">Job</th>' +
+    '<th style="padding:10px 8px;background:var(--slate);color:white;font-size:12px;font-weight:600;text-align:left;">Job</th>' +
     dayHeaderCells +
     '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
 }
