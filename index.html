@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.42 -->
+<!-- Livingstone v3.43 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5775,7 +5775,16 @@ function renderKanban() {
 
   });
   rowsHtml += '<tr><td colspan="6" style="padding:12px;text-align:center;"><button class="btn btn-sm btn-secondary" onclick="addKanbanTask()">+ Add Task</button></td></tr>';
-  board.innerHTML = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead style="position:sticky;top:0;z-index:10;"><tr><th style="width:15%;padding:10px 8px;background:var(--slate);color:white;font-size:12px;">Job</th>' + dayHeaders + '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+  board.innerHTML = '<div style="display:flex;position:sticky;top:0;z-index:10;background:var(--slate);border-radius:6px 6px 0 0;">' +
+    '<div style="width:15%;padding:10px 8px;color:white;font-size:12px;font-weight:600;">Job</div>' +
+    days.map(d => {
+      const isToday = fmtISO(d) === fmtISO(new Date());
+      return '<div style="flex:1;padding:10px 6px;text-align:center;font-size:11px;font-weight:600;color:white;' + (isToday?'background:var(--copper);':'') + '">' +
+        d.toLocaleDateString('en-GB',{weekday:'short'}) + '<br><span style="font-size:10px;font-weight:400;">' +
+        d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + '</span></div>';
+    }).join('') +
+    '</div>' +
+    '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><tbody>' + rowsHtml + '</tbody></table>';
 }
 
 async function kanbanDrop(event, jobRef, dayISO) {
