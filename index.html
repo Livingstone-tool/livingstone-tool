@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.39 -->
+<!-- Livingstone v3.40 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5730,7 +5730,7 @@ function renderKanban() {
 
   });
   rowsHtml += '<tr><td colspan="6" style="padding:12px;text-align:center;"><button class="btn btn-sm btn-secondary" onclick="addKanbanTask()">+ Add Task</button></td></tr>';
-  board.innerHTML = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr><th style="width:15%;padding:10px 8px;background:var(--slate);color:white;font-size:12px;">Job</th>' + dayHeaders + '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+  board.innerHTML = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead style="position:sticky;top:0;z-index:10;"><tr><th style="width:15%;padding:10px 8px;background:var(--slate);color:white;font-size:12px;">Job</th>' + dayHeaders + '</tr></thead><tbody>' + rowsHtml + '</tbody></table>';
 }
 
 async function kanbanDrop(event, jobRef, dayISO) {
