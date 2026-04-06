@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.46 -->
+<!-- Livingstone v3.48 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5679,8 +5679,18 @@ function getKanbanWeekStart() {
   }
   return new Date(_kanbanWeekStart);
 }
-function shiftKanbanWeek(n) { const d = getKanbanWeekStart(); d.setDate(d.getDate() + n * 7); _kanbanWeekStart = d; renderKanban(); }
-function kanbanToThisWeek() { _kanbanWeekStart = null; renderKanban(); }
+function shiftKanbanWeek(n) {
+  const d = getKanbanWeekStart();
+  d.setDate(d.getDate() + n * 7);
+  _kanbanWeekStart = new Date(d);
+  console.log('Kanban week shifted to:', _kanbanWeekStart.toISOString().split('T')[0]);
+  renderKanban();
+}
+function kanbanToThisWeek() {
+  _kanbanWeekStart = null;
+  console.log('Kanban reset to this week');
+  renderKanban();
+}
 
 function toggleKanbanHideJobs() {
   const activeJobs = db.jobs.filter(j => ['Confirmed','In Progress','Quoted','Preparing Quote'].includes(j.status));
@@ -5734,12 +5744,18 @@ function renderKanban() {
     weekTasks.sort((a,b) => (a.start||'').localeCompare(b.start||''));
     weekTasks.forEach((t, ti) => {
       const ri = db.tasks.indexOf(t);
+      if (ri < 0) return;
       const te = t.end || t.start;
-      const sD = new Date(Math.max(new Date(t.start), days[0]));
-      const eD = new Date(Math.min(new Date(te), days[6]));
-      const startDi = Math.max(0, Math.round((sD - days[0]) / 86400000));
-      const endDi = Math.min(6, Math.round((eD - days[0]) / 86400000));
-      const span = endDi - startDi + 1;
+      // DST-safe: find day index by comparing ISO date strings
+      const dayISOs = days.map(d => fmtISO(d));
+      let startDi = dayISOs.findIndex(d => d >= t.start);
+      if (startDi < 0) startDi = 0;
+      if (t.start < dayISOs[0]) startDi = 0;
+      let endDi = 0;
+      for (let k = 6; k >= 0; k--) { if (dayISOs[k] <= te) { endDi = k; break; } }
+      endDi = Math.max(startDi, Math.min(6, endDi));
+      startDi = Math.max(0, Math.min(6, startDi));
+      const span = Math.max(1, Math.min(7 - startDi, endDi - startDi + 1));
       const sBg = {'Not Started':'#f5f0e8','In Progress':'rgba(184,115,51,0.15)','Completed':'rgba(46,204,113,0.15)','Blocked':'rgba(231,76,60,0.12)'}[t.status] || '#f5f0e8';
       const sBo = {'Not Started':'#ccc','In Progress':'var(--copper)','Completed':'var(--success)','Blocked':'var(--danger)'}[t.status] || '#ccc';
       const stk = t.status === 'Completed' ? 'text-decoration:line-through;opacity:0.5;' : '';
