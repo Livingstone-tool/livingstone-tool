@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.31 -->
+<!-- Livingstone v3.33 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1306,7 +1306,7 @@
         <button class="btn btn-primary" onclick="addTaskToSelectedJob()">+ Add Task</button>
         <button class="btn btn-secondary" onclick="addPaymentGateModal()">+ Payment Gate</button>
         <button class="btn btn-secondary" onclick="generatePlanFromQuote()" style="background:var(--copper);color:white;">📋 Generate Plan from Quote</button>
-        <button class="btn btn-secondary" onclick="exportProjectPlanPDF()">⬇ Export PDF</button>
+        <button class="btn btn-secondary" onclick="shiftAllJobTasks()">📅 Shift All Tasks</button>
         <button class="btn btn-secondary" onclick="exportProjectPlanPDF()">⬇ Export PDF</button>
       </div>
       <div id="jobplan-area">
@@ -5687,13 +5687,14 @@ function renderKanban() {
         const sBg = {'Not Started':'#f5f0e8','In Progress':'rgba(184,115,51,0.12)','Completed':'rgba(46,204,113,0.15)','Blocked':'rgba(231,76,60,0.12)'}[t.status] || '#f5f0e8';
         const sBo = {'Not Started':'#ccc','In Progress':'var(--copper)','Completed':'var(--success)','Blocked':'var(--danger)'}[t.status] || '#ccc';
         const stk = t.status === 'Completed' ? 'text-decoration:line-through;opacity:0.5;' : '';
-        cellHtml += '<div draggable="true" ondragstart="event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" style="position:relative;width:' + wp + ';background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:11px;cursor:grab;' + stk + 'z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.08);">';
+        cellHtml += '<div draggable="true" ondragstart="window._kanbanDragging=true;event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" ondragend="setTimeout(()=>{window._kanbanDragging=false},200)" style="position:relative;width:' + wp + ';background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:5px 8px;margin-bottom:4px;font-size:11px;cursor:grab;' + stk + 'z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.08);">';
         cellHtml += '<div style="font-weight:600;line-height:1.3;">' + (t.desc||'') + '</div>';
         if (t.responsible) cellHtml += '<div style="font-size:10px;color:var(--text-muted);margin-top:1px;">👷 ' + t.responsible + '</div>';
         if (span > 1) cellHtml += '<div style="font-size:9px;color:var(--text-muted);">' + span + ' days</div>';
         cellHtml += '<div style="display:flex;gap:2px;margin-top:3px;justify-content:flex-end;">';
         cellHtml += '<button onclick="event.stopPropagation();shiftTaskWeek(' + ri + ',-1)" style="border:none;background:rgba(0,0,0,0.08);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--text-muted);" title="Move to previous week">◀ wk</button>';
         cellHtml += '<button onclick="event.stopPropagation();shiftTaskWeek(' + ri + ',1)" style="border:none;background:rgba(0,0,0,0.08);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--text-muted);" title="Move to next week">wk ▶</button>';
+        cellHtml += '<button onclick="event.stopPropagation();deleteKanbanTask(' + ri + ')" style="border:none;background:rgba(231,76,60,0.15);border-radius:3px;padding:1px 5px;font-size:9px;cursor:pointer;color:var(--danger);" title="Delete task">✕</button>';
         cellHtml += '</div>';
         cellHtml += '</div>';
       });
@@ -5726,6 +5727,44 @@ async function shiftTaskWeek(taskIdx, weeks) {
   if (task.start) { const d = new Date(task.start); d.setDate(d.getDate() + shiftDays); task.start = d.toISOString().split('T')[0]; }
   if (task.end) { const d = new Date(task.end); d.setDate(d.getDate() + shiftDays); task.end = d.toISOString().split('T')[0]; }
   saveData(); await syncTaskToSupabase(task); renderKanban();
+}
+
+async function deleteKanbanTask(taskIdx) {
+  const task = db.tasks[taskIdx];
+  if (!task) return;
+  if (!confirm('Delete task: "' + (task.desc||'') + '"?')) return;
+  if (task.id) { try { await supa.delete('tasks', task.id); } catch(e) { console.warn('Task delete failed:', e); } }
+  db.tasks.splice(taskIdx, 1);
+  saveData();
+  renderKanban();
+}
+
+async function shiftAllJobTasks() {
+  const ref = document.getElementById('jobplan-select')?.value;
+  if (!ref) { alert('Select a job first.'); return; }
+  const tasks = db.tasks.filter(t => t.jobRef === ref && t.start);
+  if (!tasks.length) { alert('No dated tasks to shift.'); return; }
+  const input = prompt('Shift all ' + tasks.length + ' tasks for ' + ref + ' by how many days?\n\nExamples:\n  7 = forward 1 week\n  14 = forward 2 weeks\n  -7 = back 1 week');
+  if (input === null) return;
+  const shiftDays = parseInt(input);
+  if (!shiftDays || isNaN(shiftDays)) { alert('Please enter a number of days.'); return; }
+  const dir = shiftDays > 0 ? 'forward' : 'back';
+  if (!confirm('Shift all ' + tasks.length + ' tasks ' + dir + ' by ' + Math.abs(shiftDays) + ' days?')) return;
+  for (const t of tasks) {
+    if (t.start) { const d = new Date(t.start); d.setDate(d.getDate() + shiftDays); t.start = d.toISOString().split('T')[0]; }
+    if (t.end) { const d = new Date(t.end); d.setDate(d.getDate() + shiftDays); t.end = d.toISOString().split('T')[0]; }
+    syncTaskToSupabase(t).catch(e => console.warn('Shift sync failed:', t.desc, e));
+  }
+  // Also shift the job's start/end dates
+  const job = db.jobs.find(j => j.ref === ref);
+  if (job) {
+    if (job.startDate) { const d = new Date(job.startDate); d.setDate(d.getDate() + shiftDays); job.startDate = d.toISOString().split('T')[0]; }
+    if (job.endDate) { const d = new Date(job.endDate); d.setDate(d.getDate() + shiftDays); job.endDate = d.toISOString().split('T')[0]; }
+    syncJobToSupabase(ref).catch(e => console.warn('Job date sync failed:', e));
+  }
+  saveData();
+  renderJobPlan();
+  alert('Shifted ' + tasks.length + ' tasks ' + dir + ' by ' + Math.abs(shiftDays) + ' days.');
 }
 
 function addKanbanTask() {
