@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.35 -->
+<!-- Livingstone v3.36 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5645,17 +5645,17 @@ function toggleKanbanHideJobs() {
   renderKanban();
 }
 
-function toggleKanbanJob(cid, event) {
-  // Only toggle if this was a genuine click, not after a drag
-  if (window._kanbanLastDrop && (Date.now() - window._kanbanLastDrop) < 1000) return;
+let _kanbanExpanded = {};
+
+function toggleKanbanJob(cid, ref) {
+  _kanbanExpanded[ref] = !_kanbanExpanded[ref];
   var el = document.getElementById(cid);
-  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  if (el) el.style.display = _kanbanExpanded[ref] ? '' : 'none';
 }
 
 function renderKanban() {
   const board = document.getElementById('kanban-board');
   if (!board) return;
-  window._kanbanDragSuppress = false;
   const weekStart = getKanbanWeekStart();
   const days = [];
   for (let i = 0; i < 5; i++) { const d = new Date(weekStart); d.setDate(d.getDate() + i); days.push(d); }
@@ -5674,13 +5674,17 @@ function renderKanban() {
     const weekTasks = jobTasks.filter(t => { const te = t.end || t.start; return t.start <= weekEndISO && te >= weekStartISO; });
     const statusCol = {'Confirmed':'var(--success)','In Progress':'var(--copper)','Quoted':'var(--slate)','Preparing Quote':'#adb5bd'}[job.status] || '#adb5bd';
     const cid = 'kb-' + job.ref.replace(/[^a-zA-Z0-9]/g,'');
-    rowsHtml += '<tr style="border-top:2px solid var(--border);"><td style="padding:8px 10px;background:var(--limestone);font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;" onclick="toggleKanbanJob(\'' + cid + '\')">';
+    const isExpanded = _kanbanExpanded[job.ref] !== undefined ? _kanbanExpanded[job.ref] : weekTasks.length > 0;
+    if (_kanbanExpanded[job.ref] === undefined && weekTasks.length > 0) _kanbanExpanded[job.ref] = true;
+    rowsHtml += '<tr style="border-top:2px solid var(--border);"><td style="padding:8px 10px;background:var(--limestone);font-weight:600;font-size:12px;white-space:nowrap;">';
+    rowsHtml += '<button onclick="toggleKanbanJob(\'' + cid + '\',\'' + job.ref + '\')" style="border:none;background:none;cursor:pointer;font-size:13px;color:var(--text-muted);padding:0 4px 0 0;">' + (isExpanded ? '▾' : '▸') + '</button>';
     rowsHtml += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + statusCol + ';margin-right:6px;"></span>';
     rowsHtml += job.ref + ' — ' + (job.name||'') + '<span style="color:var(--text-muted);font-weight:400;font-size:11px;margin-left:6px;">' + weekTasks.length + ' task' + (weekTasks.length!==1?'s':'') + '</span>';
-    rowsHtml += '<span style="float:right;color:var(--text-muted);font-size:13px;">▾</span></td>';
+    rowsHtml += ' <button onclick="addKanbanTaskForJob(\'' + job.ref + '\')" style="border:none;background:rgba(0,0,0,0.06);border-radius:3px;padding:1px 6px;font-size:10px;cursor:pointer;color:var(--copper);margin-left:6px;" title="Add task to this job">+ task</button>';
+    rowsHtml += '</td>';
     days.forEach(d => { rowsHtml += '<td style="padding:4px;background:var(--limestone);" data-kanban-drop="' + job.ref + '|' + fmtISO(d) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.15)\'" ondragleave="this.style.background=\'var(--limestone)\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(d) + '\');this.style.background=\'var(--limestone)\'"></td>'; });
     rowsHtml += '</tr>';
-    rowsHtml += '<tr id="' + cid + '"' + (weekTasks.length?'':' style="display:none;"') + '><td></td>';
+    rowsHtml += '<tr id="' + cid + '"' + (isExpanded?'':' style="display:none;"') + '><td></td>';
     days.forEach((d, di) => {
       const dayISO = fmtISO(d);
       const startCards = weekTasks.filter(t => { if (t.start === dayISO) return true; if (t.start < weekStartISO && di === 0 && (t.end||t.start) >= dayISO) return true; return false; });
@@ -5772,6 +5776,19 @@ async function shiftAllJobTasks() {
   saveData();
   renderJobPlan();
   alert('Shifted ' + tasks.length + ' tasks ' + dir + ' by ' + Math.abs(shiftDays) + ' days.');
+}
+
+function addKanbanTaskForJob(jobRef) {
+  const ws = getKanbanWeekStart();
+  const desc = prompt('Task description for ' + jobRef + ':');
+  if (!desc) return;
+  const dn = parseInt(prompt('Day (1=Mon..5=Fri):', '1')) || 1;
+  const td = new Date(ws); td.setDate(td.getDate() + Math.max(0, Math.min(4, dn-1)));
+  const di = td.toISOString().split('T')[0];
+  const nt = { jobRef: jobRef, desc, responsible: '', start: di, end: di, status: 'Not Started', sortOrder: db.tasks.length, notes: '' };
+  db.tasks.push(nt); saveData(); syncTaskToSupabase(nt);
+  _kanbanExpanded[jobRef] = true;
+  renderKanban();
 }
 
 function addKanbanTask() {
