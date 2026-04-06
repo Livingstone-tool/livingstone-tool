@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.51 -->
+<!-- Livingstone v3.52 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5738,7 +5738,7 @@ function renderKanban() {
     rowsHtml += job.ref + ' — ' + (job.name||'') + '<span style="color:var(--text-muted);font-weight:400;font-size:11px;margin-left:6px;">' + weekTasks.length + ' task' + (weekTasks.length!==1?'s':'') + '</span>';
     rowsHtml += ' <button onclick="addKanbanTaskForJob(\'' + job.ref + '\')" style="border:none;background:rgba(0,0,0,0.06);border-radius:3px;padding:1px 6px;font-size:10px;cursor:pointer;color:var(--copper);margin-left:6px;" title="Add task to this job">+ task</button>';
     rowsHtml += '</td>';
-    days.forEach(d => { rowsHtml += '<td style="padding:4px;background:var(--limestone);" data-kanban-drop="' + job.ref + '|' + fmtISO(d) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.15)\'" ondragleave="this.style.background=\'var(--limestone)\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(d) + '\');this.style.background=\'var(--limestone)\'"></td>'; });
+    days.forEach(d => { rowsHtml += '<td style="padding:8px 4px;background:var(--limestone);min-height:32px;" data-kanban-drop="' + job.ref + '|' + fmtISO(d) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.2)\';this.style.outline=\'2px dashed var(--copper)\'" ondragleave="this.style.background=\'var(--limestone)\';this.style.outline=\'none\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(d) + '\');this.style.background=\'var(--limestone)\';this.style.outline=\'none\'"></td>'; });
     rowsHtml += '</tr>';
     // Each task gets its own row — spanning across day columns
     weekTasks.sort((a,b) => (a.start||'').localeCompare(b.start||''));
@@ -5774,8 +5774,8 @@ function renderKanban() {
       // Individual day cells — task card spans its columns, empty cells are drop zones
       for (let dayI = 0; dayI < 7; dayI++) {
         if (dayI === startDi) {
-          // Task card cell
-          rowsHtml += '<td colspan="' + span + '" style="padding:2px 4px;" data-kanban-drop="' + job.ref + '|' + fmtISO(days[dayI]) + '" ondragover="event.preventDefault();this.style.background=\'rgba(184,115,51,0.1)\'" ondragleave="this.style.background=\'\'" ondrop="event.stopPropagation();kanbanDrop(event,\'' + job.ref + '\',\'' + fmtISO(days[dayI]) + '\');this.style.background=\'\'">';
+          // Task card cell — no drop handler here, use the job header row to drop
+          rowsHtml += '<td colspan="' + span + '" style="padding:2px 4px;">';
           rowsHtml += '<div draggable="true" ondragstart="window._kanbanLastDrop=Date.now();event.dataTransfer.setData(\'text\',\'' + ri + '\');event.dataTransfer.effectAllowed=\'move\'" ondragend="window._kanbanLastDrop=Date.now()" style="width:100%;background:' + sBg + ';border-left:3px solid ' + sBo + ';border-radius:4px;padding:6px 10px;font-size:11px;cursor:grab;' + stk + 'box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;align-items:center;gap:8px;justify-content:space-between;">';
           rowsHtml += '<div style="flex:1;min-width:0;cursor:pointer;" onclick="event.stopPropagation();openKanbanTaskEdit(' + ri + ')">';
           rowsHtml += '<span style="font-weight:600;">' + (t.desc||'') + '</span>';
