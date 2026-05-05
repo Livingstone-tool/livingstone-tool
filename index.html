@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.62 -->
+<!-- Livingstone v3.63 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8284,7 +8284,24 @@ function applyCombineJobs() {
 function loadJobCostsTab() {
   const ref = window._currentJobRef;
   const el = document.getElementById('jd-costs-content');
-  if (el && ref) el.innerHTML = renderJobCosts(ref, window._costCombineRefs || []);
+  if (!el || !ref) return;
+  // Preserve search input focus and cursor
+  const searchEl = document.getElementById('jd-cost-search');
+  const hadFocus = searchEl && document.activeElement === searchEl;
+  const cursorPos = hadFocus ? searchEl.selectionStart : null;
+  const searchVal = searchEl ? searchEl.value : '';
+  const vatVal = document.getElementById('jd-cost-vat')?.value || 'none';
+  
+  el.innerHTML = renderJobCosts(ref, window._costCombineRefs || []);
+  
+  // Restore search focus and cursor
+  if (hadFocus) {
+    const newSearch = document.getElementById('jd-cost-search');
+    if (newSearch) {
+      newSearch.focus();
+      if (cursorPos !== null) newSearch.setSelectionRange(cursorPos, cursorPos);
+    }
+  }
 }
 
 function generateJobReport(jobRef) {
