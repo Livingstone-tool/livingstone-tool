@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.64 -->
+<!-- Livingstone v3.65 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8170,14 +8170,25 @@ function renderJobCosts(jobRef, extraRefs) {
   }).join('');
 
   // Cost rows with per-entry VAT and line toggle
+  if (!window._jobVatReclaim) window._jobVatReclaim = {};
+  const vr = window._jobVatReclaim;
+  const isReclaimable = (e, idx) => {
+    const lineKey = 'rcl_' + (e.id || 'i' + idx);
+    if (vr[lineKey] === true) return true;
+    if (vr[lineKey] === false) return false;
+    // Default: materials reclaimable, labour/other not
+    return e.type === 'Material';
+  };
+
   const rows2 = jobEntries.sort((a,b) => (a.date||'').localeCompare(b.date||'')).map(function(e, idx) {
     const typeColor = e.type==='Labour' ? 'badge-confirmed' : e.type==='Material' ? 'badge-quoted' : 'badge-enquiry';
     const lineKey = 'line_' + (e.id || 'i' + idx);
+    const rclKey = 'rcl_' + (e.id || 'i' + idx);
     const lineCur = vs[lineKey] || '';
     const vatMul = getVatForEntry(e, idx);
     const vatTag = vatMul > 1 ? '<span style="font-size:9px;color:var(--copper);margin-left:3px;">+VAT</span>' : vatMul < 1 ? '<span style="font-size:9px;color:var(--text-muted);margin-left:3px;">ex-VAT</span>' : '';
     const btnStyle = 'border:none;border-radius:3px;padding:2px 6px;font-size:9px;cursor:pointer;';
-    // Effective state: what VAT is actually applied (from line override or cascade)
+    // Effective state
     const effectiveState = lineCur || (vatMul > 1 ? 'add' : vatMul < 1 ? 'remove' : 'none');
     const isOverride = lineCur !== '';
     const removeActive = effectiveState === 'remove';
@@ -8186,6 +8197,12 @@ function renderJobCosts(jobRef, extraRefs) {
     const activeRemove = removeActive ? (isOverride ? 'background:var(--slate);color:white;' : 'background:var(--slate);color:white;opacity:0.6;') : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
     const activeAdd = addActive ? (isOverride ? 'background:var(--copper);color:white;' : 'background:var(--copper);color:white;opacity:0.6;') : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
     const activeNone = noneActive ? (isOverride ? 'background:var(--limestone);font-weight:600;' : 'background:var(--limestone);font-weight:600;opacity:0.6;') : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
+    // Reclaimable toggle
+    const rcl = isReclaimable(e, idx);
+    const rclIsOverride = vr[rclKey] !== undefined;
+    const rclStyle = rcl
+      ? (rclIsOverride ? 'background:#27ae60;color:white;' : 'background:#27ae60;color:white;opacity:0.6;')
+      : (rclIsOverride ? 'background:#e74c3c;color:white;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);');
     return '<tr>'
       + '<td style="font-size:12px;">' + (e.date||'') + '</td>'
       + '<td><span class="badge ' + typeColor + '" style="font-size:10px;">' + e.type + '</span></td>'
@@ -8198,6 +8215,7 @@ function renderJobCosts(jobRef, extraRefs) {
       + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='none'?'':'none') + '\';loadJobCostsTab()" style="' + btnStyle + activeNone + '" title="As entered">As is</button>'
       + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='add'?'':'add') + '\';loadJobCostsTab()" style="' + btnStyle + activeAdd + '" title="Add 20% VAT">+20%</button>'
       + '</div></td>'
+      + '<td style="padding:2px 4px;"><button onclick="window._jobVatReclaim[\'' + rclKey + '\']=' + (rclIsOverride ? 'undefined;delete window._jobVatReclaim[\'' + rclKey + '\']' : (!rcl).toString()) + ';loadJobCostsTab()" style="' + btnStyle + rclStyle + 'border:1px solid var(--border);border-radius:4px;min-width:50px;" title="' + (rcl ? 'VAT reclaimable — click to change' : 'VAT not reclaimable — click to change') + '">' + (rcl ? '✓ Reclaim' : '✗ No rcl') + '</button></td>'
       + '</tr>';
   }).join('');
 
@@ -8234,9 +8252,9 @@ function renderJobCosts(jobRef, extraRefs) {
     + '</div></details>'
     + (searchQ && !jobEntries.length ? '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;text-align:center;">No costs matching "' + searchQ + '"</div>' : '')
     + '<table style="font-size:12.5px;width:100%;">'
-    + '<thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Supplier</th><th style="text-align:right;">Amount</th><th style="text-align:center;">VAT</th></tr></thead>'
+    + '<thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Supplier</th><th style="text-align:right;">Amount</th><th style="text-align:center;">VAT</th><th style="text-align:center;">Reclaim</th></tr></thead>'
     + '<tbody>' + rows2 + '</tbody>'
-    + '<tfoot><tr style="background:var(--limestone);font-weight:700;"><td colspan="4" style="text-align:right;padding:8px 12px;">Total</td><td style="text-align:right;padding:8px 12px;">' + fmtR(totalVat) + '</td><td></td></tr></tfoot>'
+    + '<tfoot><tr style="background:var(--limestone);font-weight:700;"><td colspan="4" style="text-align:right;padding:8px 12px;">Total</td><td style="text-align:right;padding:8px 12px;">' + fmtR(totalVat) + '</td><td></td><td></td></tr></tfoot>'
     + '</table>'
     + '<div style="margin-top:12px;text-align:right;"><button class="btn btn-sm btn-primary" onclick="openFirstCostForJob()">+ Log Cost for this Job</button></div>';
 }
@@ -8365,7 +8383,18 @@ function generateJobReport(jobRef) {
   ).join('');
 
   const vatCollected = quoteVal * 0.2;
-  const vatReclaimable = materialsTotal * 0.2;
+  // Calculate reclaimable VAT based on per-line settings
+  if (!window._jobVatReclaim) window._jobVatReclaim = {};
+  const vrReport = window._jobVatReclaim;
+  const reclaimableTotal = entries.reduce((s, e, idx) => {
+    const rclKey = 'rcl_' + (e.id || 'i' + idx);
+    let rcl;
+    if (vrReport[rclKey] === true) rcl = true;
+    else if (vrReport[rclKey] === false) rcl = false;
+    else rcl = e.type === 'Material'; // default
+    return s + (rcl ? e.allocAmount : 0);
+  }, 0);
+  const vatReclaimable = reclaimableTotal * 0.2;
   const vatOwed = vatCollected - vatReclaimable;
   const trueProfit = margin - vatOwed;
   const trueProfitPct = quoteVal ? (trueProfit / quoteVal * 100).toFixed(1) : '—';
@@ -8428,7 +8457,7 @@ thead th { padding:7px 10px; text-align:left; font-size:10px; text-transform:upp
       <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;">Total Costs</td><td style="text-align:right;font-weight:600;">- ${fmtM(totalSpent)}</td></tr>
       <tr style="border-bottom:2px solid #B87333;"><td style="padding:8px 0;font-weight:600;">Gross Margin</td><td style="text-align:right;font-weight:700;color:${marginCol};">${fmtM(margin)} (${marginPct}%)</td></tr>
       <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;color:#e74c3c;">VAT Man's Cut (20% of quote)</td><td style="text-align:right;font-weight:600;color:#e74c3c;">- ${fmtM(vatCollected)}</td></tr>
-      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;color:#27ae60;">Less: Reclaimable VAT (20% of materials £${Math.round(materialsTotal).toLocaleString()})</td><td style="text-align:right;font-weight:600;color:#27ae60;">+ ${fmtM(vatReclaimable)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;color:#27ae60;">Less: Reclaimable VAT (20% of reclaimable costs £${Math.round(reclaimableTotal).toLocaleString()})</td><td style="text-align:right;font-weight:600;color:#27ae60;">+ ${fmtM(vatReclaimable)}</td></tr>
       <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;">Net VAT Owed to HMRC</td><td style="text-align:right;font-weight:600;">- ${fmtM(vatOwed)}</td></tr>
       <tr><td style="padding:10px 0;font-weight:700;font-size:15px;">TRUE PROFIT</td><td style="text-align:right;font-weight:700;font-size:15px;color:${trueProfitCol};">${fmtM(trueProfit)} (${trueProfitPct}%)</td></tr>
     </table>
