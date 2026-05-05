@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.59 -->
+<!-- Livingstone v3.60 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8241,10 +8241,10 @@ function promptCombineJobs(currentRef) {
   let html = '<div style="max-height:400px;overflow-y:auto;">';
   otherJobs.forEach(j => {
     const checked = currentCombined.includes(j.ref) ? ' checked' : '';
-    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'\'">';
-    html += '<input type="checkbox" class="combine-job-check" value="' + j.ref + '"' + checked + '>';
-    html += '<strong>' + j.ref + '</strong> — ' + (j.name||'(unnamed)');
-    html += '<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">' + (j.status||'') + '</span>';
+    html += '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'\'">';
+    html += '<input type="checkbox" class="combine-job-check" value="' + j.ref + '"' + checked + ' style="flex-shrink:0;width:18px;height:18px;">';
+    html += '<span style="flex:1;"><strong>' + j.ref + '</strong> — ' + (j.name||'(unnamed)') + '</span>';
+    html += '<span style="flex-shrink:0;font-size:11px;color:var(--text-muted);">' + (j.status||'') + '</span>';
     html += '</label>';
   });
   html += '</div>';
