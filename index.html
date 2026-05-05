@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.53 -->
+<!-- Livingstone v3.54 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1430,21 +1430,30 @@
   <div class="card">
     <div class="card-header">
       <div class="card-title">Cost Log</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <select id="ct-filter-job" onchange="renderCostLog()" style="font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);width:auto;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="ct-search" placeholder="Search supplier, description..." oninput="renderCostLog()" style="font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);width:180px;">
+        <select id="ct-filter-job" onchange="renderCostLog()" style="font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);width:auto;">
           <option value="">All Jobs</option>
         </select>
-        <select id="ct-filter-type" onchange="renderCostLog()" style="font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);width:auto;">
+        <select id="ct-filter-type" onchange="renderCostLog()" style="font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);width:auto;">
           <option value="">All Types</option>
           <option value="Labour">Labour</option>
           <option value="Material">Material</option>
           <option value="Other">Other</option>
         </select>
+        <select id="ct-filter-supplier" onchange="renderCostLog()" style="font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);width:auto;">
+          <option value="">All Suppliers</option>
+        </select>
+        <select id="ct-vat" onchange="renderCostLog();renderCostStats()" style="font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);width:auto;">
+          <option value="none">As entered</option>
+          <option value="add">+ 20% VAT</option>
+          <option value="remove">- 20% VAT</option>
+        </select>
       </div>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Allocated to</th><th style="text-align:right;">Amount</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Supplier</th><th>Allocated to</th><th style="text-align:right;">Amount</th><th></th></tr></thead>
         <tbody id="cost-log-body"></tbody>
       </table>
     </div>
@@ -7649,25 +7658,38 @@ function renderCostTracker() {
     filt.innerHTML = '<option value="">All Jobs</option>' +
       db.jobs.map(j => `<option value="${j.ref}" ${j.ref===current?'selected':''}>${j.ref} — ${j.name}</option>`).join('');
   }
+  // Populate supplier filter
+  const supFilt = document.getElementById('ct-filter-supplier');
+  if (supFilt) {
+    const current = supFilt.value;
+    const suppliers = new Set();
+    (db.costs||[]).forEach(c => { if (c.supplier) suppliers.add(c.supplier); if (c.description) suppliers.add(c.description); });
+    const sorted = [...suppliers].sort();
+    supFilt.innerHTML = '<option value="">All Suppliers</option>' +
+      sorted.map(s => `<option value="${s}" ${s===current?'selected':''}>${s}</option>`).join('');
+  }
   renderCostLog();
   renderCostStats();
 }
 
 function renderCostStats() {
   const costs = db.costs || [];
-  const total = costs.reduce((s,c) => s + (c.amount||0), 0);
-  const labour = costs.filter(c=>c.type==='Labour').reduce((s,c)=>s+(c.amount||0),0);
-  const materials = costs.filter(c=>c.type==='Material').reduce((s,c)=>s+(c.amount||0),0);
-  const other = costs.filter(c=>c.type==='Other').reduce((s,c)=>s+(c.amount||0),0);
+  const vatMode = document.getElementById('ct-vat')?.value || 'none';
+  const vatMult = vatMode === 'add' ? 1.2 : vatMode === 'remove' ? (1/1.2) : 1;
+  const vatLabel = vatMode === 'add' ? ' +VAT' : vatMode === 'remove' ? ' ex-VAT' : '';
+  const total = costs.reduce((s,c) => s + (c.amount||0), 0) * vatMult;
+  const labour = costs.filter(c=>c.type==='Labour').reduce((s,c)=>s+(c.amount||0),0) * vatMult;
+  const materials = costs.filter(c=>c.type==='Material').reduce((s,c)=>s+(c.amount||0),0) * vatMult;
+  const other = costs.filter(c=>c.type==='Other').reduce((s,c)=>s+(c.amount||0),0) * vatMult;
 
   const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-  set('ct-stat-total', total ? '£'+total.toLocaleString(undefined,{maximumFractionDigits:0}) : '£0');
+  set('ct-stat-total', total ? '£'+Math.round(total).toLocaleString() + vatLabel : '£0');
   set('ct-stat-entries', costs.length + ' entr' + (costs.length===1?'y':'ies'));
-  set('ct-stat-labour', labour ? '£'+labour.toLocaleString(undefined,{maximumFractionDigits:0}) : '£0');
+  set('ct-stat-labour', labour ? '£'+Math.round(labour).toLocaleString() : '£0');
   set('ct-stat-labour-sub', costs.filter(c=>c.type==='Labour').length + ' entries');
-  set('ct-stat-materials', materials ? '£'+materials.toLocaleString(undefined,{maximumFractionDigits:0}) : '£0');
+  set('ct-stat-materials', materials ? '£'+Math.round(materials).toLocaleString() : '£0');
   set('ct-stat-materials-sub', costs.filter(c=>c.type==='Material').length + ' entries');
-  set('ct-stat-other', other ? '£'+other.toLocaleString(undefined,{maximumFractionDigits:0}) : '£0');
+  set('ct-stat-other', other ? '£'+Math.round(other).toLocaleString() : '£0');
   set('ct-stat-other-sub', costs.filter(c=>c.type==='Other').length + ' entries');
 }
 
@@ -7681,11 +7703,23 @@ function openFirstCostForJob() {
 function renderCostLog() {
   const jobF = document.getElementById('ct-filter-job')?.value || '';
   const typeF = document.getElementById('ct-filter-type')?.value || '';
+  const supF = document.getElementById('ct-filter-supplier')?.value || '';
+  const searchQ = (document.getElementById('ct-search')?.value || '').toLowerCase();
+  const vatMode = document.getElementById('ct-vat')?.value || 'none';
+  const vatMult = vatMode === 'add' ? 1.2 : vatMode === 'remove' ? (1/1.2) : 1;
+  const vatLabel = vatMode === 'add' ? ' +VAT' : vatMode === 'remove' ? ' ex-VAT' : '';
   let costs = db.costs || [];
 
   // Filter
   if (jobF) costs = costs.filter(c => c.allocations && c.allocations.some(a => a.jobRef === jobF));
   if (typeF) costs = costs.filter(c => c.type === typeF);
+  if (supF) costs = costs.filter(c => (c.supplier||'') === supF || (c.description||'') === supF);
+  if (searchQ) costs = costs.filter(c =>
+    (c.description||'').toLowerCase().includes(searchQ) ||
+    (c.supplier||'').toLowerCase().includes(searchQ) ||
+    (c.notes||'').toLowerCase().includes(searchQ) ||
+    (c.type||'').toLowerCase().includes(searchQ)
+  );
 
   // Sort newest first
   costs = [...costs].sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -7694,7 +7728,8 @@ function renderCostLog() {
   if (!tbody) return;
 
   if (!costs.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">No costs logged yet. Click "+ Log Cost" to add one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">' + (searchQ || jobF || typeF || supF ? 'No costs match your filters.' : 'No costs logged yet. Click "+ Log Cost" to add one.') + '</td></tr>';
+    document.getElementById('cost-summary').innerHTML = '';
     return;
   }
 
@@ -7705,6 +7740,7 @@ function renderCostLog() {
     ).join(' ');
 
     const typeColor = cost.type==='Labour' ? 'badge-confirmed' : cost.type==='Material' ? 'badge-quoted' : 'badge-enquiry';
+    const amt = (cost.amount||0) * vatMult;
 
     return `<tr>
       <td style="white-space:nowrap;font-size:13px;">${cost.date||'—'}</td>
@@ -7713,8 +7749,9 @@ function renderCostLog() {
         <div style="font-weight:600;font-size:13px;">${cost.description||''}</div>
         ${cost.notes ? '<div style="font-size:11px;color:var(--text-muted);">' + cost.notes + '</div>' : ''}
       </td>
+      <td style="font-size:12px;color:var(--text-muted);">${cost.supplier||'—'}</td>
       <td style="font-size:12px;">${allocStr || '—'}</td>
-      <td style="text-align:right;font-weight:700;font-size:14px;">£${(cost.amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="text-align:right;font-weight:700;font-size:14px;">£${amt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td>
         <div style="display:flex;gap:4px;">
           <button class="btn btn-sm btn-secondary" onclick="editCost(${realIdx})">Edit</button>
@@ -7725,10 +7762,10 @@ function renderCostLog() {
   }).join('');
 
   // Summary footer
-  const total = costs.reduce((s,c)=>s+(c.amount||0),0);
+  const total = costs.reduce((s,c)=>s+(c.amount||0),0) * vatMult;
   const sumEl = document.getElementById('cost-summary');
   if (sumEl) {
-    sumEl.innerHTML = `<span style="color:var(--text-muted);">Showing ${costs.length} ${jobF||typeF?'filtered ':''} entr${costs.length===1?'y':'ies'}</span><span style="margin-left:auto;font-weight:700;font-size:14px;">Total: £${total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`;
+    sumEl.innerHTML = `<span style="color:var(--text-muted);">Showing ${costs.length} ${jobF||typeF||supF||searchQ?'filtered ':''}entr${costs.length===1?'y':'ies'}</span><span style="margin-left:auto;font-weight:700;font-size:14px;">Total${vatLabel}: £${total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`;
   }
 }
 
