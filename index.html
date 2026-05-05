@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.60 -->
+<!-- Livingstone v3.61 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8163,7 +8163,7 @@ function renderJobCosts(jobRef, extraRefs) {
     return '<tr><td style="font-size:12px;padding:4px 8px;">' + s + '</td><td style="text-align:right;font-size:12px;padding:4px 8px;">£' + supTotal.toFixed(2) + '</td>'
       + '<td style="padding:4px 8px;"><select onchange="window._jobVatSettings[\'' + sk + '\']=this.value;loadJobCostsTab()" style="font-size:11px;padding:2px 4px;">'
       + '<option value=""' + (cur===''?' selected':'') + '>Default</option>'
-      + '<option value="none"' + (cur==='none'?' selected':'') + '>No VAT</option>'
+      + '<option value="none"' + (cur==='none'?' selected':'') + '>As entered</option>'
       + '<option value="add"' + (cur==='add'?' selected':'') + '>+20% VAT</option>'
       + '<option value="remove"' + (cur==='remove'?' selected':'') + '>-20% VAT</option>'
       + '</select></td></tr>';
@@ -8177,9 +8177,15 @@ function renderJobCosts(jobRef, extraRefs) {
     const vatMul = getVatForEntry(e, idx);
     const vatTag = vatMul > 1 ? '<span style="font-size:9px;color:var(--copper);margin-left:3px;">+VAT</span>' : vatMul < 1 ? '<span style="font-size:9px;color:var(--text-muted);margin-left:3px;">ex-VAT</span>' : '';
     const btnStyle = 'border:none;border-radius:3px;padding:2px 6px;font-size:9px;cursor:pointer;';
-    const activeNone = lineCur === 'none' ? 'background:var(--slate);color:white;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
-    const activeAdd = lineCur === 'add' ? 'background:var(--copper);color:white;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
-    const activeRemove = lineCur === 'remove' ? 'background:var(--slate);color:white;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
+    // Effective state: what VAT is actually applied (from line override or cascade)
+    const effectiveState = lineCur || (vatMul > 1 ? 'add' : vatMul < 1 ? 'remove' : 'none');
+    const isOverride = lineCur !== '';
+    const removeActive = effectiveState === 'remove';
+    const addActive = effectiveState === 'add';
+    const noneActive = effectiveState === 'none';
+    const activeRemove = removeActive ? (isOverride ? 'background:var(--slate);color:white;' : 'background:var(--slate);color:white;opacity:0.6;') : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
+    const activeAdd = addActive ? (isOverride ? 'background:var(--copper);color:white;' : 'background:var(--copper);color:white;opacity:0.6;') : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
+    const activeNone = noneActive ? (isOverride ? 'background:var(--limestone);font-weight:600;' : 'background:var(--limestone);font-weight:600;opacity:0.6;') : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
     return '<tr>'
       + '<td style="font-size:12px;">' + (e.date||'') + '</td>'
       + '<td><span class="badge ' + typeColor + '" style="font-size:10px;">' + e.type + '</span></td>'
@@ -8188,9 +8194,9 @@ function renderJobCosts(jobRef, extraRefs) {
       + '<td style="text-align:right;font-weight:600;white-space:nowrap;">' + fmtAmtV(e.allocAmount, e, idx) + vatTag + '</td>'
       + '<td style="padding:2px 4px;white-space:nowrap;">'
       + '<div style="display:inline-flex;gap:1px;border-radius:4px;overflow:hidden;border:1px solid var(--border);">'
-      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='remove'?'':'remove') + '\';loadJobCostsTab()" style="' + btnStyle + activeRemove + '" title="Remove VAT">-VAT</button>'
-      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'\';loadJobCostsTab()" style="' + btnStyle + (lineCur===''?'background:var(--limestone);font-weight:600;':'background:rgba(0,0,0,0.06);color:var(--text-muted);') + '" title="Use default (auto)">Auto</button>'
-      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='add'?'':'add') + '\';loadJobCostsTab()" style="' + btnStyle + activeAdd + '" title="Add VAT">+VAT</button>'
+      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='remove'?'':'remove') + '\';loadJobCostsTab()" style="' + btnStyle + activeRemove + '" title="Remove 20% VAT">-20%</button>'
+      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='none'?'':'none') + '\';loadJobCostsTab()" style="' + btnStyle + activeNone + '" title="As entered">As is</button>'
+      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='add'?'':'add') + '\';loadJobCostsTab()" style="' + btnStyle + activeAdd + '" title="Add 20% VAT">+20%</button>'
       + '</div></td>'
       + '</tr>';
   }).join('');
@@ -8220,7 +8226,7 @@ function renderJobCosts(jobRef, extraRefs) {
       const cur = vs[tk] || '';
       return '<div><strong>' + t + ':</strong> <select onchange="window._jobVatSettings[\'' + tk + '\']=this.value;loadJobCostsTab()" style="font-size:11px;padding:2px 4px;">'
         + '<option value=""' + (cur===''?' selected':'') + '>Default</option>'
-        + '<option value="none"' + (cur==='none'?' selected':'') + '>No VAT</option>'
+        + '<option value="none"' + (cur==='none'?' selected':'') + '>As entered</option>'
         + '<option value="add"' + (cur==='add'?' selected':'') + '>+20%</option>'
         + '<option value="remove"' + (cur==='remove'?' selected':'') + '>-20%</option>'
         + '</select></div>';
