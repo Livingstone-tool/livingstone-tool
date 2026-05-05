@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.63 -->
+<!-- Livingstone v3.64 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8364,6 +8364,13 @@ function generateJobReport(jobRef) {
     + '<td style="padding:6px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-size:11px;color:#6b7e8e;">' + (totalSpent ? (d.total/totalSpent*100).toFixed(0) : 0) + '%</td></tr>'
   ).join('');
 
+  const vatCollected = quoteVal * 0.2;
+  const vatReclaimable = materialsTotal * 0.2;
+  const vatOwed = vatCollected - vatReclaimable;
+  const trueProfit = margin - vatOwed;
+  const trueProfitPct = quoteVal ? (trueProfit / quoteVal * 100).toFixed(1) : '—';
+  const trueProfitCol = trueProfit >= 0 ? '#27ae60' : '#e74c3c';
+
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Job Report — ${reportTitle} — Livingstone Projects</title>
 <style>
@@ -8412,6 +8419,20 @@ thead th { padding:7px 10px; text-align:left; font-size:10px; text-transform:upp
     <div class="bar-seg" style="flex:${materialsTotal||1};background:#3498db;">Materials ${matPct}%</div>
     ${otherTotal > 0 ? '<div class="bar-seg" style="flex:' + otherTotal + ';background:#95a5a6;">Other</div>' : ''}
   </div>
+
+  ${quoteVal ? `<h2>True Profitability (VAT Adjusted)</h2>
+  <div style="background:#F5F0E8;border-radius:8px;padding:20px;margin-bottom:20px;">
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;">Quote Value (ex-VAT)</td><td style="text-align:right;font-weight:600;">${fmtM(quoteVal)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;">VAT Charged to Client (20%)</td><td style="text-align:right;font-weight:600;">${fmtM(vatCollected)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;">Total Costs</td><td style="text-align:right;font-weight:600;">- ${fmtM(totalSpent)}</td></tr>
+      <tr style="border-bottom:2px solid #B87333;"><td style="padding:8px 0;font-weight:600;">Gross Margin</td><td style="text-align:right;font-weight:700;color:${marginCol};">${fmtM(margin)} (${marginPct}%)</td></tr>
+      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;color:#e74c3c;">VAT Man's Cut (20% of quote)</td><td style="text-align:right;font-weight:600;color:#e74c3c;">- ${fmtM(vatCollected)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;color:#27ae60;">Less: Reclaimable VAT (20% of materials £${Math.round(materialsTotal).toLocaleString()})</td><td style="text-align:right;font-weight:600;color:#27ae60;">+ ${fmtM(vatReclaimable)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e0d5;"><td style="padding:8px 0;">Net VAT Owed to HMRC</td><td style="text-align:right;font-weight:600;">- ${fmtM(vatOwed)}</td></tr>
+      <tr><td style="padding:10px 0;font-weight:700;font-size:15px;">TRUE PROFIT</td><td style="text-align:right;font-weight:700;font-size:15px;color:${trueProfitCol};">${fmtM(trueProfit)} (${trueProfitPct}%)</td></tr>
+    </table>
+  </div>` : ''}
 
   <h2>Spend by Supplier / Sub (${supplierSorted.length})</h2>
   <table><thead><tr><th>Supplier</th><th style="text-align:center;">Entries</th><th style="text-align:center;">Type</th><th style="text-align:right;">Total</th><th style="text-align:right;">%</th></tr></thead>
