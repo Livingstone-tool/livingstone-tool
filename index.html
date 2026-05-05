@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.65 -->
+<!-- Livingstone v3.66 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -820,6 +820,7 @@
             <button class="btn btn-sm btn-secondary" onclick="closeQuoteBuilder()">Close</button>
             <button class="btn btn-sm btn-slate" onclick="saveQuote()">Save Quote</button>
             <button class="btn btn-sm btn-secondary" onclick="addToShoppingList()" title="Add materials from this quote to the shopping list">🛒 Shopping List</button>
+            <button class="btn btn-sm btn-secondary" onclick="openInflationAdjuster()" title="Apply inflation % to costs">📈 Inflation</button>
             <button class="btn btn-sm btn-primary" onclick="exportQuotePDF()" style="background:var(--copper);border-color:var(--copper);">⬇ Export PDF</button>
           </div>
         </div>
@@ -875,6 +876,7 @@
               <button id="qmode-detailed" class="btn btn-sm btn-primary" onclick="setQuoteMode('detailed')">Detailed (by line)</button>
               <button id="qmode-byroom" class="btn btn-sm btn-secondary" onclick="setQuoteMode('byroom')">By Room</button>
               <button id="qmode-bytype" class="btn btn-sm btn-secondary" onclick="setQuoteMode('bytype')">By Cost Type</button>
+              <button id="qmode-byroomtype" class="btn btn-sm btn-secondary" onclick="setQuoteMode('byroomtype')">Room × Type</button>
             </div>
           </div>
 
@@ -3531,6 +3533,7 @@ function renderQBRooms() {
   const mode = window._quoteMode || 'detailed';
   if(mode === 'byroom') return renderQBRoomSimple();
   if(mode === 'bytype') return renderQBRoomByType();
+  if(mode === 'byroomtype') return renderQBRoomByRoomType();
   // else detailed:
 
   const rooms = window._activeQuoteRooms || [];
@@ -3708,7 +3711,7 @@ function setQuoteMode(mode) {
   }
 
   window._quoteMode = mode;
-  ['detailed','byroom','bytype'].forEach(m => {
+  ['detailed','byroom','bytype','byroomtype'].forEach(m => {
     const btn = document.getElementById('qmode-'+m);
     if(btn) btn.className = 'btn btn-sm ' + (m===mode ? 'btn-primary' : 'btn-secondary');
   });
@@ -5673,6 +5676,137 @@ function globalSearch(q) {
     showPage('jobs');
     setTimeout(()=>openJob(matches[0].ref),100);
   }
+}
+
+// ============================================================
+// ROOM × TYPE QUOTE VIEW
+// ============================================================
+function renderQBRoomByRoomType() {
+  const rooms = window._activeQuoteRooms || [];
+  const container = document.getElementById('qb-rooms-container');
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">';
+  html += '<thead><tr style="background:var(--slate);color:white;"><th style="padding:10px 12px;text-align:left;">Room</th><th style="padding:10px 8px;text-align:right;">Labour</th><th style="padding:10px 8px;text-align:right;">Materials</th><th style="padding:10px 8px;text-align:right;">Other</th><th style="padding:10px 8px;text-align:right;font-weight:700;">Total</th></tr></thead><tbody>';
+  let grandLabour = 0, grandMaterials = 0, grandOther = 0, grandTotal = 0;
+  rooms.forEach(room => {
+    let labour = 0, materials = 0, other = 0;
+    (room.lines||[]).forEach(l => {
+      const v = l.withMargin || 0;
+      if (l.type === 'Labour') labour += v;
+      else if (l.type === 'Material') materials += v;
+      else other += v;
+    });
+    const roomTotal = room.simpleTotal || (labour + materials + other);
+    grandLabour += labour; grandMaterials += materials; grandOther += other; grandTotal += roomTotal;
+    html += '<tr style="border-bottom:1px solid var(--border);">';
+    html += '<td style="padding:8px 12px;font-weight:600;">' + room.name + '</td>';
+    html += '<td style="padding:8px 8px;text-align:right;">' + (labour ? '£' + labour.toFixed(2) : '—') + '</td>';
+    html += '<td style="padding:8px 8px;text-align:right;">' + (materials ? '£' + materials.toFixed(2) : '—') + '</td>';
+    html += '<td style="padding:8px 8px;text-align:right;">' + (other ? '£' + other.toFixed(2) : '—') + '</td>';
+    html += '<td style="padding:8px 8px;text-align:right;font-weight:700;">£' + roomTotal.toFixed(2) + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody><tfoot><tr style="background:var(--limestone);font-weight:700;">';
+  html += '<td style="padding:10px 12px;">Totals</td>';
+  html += '<td style="padding:10px 8px;text-align:right;">£' + grandLabour.toFixed(2) + '</td>';
+  html += '<td style="padding:10px 8px;text-align:right;">£' + grandMaterials.toFixed(2) + '</td>';
+  html += '<td style="padding:10px 8px;text-align:right;">£' + grandOther.toFixed(2) + '</td>';
+  html += '<td style="padding:10px 8px;text-align:right;">£' + grandTotal.toFixed(2) + '</td>';
+  html += '</tr></tfoot></table>';
+  html += '<div style="font-size:12px;color:var(--text-muted);">This is a read-only summary. Switch to Detailed view to edit lines.</div>';
+  container.innerHTML = html;
+  recalcQuote();
+}
+
+// ============================================================
+// INFLATION ADJUSTER
+// ============================================================
+function openInflationAdjuster() {
+  const rooms = window._activeQuoteRooms || [];
+  if (!rooms.length) { alert('No quote lines to adjust.'); return; }
+
+  let labourCount = 0, materialCount = 0, otherCount = 0;
+  rooms.forEach(r => (r.lines||[]).forEach(l => {
+    if (l.type === 'Labour') labourCount++;
+    else if (l.type === 'Material') materialCount++;
+    else otherCount++;
+  }));
+
+  let modal = document.getElementById('inflation-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'inflation-modal';
+    modal.className = 'modal-overlay';
+    modal.onclick = function(e) { if(e.target===modal) closeModal('inflation-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:480px;"><div class="modal-header"><div class="modal-title">📈 Inflation Adjuster</div><button class="modal-close" onclick="closeModal(\'inflation-modal\')">×</button></div><div class="modal-body" id="inflation-modal-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('inflation-modal-body').innerHTML = `
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Apply percentage increases to costs by type. This will update all line item rates in the current quote.</p>
+    <div class="form-group">
+      <label>Labour increase % <span style="color:var(--text-muted);font-weight:400;">(${labourCount} lines)</span></label>
+      <input type="number" id="inflate-labour" value="0" min="0" max="100" step="0.5" style="width:100%;">
+    </div>
+    <div class="form-group">
+      <label>Materials increase % <span style="color:var(--text-muted);font-weight:400;">(${materialCount} lines)</span></label>
+      <input type="number" id="inflate-material" value="0" min="0" max="100" step="0.5" style="width:100%;">
+    </div>
+    <div class="form-group">
+      <label>Other costs increase % <span style="color:var(--text-muted);font-weight:400;">(${otherCount} lines)</span></label>
+      <input type="number" id="inflate-other" value="0" min="0" max="100" step="0.5" style="width:100%;">
+    </div>
+    <div class="form-group">
+      <label>PM Fee increase %</label>
+      <input type="number" id="inflate-pm" value="0" min="0" max="100" step="0.5" style="width:100%;">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeModal('inflation-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="applyInflation()">Apply Inflation</button>
+    </div>
+  `;
+  modal.style.display = 'flex';
+}
+
+function applyInflation() {
+  const labourPct = parseFloat(document.getElementById('inflate-labour')?.value) || 0;
+  const materialPct = parseFloat(document.getElementById('inflate-material')?.value) || 0;
+  const otherPct = parseFloat(document.getElementById('inflate-other')?.value) || 0;
+  const pmPct = parseFloat(document.getElementById('inflate-pm')?.value) || 0;
+
+  if (!labourPct && !materialPct && !otherPct && !pmPct) { alert('No percentages entered.'); return; }
+
+  const rooms = window._activeQuoteRooms || [];
+  let updated = 0;
+  rooms.forEach(r => {
+    (r.lines||[]).forEach(l => {
+      let pct = 0;
+      if (l.type === 'Labour') pct = labourPct;
+      else if (l.type === 'Material') pct = materialPct;
+      else pct = otherPct;
+      if (pct) {
+        l.rate = Math.round((l.rate || 0) * (1 + pct/100) * 100) / 100;
+        // Recalc line totals
+        const margin = l.type === 'Labour' ? parseFloat(document.getElementById('qb-labour-margin')?.value||10)/100 : parseFloat(document.getElementById('qb-mat-margin')?.value||10)/100;
+        l.cost = (l.qty||0) * l.rate;
+        l.withMargin = l.cost * (1 + margin);
+        updated++;
+      }
+    });
+    // Update simpleTotal
+    r.simpleTotal = (r.lines||[]).reduce((s,l) => s + (l.withMargin||0), 0);
+  });
+
+  // PM fee
+  if (pmPct) {
+    const pmEl = document.getElementById('qb-pm-fee');
+    if (pmEl) {
+      pmEl.value = Math.round(parseFloat(pmEl.value||0) * (1 + pmPct/100) * 100) / 100;
+    }
+  }
+
+  closeModal('inflation-modal');
+  renderQBRooms();
+  alert('Inflation applied to ' + updated + ' line items.' + (pmPct ? ' PM fee also adjusted.' : '') + '\n\nRemember to Save Quote to keep the changes.');
 }
 
 // ============================================================
@@ -8177,7 +8311,7 @@ function renderJobCosts(jobRef, extraRefs) {
     if (vr[lineKey] === true) return true;
     if (vr[lineKey] === false) return false;
     // Default: materials reclaimable, labour/other not
-    return e.type === 'Material';
+    return e.type === 'Material' || e.type === 'Other';
   };
 
   const rows2 = jobEntries.sort((a,b) => (a.date||'').localeCompare(b.date||'')).map(function(e, idx) {
@@ -8208,13 +8342,7 @@ function renderJobCosts(jobRef, extraRefs) {
       + '<td><span class="badge ' + typeColor + '" style="font-size:10px;">' + e.type + '</span></td>'
       + '<td style="font-size:12px;">' + (e.description||'') + '</td>'
       + '<td style="font-size:12px;color:var(--text-muted);">' + (e.supplier||'') + '</td>'
-      + '<td style="text-align:right;font-weight:600;white-space:nowrap;">' + fmtAmtV(e.allocAmount, e, idx) + vatTag + '</td>'
-      + '<td style="padding:2px 4px;white-space:nowrap;">'
-      + '<div style="display:inline-flex;gap:1px;border-radius:4px;overflow:hidden;border:1px solid var(--border);">'
-      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='remove'?'':'remove') + '\';loadJobCostsTab()" style="' + btnStyle + activeRemove + '" title="Remove 20% VAT">-20%</button>'
-      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='none'?'':'none') + '\';loadJobCostsTab()" style="' + btnStyle + activeNone + '" title="As entered">As is</button>'
-      + '<button onclick="window._jobVatSettings[\'' + lineKey + '\']=\'' + (lineCur==='add'?'':'add') + '\';loadJobCostsTab()" style="' + btnStyle + activeAdd + '" title="Add 20% VAT">+20%</button>'
-      + '</div></td>'
+      + '<td style="text-align:right;font-weight:600;white-space:nowrap;">£' + e.allocAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</td>'
       + '<td style="padding:2px 4px;"><button onclick="window._jobVatReclaim[\'' + rclKey + '\']=' + (rclIsOverride ? 'undefined;delete window._jobVatReclaim[\'' + rclKey + '\']' : (!rcl).toString()) + ';loadJobCostsTab()" style="' + btnStyle + rclStyle + 'border:1px solid var(--border);border-radius:4px;min-width:50px;" title="' + (rcl ? 'VAT reclaimable — click to change' : 'VAT not reclaimable — click to change') + '">' + (rcl ? '✓ Reclaim' : '✗ No rcl') + '</button></td>'
       + '</tr>';
   }).join('');
@@ -8223,7 +8351,6 @@ function renderJobCosts(jobRef, extraRefs) {
 
   return '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">'
     + '<input type="text" id="jd-cost-search" placeholder="Search costs..." value="' + (searchQ||'') + '" oninput="loadJobCostsTab()" style="flex:1;min-width:180px;font-size:13px;padding:6px 10px;">'
-    + '<select id="jd-cost-vat" style="font-size:12px;padding:4px 8px;" onchange="loadJobCostsTab()"><option value="none"' + (vatMode==='none'?' selected':'') + '>As entered</option><option value="add"' + (vatMode==='add'?' selected':'') + '>+20% VAT (all)</option><option value="remove"' + (vatMode==='remove'?' selected':'') + '>-20% VAT (all)</option></select>'
     + '<button class="btn btn-sm btn-secondary" onclick="promptCombineJobs(\'' + jobRef + '\')" title="Combine costs with another job">🔗 Combine Jobs</button>'
     + '<button class="btn btn-sm btn-secondary" onclick="generateJobReport(\'' + jobRef + '\')" title="Generate analysis report">📊 Analyse</button>'
     + '</div>'
@@ -8236,25 +8363,16 @@ function renderJobCosts(jobRef, extraRefs) {
     + '</div>'
     + budgetBar
     + '<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--copper);">📋 Breakdown by Supplier (' + uniqueSuppliers.length + ')</summary>'
-    + '<table style="font-size:12.5px;width:100%;margin-top:8px;"><thead><tr><th>Supplier</th><th style="text-align:right;">Total</th><th>VAT</th></tr></thead><tbody>' + supVatRows + '</tbody></table></details>'
-    + '<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--slate);">⚙️ VAT by Type</summary>'
-    + '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;">'
-    + ['Labour','Material','Other'].map(t => {
-      const tk = 'type_' + t;
-      const cur = vs[tk] || '';
-      return '<div><strong>' + t + ':</strong> <select onchange="window._jobVatSettings[\'' + tk + '\']=this.value;loadJobCostsTab()" style="font-size:11px;padding:2px 4px;">'
-        + '<option value=""' + (cur===''?' selected':'') + '>Default</option>'
-        + '<option value="none"' + (cur==='none'?' selected':'') + '>As entered</option>'
-        + '<option value="add"' + (cur==='add'?' selected':'') + '>+20%</option>'
-        + '<option value="remove"' + (cur==='remove'?' selected':'') + '>-20%</option>'
-        + '</select></div>';
-    }).join('')
-    + '</div></details>'
+    + '<table style="font-size:12.5px;width:100%;margin-top:8px;"><thead><tr><th>Supplier</th><th style="text-align:right;">Total</th><th style="text-align:center;">Entries</th></tr></thead><tbody>' + uniqueSuppliers.map(s => {
+      const supTotal = jobEntries.filter(e => (e.supplier||e.description||'Other')===s).reduce((sum,e) => sum+e.allocAmount, 0);
+      const supCount = jobEntries.filter(e => (e.supplier||e.description||'Other')===s).length;
+      return '<tr><td style="font-size:12px;padding:4px 8px;">' + s + '</td><td style="text-align:right;font-size:12px;padding:4px 8px;">£' + supTotal.toFixed(2) + '</td><td style="text-align:center;font-size:12px;padding:4px 8px;">' + supCount + '</td></tr>';
+    }).join('') + '</tbody></table></details>'
     + (searchQ && !jobEntries.length ? '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;text-align:center;">No costs matching "' + searchQ + '"</div>' : '')
     + '<table style="font-size:12.5px;width:100%;">'
-    + '<thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Supplier</th><th style="text-align:right;">Amount</th><th style="text-align:center;">VAT</th><th style="text-align:center;">Reclaim</th></tr></thead>'
+    + '<thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Supplier</th><th style="text-align:right;">Amount</th><th style="text-align:center;">Reclaim</th></tr></thead>'
     + '<tbody>' + rows2 + '</tbody>'
-    + '<tfoot><tr style="background:var(--limestone);font-weight:700;"><td colspan="4" style="text-align:right;padding:8px 12px;">Total</td><td style="text-align:right;padding:8px 12px;">' + fmtR(totalVat) + '</td><td></td><td></td></tr></tfoot>'
+    + '<tfoot><tr style="background:var(--limestone);font-weight:700;"><td colspan="4" style="text-align:right;padding:8px 12px;">Total</td><td style="text-align:right;padding:8px 12px;">' + fmtR(totalVat) + '</td><td></td></tr></tfoot>'
     + '</table>'
     + '<div style="margin-top:12px;text-align:right;"><button class="btn btn-sm btn-primary" onclick="openFirstCostForJob()">+ Log Cost for this Job</button></div>';
 }
@@ -8391,7 +8509,7 @@ function generateJobReport(jobRef) {
     let rcl;
     if (vrReport[rclKey] === true) rcl = true;
     else if (vrReport[rclKey] === false) rcl = false;
-    else rcl = e.type === 'Material'; // default
+    else rcl = e.type === 'Material' || e.type === 'Other'; // default
     return s + (rcl ? e.allocAmount : 0);
   }, 0);
   const vatReclaimable = reclaimableTotal * 0.2;
@@ -8636,6 +8754,20 @@ async function exportQuotePDF() {
     const bonusVal2 = parseFloat(document.getElementById('qb-bonus')?.value)||0;
     if (pmFeeVal2) lineRows += `<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;font-weight:600;">Project Management</td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;color:#6b7e8e;"></td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${pmFeeVal2.toFixed(2)}</td></tr>`;
     if (bonusVal2) lineRows += `<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;font-weight:600;">On-Time Bonus</td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;color:#6b7e8e;"></td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${bonusVal2.toFixed(2)}</td></tr>`;
+
+  } else if (mode === 'byroomtype') {
+    tableColspan = 5;
+    tableHeaders = `<tr><th style="text-align:left;">Room</th><th style="text-align:right;">Labour</th><th style="text-align:right;">Materials</th><th style="text-align:right;">Other</th><th style="text-align:right;">Total</th></tr>`;
+    lineRows = rooms.map(room => {
+      let lb=0, mt=0, ot=0;
+      (room.lines||[]).forEach(l => { const v=l.withMargin||0; if(l.type==='Labour')lb+=v; else if(l.type==='Material')mt+=v; else ot+=v; });
+      const rt = room.simpleTotal || (lb+mt+ot);
+      return `<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;font-weight:600;">${room.name}</td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;">${lb?'£'+lb.toFixed(2):'—'}</td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;">${mt?'£'+mt.toFixed(2):'—'}</td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;">${ot?'£'+ot.toFixed(2):'—'}</td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${rt.toFixed(2)}</td></tr>`;
+    }).join('');
+    const pmFeeVal4 = parseFloat(document.getElementById('qb-pm-fee')?.value)||0;
+    const bonusVal4 = parseFloat(document.getElementById('qb-bonus')?.value)||0;
+    if (pmFeeVal4) lineRows += `<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;font-weight:600;">Project Management</td><td colspan="3"></td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${pmFeeVal4.toFixed(2)}</td></tr>`;
+    if (bonusVal4) lineRows += `<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;font-weight:600;">On-Time Bonus</td><td colspan="3"></td><td style="padding:9px 10px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£${bonusVal4.toFixed(2)}</td></tr>`;
 
   } else {
     // Detailed
