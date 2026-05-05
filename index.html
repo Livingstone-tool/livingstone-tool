@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.54 -->
+<!-- Livingstone v3.56 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8056,8 +8056,9 @@ function renderJobCosts(jobRef, extraRefs) {
   const otherCosts = total - labour - materials;
 
   const job = db.jobs.find(j => j.ref===jobRef);
-  const budget = job ? (job.estCost||0) : 0;
-  const quoteVal = job ? (job.quoteValue||0) : 0;
+  const allJobs = refs.map(r => db.jobs.find(j => j.ref===r)).filter(Boolean);
+  const budget = allJobs.reduce((s,j) => s + (j.estCost||0), 0);
+  const quoteVal = allJobs.reduce((s,j) => s + (j.quoteValue||0), 0);
   const remaining = budget - total;
   const pct = budget ? Math.round(total/budget*100) : null;
   const margin = quoteVal - total;
@@ -8121,37 +8122,107 @@ function renderJobCosts(jobRef, extraRefs) {
   const otherJobs = db.jobs.filter(j => j.ref !== jobRef).sort((a,b) => (parseInt((a.ref||'').replace(/\D/g,''))||0) - (parseInt((b.ref||'').replace(/\D/g,''))||0));
   const combineOptions = otherJobs.map(j => '<option value="' + j.ref + '"' + ((extraRefs||[]).includes(j.ref) ? ' selected' : '') + '>' + j.ref + ' — ' + (j.name||'') + '</option>').join('');
 
+  // Per-type/supplier VAT — get settings
+  if (!window._jobVatSettings) window._jobVatSettings = {};
+  const vs = window._jobVatSettings;
+  const getVatForEntry = (e) => {
+    const supKey = 'sup_' + (e.supplier||e.description||'').replace(/[^a-zA-Z0-9]/g,'_');
+    if (vs[supKey] === 'add') return 1.2;
+    if (vs[supKey] === 'remove') return 1/1.2;
+    if (vs[supKey]) return 1;
+    const typeKey = 'type_' + (e.type||'Other');
+    if (vs[typeKey] === 'add') return 1.2;
+    if (vs[typeKey] === 'remove') return 1/1.2;
+    if (vs[typeKey]) return 1;
+    return vatMult;
+  };
+
+  // Recalc with per-entry VAT
+  const totalVat = jobEntries.reduce((s,e) => s + e.allocAmount * getVatForEntry(e), 0);
+  const labourVat = jobEntries.filter(e => e.type==='Labour').reduce((s,e) => s + e.allocAmount * getVatForEntry(e), 0);
+  const materialsVat = jobEntries.filter(e => e.type==='Material').reduce((s,e) => s + e.allocAmount * getVatForEntry(e), 0);
+  const otherVat = totalVat - labourVat - materialsVat;
+  const marginVat = quoteVal - totalVat;
+  const marginPctVat = quoteVal ? (marginVat/quoteVal*100).toFixed(1) : null;
+  const marginColVat = marginVat >= 0 ? 'var(--success)' : 'var(--danger)';
+  const fmtAmtV = (v, e) => '£' + (v * getVatForEntry(e)).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // Supplier VAT controls
+  const uniqueSuppliers = [...new Set(jobEntries.map(e => e.supplier||e.description||'Other'))].sort();
+  const supVatRows = uniqueSuppliers.map(s => {
+    const sk = 'sup_' + s.replace(/[^a-zA-Z0-9]/g,'_');
+    const cur = vs[sk] || '';
+    const supTotal = jobEntries.filter(e => (e.supplier||e.description||'Other')===s).reduce((sum,e) => sum+e.allocAmount, 0);
+    return '<tr><td style="font-size:12px;padding:4px 8px;">' + s + '</td><td style="text-align:right;font-size:12px;padding:4px 8px;">£' + supTotal.toFixed(2) + '</td>'
+      + '<td style="padding:4px 8px;"><select onchange="window._jobVatSettings[\'' + sk + '\']=this.value;loadJobCostsTab()" style="font-size:11px;padding:2px 4px;">'
+      + '<option value=""' + (cur===''?' selected':'') + '>Default</option>'
+      + '<option value="none"' + (cur==='none'?' selected':'') + '>No VAT</option>'
+      + '<option value="add"' + (cur==='add'?' selected':'') + '>+20% VAT</option>'
+      + '<option value="remove"' + (cur==='remove'?' selected':'') + '>-20% VAT</option>'
+      + '</select></td></tr>';
+  }).join('');
+
+  // Cost rows with per-entry VAT
+  const rows2 = jobEntries.sort((a,b) => (a.date||'').localeCompare(b.date||'')).map(function(e) {
+    const typeColor = e.type==='Labour' ? 'badge-confirmed' : e.type==='Material' ? 'badge-quoted' : 'badge-enquiry';
+    return '<tr>'
+      + '<td style="font-size:12px;">' + (e.date||'') + '</td>'
+      + '<td><span class="badge ' + typeColor + '" style="font-size:10px;">' + e.type + '</span></td>'
+      + '<td style="font-size:12px;">' + (e.description||'') + '</td>'
+      + '<td style="font-size:12px;color:var(--text-muted);">' + (e.supplier||'') + '</td>'
+      + '<td style="text-align:right;font-weight:600;">' + fmtAmtV(e.allocAmount, e) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const fmtR = v => '£' + Math.round(v).toLocaleString();
+
   return '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">'
-    + '<input type="text" id="jd-cost-search" placeholder="Search costs (supplier, description...)" value="' + (searchQ||'') + '" oninput="loadJobCostsTab()" style="flex:1;min-width:200px;font-size:13px;padding:6px 10px;">'
-    + '<select id="jd-cost-vat" style="font-size:12px;padding:4px 8px;" onchange="loadJobCostsTab()"><option value="none"' + (vatMode==='none'?' selected':'') + '>As entered</option><option value="add"' + (vatMode==='add'?' selected':'') + '>+ 20% VAT</option><option value="remove"' + (vatMode==='remove'?' selected':'') + '>- 20% VAT (ex-VAT)</option></select>'
-    + '<select id="jd-cost-combine" multiple style="font-size:11px;padding:4px;max-height:60px;min-width:180px;" onchange="loadJobCostsTabCombined()" title="Hold Ctrl to combine jobs">' + combineOptions + '</select>'
+    + '<input type="text" id="jd-cost-search" placeholder="Search costs..." value="' + (searchQ||'') + '" oninput="loadJobCostsTab()" style="flex:1;min-width:180px;font-size:13px;padding:6px 10px;">'
+    + '<select id="jd-cost-vat" style="font-size:12px;padding:4px 8px;" onchange="loadJobCostsTab()"><option value="none"' + (vatMode==='none'?' selected':'') + '>As entered</option><option value="add"' + (vatMode==='add'?' selected':'') + '>+20% VAT (all)</option><option value="remove"' + (vatMode==='remove'?' selected':'') + '>-20% VAT (all)</option></select>'
+    + '<button class="btn btn-sm btn-secondary" onclick="promptCombineJobs(\'' + jobRef + '\')" title="Combine costs with another job">🔗 Combine Jobs</button>'
     + '<button class="btn btn-sm btn-secondary" onclick="generateJobReport(\'' + jobRef + '\')" title="Generate analysis report">📊 Analyse</button>'
     + '</div>'
+    + ((extraRefs||[]).length ? '<div style="margin-bottom:8px;font-size:12px;color:var(--copper);"><strong>Combined with:</strong> ' + extraRefs.join(', ') + ' <button class="btn btn-sm" onclick="window._costCombineRefs=[];loadJobCostsTab()" style="font-size:10px;padding:1px 6px;">Clear</button></div>' : '')
     + '<div class="grid-4" style="gap:12px;margin-bottom:16px;">'
-    + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Total Spent' + vatLabel + '</div><div style="font-size:18px;font-weight:700;color:var(--copper);">' + fmtRnd(total) + '</div></div>'
-    + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Labour</div><div style="font-size:18px;font-weight:700;">' + fmtRnd(labour) + '</div></div>'
-    + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Materials</div><div style="font-size:18px;font-weight:700;">' + fmtRnd(materials) + '</div></div>'
-    + (quoteComp || '<div class="stat-card" style="padding:12px;"><div class="stat-label">Other</div><div style="font-size:18px;font-weight:700;">' + fmtRnd(otherCosts) + '</div></div>')
+    + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Total Spent</div><div style="font-size:18px;font-weight:700;color:var(--copper);">' + fmtR(totalVat) + '</div></div>'
+    + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Labour</div><div style="font-size:18px;font-weight:700;">' + fmtR(labourVat) + '</div></div>'
+    + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Materials</div><div style="font-size:18px;font-weight:700;">' + fmtR(materialsVat) + '</div></div>'
+    + (quoteVal ? '<div class="stat-card" style="padding:12px;"><div class="stat-label">Actual Margin</div><div style="font-size:18px;font-weight:700;color:' + marginColVat + ';">' + fmtR(marginVat) + ' (' + marginPctVat + '%)</div><div style="font-size:11px;color:var(--text-muted);">Quote: ' + fmtR(quoteVal) + '</div></div>' : '<div class="stat-card" style="padding:12px;"><div class="stat-label">Other</div><div style="font-size:18px;font-weight:700;">' + fmtR(otherVat) + '</div></div>')
     + '</div>'
     + budgetBar
-    + (supplierRows ? '<details style="margin-bottom:16px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--copper);">📋 Breakdown by Supplier/Sub (' + Object.keys(bySupplier).length + ')</summary>'
-    + '<table style="font-size:12.5px;width:100%;margin-top:8px;"><thead><tr><th>Supplier</th><th style="text-align:center;">Entries</th><th style="text-align:center;">Type</th><th style="text-align:right;">Total' + vatLabel + '</th><th style="text-align:right;">%</th></tr></thead><tbody>' + supplierRows + '</tbody></table></details>' : '')
+    + '<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--copper);">📋 Breakdown by Supplier (' + uniqueSuppliers.length + ')</summary>'
+    + '<table style="font-size:12.5px;width:100%;margin-top:8px;"><thead><tr><th>Supplier</th><th style="text-align:right;">Total</th><th>VAT</th></tr></thead><tbody>' + supVatRows + '</tbody></table></details>'
+    + '<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--slate);">⚙️ VAT by Type</summary>'
+    + '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;">'
+    + ['Labour','Material','Other'].map(t => {
+      const tk = 'type_' + t;
+      const cur = vs[tk] || '';
+      return '<div><strong>' + t + ':</strong> <select onchange="window._jobVatSettings[\'' + tk + '\']=this.value;loadJobCostsTab()" style="font-size:11px;padding:2px 4px;">'
+        + '<option value=""' + (cur===''?' selected':'') + '>Default</option>'
+        + '<option value="none"' + (cur==='none'?' selected':'') + '>No VAT</option>'
+        + '<option value="add"' + (cur==='add'?' selected':'') + '>+20%</option>'
+        + '<option value="remove"' + (cur==='remove'?' selected':'') + '>-20%</option>'
+        + '</select></div>';
+    }).join('')
+    + '</div></details>'
     + (searchQ && !jobEntries.length ? '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;text-align:center;">No costs matching "' + searchQ + '"</div>' : '')
     + '<table style="font-size:12.5px;width:100%;">'
-    + '<thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Supplier</th><th style="text-align:right;">Amount' + vatLabel + '</th></tr></thead>'
-    + '<tbody>' + rows + '</tbody>'
-    + '<tfoot><tr style="background:var(--limestone);font-weight:700;"><td colspan="4" style="text-align:right;padding:8px 12px;">Total</td><td style="text-align:right;padding:8px 12px;">' + fmtAmt(total) + '</td></tr></tfoot>'
+    + '<thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Supplier</th><th style="text-align:right;">Amount</th></tr></thead>'
+    + '<tbody>' + rows2 + '</tbody>'
+    + '<tfoot><tr style="background:var(--limestone);font-weight:700;"><td colspan="4" style="text-align:right;padding:8px 12px;">Total</td><td style="text-align:right;padding:8px 12px;">' + fmtR(totalVat) + '</td></tr></tfoot>'
     + '</table>'
     + '<div style="margin-top:12px;text-align:right;"><button class="btn btn-sm btn-primary" onclick="openFirstCostForJob()">+ Log Cost for this Job</button></div>';
 }
 
-function loadJobCostsTabCombined() {
-  const ref = window._currentJobRef;
-  const sel = document.getElementById('jd-cost-combine');
-  const extraRefs = sel ? [...sel.selectedOptions].map(o => o.value) : [];
-  window._costCombineRefs = extraRefs;
-  const el = document.getElementById('jd-costs-content');
-  if (el && ref) el.innerHTML = renderJobCosts(ref, extraRefs);
+function promptCombineJobs(currentRef) {
+  const otherJobs = db.jobs.filter(j => j.ref !== currentRef).sort((a,b) => (parseInt((a.ref||'').replace(/\D/g,''))||0) - (parseInt((b.ref||'').replace(/\D/g,''))||0));
+  const list = otherJobs.map(j => j.ref + ' — ' + (j.name||'')).join('\n');
+  const input = prompt('Enter job refs to combine with ' + currentRef + ' (comma-separated):\n\n' + list);
+  if (input === null) return;
+  if (!input.trim()) { window._costCombineRefs = []; loadJobCostsTab(); return; }
+  const refs = input.split(',').map(r => r.trim()).filter(r => db.jobs.some(j => j.ref === r));
+  window._costCombineRefs = refs;
+  loadJobCostsTab();
 }
 
 function loadJobCostsTab() {
