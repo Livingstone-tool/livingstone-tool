@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.58 -->
+<!-- Livingstone v3.59 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8237,14 +8237,41 @@ function renderJobCosts(jobRef, extraRefs) {
 
 function promptCombineJobs(currentRef) {
   const otherJobs = db.jobs.filter(j => j.ref !== currentRef).sort((a,b) => (parseInt((a.ref||'').replace(/\D/g,''))||0) - (parseInt((b.ref||'').replace(/\D/g,''))||0));
-  const list = otherJobs.map(j => j.ref + ' — ' + (j.name||'').substring(0,25)).join('\n');
-  const current = (window._costCombineRefs||[]).join(', ');
-  const input = prompt('Enter job refs to combine with ' + currentRef + ' (comma-separated):\n\nCurrently combined: ' + (current || 'none') + '\n\n' + list, current);
-  if (input === null) return;
-  if (!input.trim()) { window._costCombineRefs = []; loadJobCostsTab(); return; }
-  const refs = input.split(',').map(r => r.trim()).filter(r => db.jobs.some(j => j.ref === r));
-  if (refs.length === 0 && input.trim()) { alert('No matching job refs found. Make sure to use exact refs like LP-024'); return; }
-  window._costCombineRefs = refs;
+  const currentCombined = window._costCombineRefs || [];
+  let html = '<div style="max-height:400px;overflow-y:auto;">';
+  otherJobs.forEach(j => {
+    const checked = currentCombined.includes(j.ref) ? ' checked' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'\'">';
+    html += '<input type="checkbox" class="combine-job-check" value="' + j.ref + '"' + checked + '>';
+    html += '<strong>' + j.ref + '</strong> — ' + (j.name||'(unnamed)');
+    html += '<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">' + (j.status||'') + '</span>';
+    html += '</label>';
+  });
+  html += '</div>';
+  html += '<div style="padding:12px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);">';
+  html += '<button class="btn btn-sm btn-secondary" onclick="window._costCombineRefs=[];loadJobCostsTab();closeModal(\'combine-modal\')">Clear All</button>';
+  html += '<button class="btn btn-sm btn-primary" onclick="applyCombineJobs();closeModal(\'combine-modal\')">Apply</button>';
+  html += '</div>';
+
+  // Create or reuse modal
+  let modal = document.getElementById('combine-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'combine-modal';
+    modal.className = 'modal-overlay';
+    modal.onclick = function(e) { if(e.target===modal) closeModal('combine-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:500px;"><div class="modal-header"><div class="modal-title">Combine Jobs with ' + currentRef + '</div><button class="modal-close" onclick="closeModal(\'combine-modal\')">×</button></div><div class="modal-body" id="combine-modal-body"></div></div>';
+    document.body.appendChild(modal);
+  } else {
+    modal.querySelector('.modal-title').textContent = 'Combine Jobs with ' + currentRef;
+  }
+  document.getElementById('combine-modal-body').innerHTML = html;
+  modal.style.display = 'flex';
+}
+
+function applyCombineJobs() {
+  const checks = document.querySelectorAll('.combine-job-check:checked');
+  window._costCombineRefs = [...checks].map(c => c.value);
   loadJobCostsTab();
 }
 
