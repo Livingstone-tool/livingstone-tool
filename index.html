@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.73 -->
+<!-- Livingstone v3.75 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -820,6 +820,7 @@
           <div style="display:flex;gap:8px;">
             <button class="btn btn-sm btn-secondary" onclick="closeQuoteBuilder()">Close</button>
             <button class="btn btn-sm btn-slate" onclick="saveQuote()">Save Quote</button>
+            <button class="btn btn-sm btn-secondary" onclick="duplicateQuote()" title="Duplicate this quote to another job">📋 Duplicate</button>
             <button class="btn btn-sm btn-secondary" onclick="addToShoppingList()" title="Add materials from this quote to the shopping list">🛒 Shopping List</button>
             <button class="btn btn-sm btn-secondary" onclick="openInflationAdjuster()" title="Apply inflation % to costs">📈 Inflation</button>
             <button class="btn btn-sm btn-primary" onclick="exportQuotePDF()" style="background:var(--copper);border-color:var(--copper);">⬇ Export PDF</button>
@@ -1774,6 +1775,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary btn-sm" onclick="editCurrentJob()">Edit Job</button>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('job-detail-modal');openInvoiceModal(window._currentJobRef)">📄 Invoice</button>
       <button class="btn btn-slate btn-sm" onclick="closeModal('job-detail-modal')">Close</button>
     </div>
   </div>
@@ -3658,6 +3660,10 @@ function renderQBRooms() {
         </div>
       </div>
       <div class="qb-room-body" style="display:${bodyDisplay};">
+        <div style="display:flex;gap:8px;margin-bottom:8px;padding:0 8px;">
+          <input type="text" value="${room.description||''}" placeholder="Room description / scope of work..." oninput="window._activeQuoteRooms[${ri}].description=this.value" style="flex:1;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;">
+          <input type="text" value="${room.measurements||''}" placeholder="Measurements (e.g. 4m × 3m)" oninput="window._activeQuoteRooms[${ri}].measurements=this.value" style="width:180px;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;">
+        </div>
         <div class="qb-line qb-line-header">
           <span></span>
           <span>Description</span><span>Supplier/Sub</span><span>Type</span>
@@ -5867,8 +5873,7 @@ function openInvoiceModal(preselectedRef) {
   window._invLines = [];
 
   // Populate job selector with checkboxes
-  const invoiceableStatuses = ['Confirmed','In Progress','Snagging','Completed - Not Paid','Quoted'];
-  const jobs = db.jobs.filter(j => invoiceableStatuses.includes(j.status)).sort((a,b) => (parseInt((a.ref||'').replace(/\D/g,''))||0) - (parseInt((b.ref||'').replace(/\D/g,''))||0));
+  const jobs = db.jobs.slice().sort((a,b) => (parseInt((a.ref||'').replace(/\D/g,''))||0) - (parseInt((b.ref||'').replace(/\D/g,''))||0));
   const selector = document.getElementById('inv-job-selector');
   selector.innerHTML = jobs.map(j => {
     const checked = preselectedRef === j.ref ? ' checked' : '';
@@ -6630,18 +6635,15 @@ function applyInflation() {
       else pct = otherPct;
       if (pct) {
         l.rate = Math.round((l.rate || 0) * (1 + pct/100) * 100) / 100;
-        // Recalc line totals
         const margin = l.type === 'Labour' ? parseFloat(document.getElementById('qb-labour-margin')?.value||10)/100 : parseFloat(document.getElementById('qb-mat-margin')?.value||10)/100;
         l.cost = (l.qty||0) * l.rate;
         l.withMargin = l.cost * (1 + margin);
         updated++;
       }
     });
-    // Update simpleTotal
     r.simpleTotal = (r.lines||[]).reduce((s,l) => s + (l.withMargin||0), 0);
   });
 
-  // PM fee
   if (pmPct) {
     const pmEl = document.getElementById('qb-pm-fee');
     if (pmEl) {
@@ -6652,6 +6654,42 @@ function applyInflation() {
   closeModal('inflation-modal');
   renderQBRooms();
   alert('Inflation applied to ' + updated + ' line items.' + (pmPct ? ' PM fee also adjusted.' : '') + '\n\nRemember to Save Quote to keep the changes.');
+}
+
+function duplicateQuote() {
+  const rooms = window._activeQuoteRooms;
+  if (!rooms || !rooms.length) { alert('No quote data to duplicate.'); return; }
+  const targetRef = prompt('Enter the job ref to duplicate this quote to (e.g. LP-005):');
+  if (!targetRef) return;
+  const targetJob = db.jobs.find(j => j.ref === targetRef.trim());
+  if (!targetJob) { alert('Job ' + targetRef + ' not found.'); return; }
+  if (db.quotes.find(q => q.ref === targetRef.trim())) {
+    if (!confirm('Job ' + targetRef + ' already has a quote. Overwrite?')) return;
+  }
+  const newRooms = JSON.parse(JSON.stringify(rooms));
+  const pmFee = parseFloat(document.getElementById('qb-pm-fee')?.value) || 0;
+  const bonus = parseFloat(document.getElementById('qb-bonus')?.value) || 0;
+  const labourMargin = parseFloat(document.getElementById('qb-labour-margin')?.value) || 10;
+  const matMargin = parseFloat(document.getElementById('qb-mat-margin')?.value) || 10;
+  const existingIdx = db.quotes.findIndex(q => q.ref === targetRef.trim());
+  const newQuote = {
+    ref: targetRef.trim(),
+    rooms: newRooms,
+    pmFee: pmFee,
+    bonus: bonus,
+    labourMargin: labourMargin,
+    matMargin: matMargin,
+    paymentTerms: document.getElementById('qb-payment-terms')?.value || ''
+  };
+  if (existingIdx >= 0) {
+    db.quotes[existingIdx] = newQuote;
+  } else {
+    db.quotes.push(newQuote);
+  }
+  const subtotal = newRooms.reduce((s,r) => s + (r.simpleTotal || r.lines.reduce((ss,l) => ss + (l.withMargin||0), 0)), 0);
+  targetJob.quoteValue = subtotal + pmFee + bonus;
+  saveData();
+  alert('Quote duplicated to ' + targetRef + ' (£' + Math.round(targetJob.quoteValue).toLocaleString() + ')');
 }
 
 // ============================================================
@@ -7260,6 +7298,7 @@ function renderGantt() {
   const jobs = db.jobs.filter(j => {
     if (leadF && j.lead !== leadF) return false;
     if (statusF && j.status !== statusF) return false;
+    if (!statusF && j.status === 'Completed - Paid') return false;
     return true;
   });
   const allTasks = db.tasks.filter(t => t.start && t.end);
