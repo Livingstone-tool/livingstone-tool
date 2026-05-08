@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.68 -->
+<!-- Livingstone v3.70 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -635,6 +635,7 @@
       <div class="nav-item" onclick="showPage('actions')"><span class="icon">🎯</span> Business Actions</div>
       <div class="nav-item" onclick="showPage('finance')"><span class="icon">£</span> Finance</div>
     <div class="nav-item" onclick="showPage('costs')"><span class="icon">💰</span> Cost Tracker</div>
+    <div class="nav-item" onclick="showPage('invoices')"><span class="icon">📄</span> Invoices</div>
     </div>
   </div>
   <div class="sidebar-footer">
@@ -1460,6 +1461,72 @@
       </table>
     </div>
     <div id="cost-summary" style="padding:16px;border-top:1px solid var(--border);display:flex;gap:32px;flex-wrap:wrap;font-size:13px;"></div>
+  </div>
+</div>
+
+<!-- INVOICES PAGE -->
+<div id="page-invoices" class="page content">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+    <h2 style="font-size:20px;font-weight:700;margin:0;">Invoices</h2>
+    <button class="btn btn-primary" onclick="openInvoiceModal()">+ Create Invoice</button>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Invoice Log</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Invoice #</th><th>Date</th><th>Client</th><th>Jobs</th><th>Description</th><th style="text-align:right;">Subtotal</th><th style="text-align:right;">VAT</th><th style="text-align:right;">Total</th><th>Status</th><th></th></tr></thead>
+        <tbody id="invoice-log-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- INVOICE MODAL -->
+<div id="invoice-modal" class="modal-overlay" style="display:none;" onclick="if(event.target.id==='invoice-modal')closeModal('invoice-modal')">
+  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <div class="modal-title" id="invoice-modal-title">Create Invoice</div>
+      <button class="modal-close" onclick="closeModal('invoice-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="inv-edit-idx" value="-1">
+      <div class="grid-2" style="gap:12px;">
+        <div class="form-group"><label>Invoice Number</label><input type="text" id="inv-number" style="width:100%;"></div>
+        <div class="form-group"><label>Invoice Date</label><input type="date" id="inv-date" style="width:100%;"></div>
+      </div>
+      <div class="form-group"><label>Client Name</label><input type="text" id="inv-client" style="width:100%;"></div>
+      <div class="form-group"><label>Client Address</label><textarea id="inv-client-address" rows="2" style="width:100%;"></textarea></div>
+
+      <h4 style="margin:16px 0 8px;font-size:13px;color:var(--copper);">Line Items</h4>
+      <div id="inv-lines-container"></div>
+      <div style="display:flex;gap:8px;margin:8px 0 16px;">
+        <button class="btn btn-sm btn-secondary" onclick="addInvLine()">+ Add Line</button>
+        <button class="btn btn-sm btn-secondary" onclick="addInvFromGates()">+ From Payment Gates</button>
+      </div>
+
+      <div class="grid-2" style="gap:12px;">
+        <div class="form-group"><label><input type="checkbox" id="inv-vat-toggle" onchange="renderInvTotals()"> Add VAT (20%)</label></div>
+        <div class="form-group"><label>Payment Terms</label>
+          <select id="inv-terms" style="width:100%;">
+            <option>Payment on completion</option>
+            <option>Net 7 days</option>
+            <option>Net 14 days</option>
+            <option>Net 30 days</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group"><label>Notes / Additional Info</label><textarea id="inv-notes" rows="2" style="width:100%;"></textarea></div>
+
+      <div id="inv-totals" style="background:var(--limestone);border-radius:8px;padding:14px 18px;margin-top:12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveInvoice()">Save Invoice</button>
+      <button class="btn btn-secondary" onclick="exportInvoicePDF()">⬇ Export PDF</button>
+      <button class="btn btn-secondary" onclick="closeModal('invoice-modal')">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -2780,7 +2847,7 @@ const SEED = {
 const PAGE_TITLES = {
   dashboard:'Dashboard', pipeline:'Pipeline', jobs:'All Jobs',
   quotes:'Quote Builder', tasks:'Tasks', subs:'Subcontractors',
-  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker'
+  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices'
 };
 
 function toggleMobileNav() {
@@ -2815,6 +2882,7 @@ function renderPage(id) {
   else if(id==='actions') renderActions();
   else if(id==='planning') renderPlanning();
   else if(id==='costs') renderCostTracker();
+  else if(id==='invoices') renderInvoicesPage();
 }
 
 // ============================================================
@@ -5683,6 +5751,323 @@ function globalSearch(q) {
 }
 
 // ============================================================
+// INVOICING
+// ============================================================
+if (!db.invoices) db.invoices = [];
+try { const li = JSON.parse(localStorage.getItem('livingstoneInvoices')); if (li) db.invoices = li; } catch(e) {}
+
+function saveInvoices() {
+  localStorage.setItem('livingstoneInvoices', JSON.stringify(db.invoices));
+}
+
+function nextInvoiceNum() {
+  const nums = db.invoices.map(i => { const m = (i.number||'').match(/(\d+)/); return m ? parseInt(m[1]) : 0; });
+  return 'LP-INV-' + String((Math.max(0,...nums) + 1)).padStart(3, '0');
+}
+
+function renderInvoicesPage() {
+  const tbody = document.getElementById('invoice-log-body');
+  if (!tbody) return;
+  if (!db.invoices.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:24px;">No invoices yet. Click "+ Create Invoice" to start.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = db.invoices.sort((a,b) => (b.date||'').localeCompare(a.date||'')).map((inv, i) => {
+    const statusCol = inv.status==='Paid'?'badge-confirmed':inv.status==='Sent'?'badge-quoted':'badge-preparing';
+    return `<tr>
+      <td style="font-weight:600;">${inv.number}</td>
+      <td>${inv.date||''}</td>
+      <td>${inv.client||''}</td>
+      <td style="font-size:12px;">${(inv.jobRefs||[]).join(', ')}</td>
+      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(inv.lines||[]).map(l=>l.desc).join('; ')}</td>
+      <td style="text-align:right;">£${(inv.subtotal||0).toFixed(2)}</td>
+      <td style="text-align:right;">${inv.vatAmount ? '£'+inv.vatAmount.toFixed(2) : '—'}</td>
+      <td style="text-align:right;font-weight:700;">£${(inv.total||0).toFixed(2)}</td>
+      <td><span class="badge ${statusCol}">${inv.status||'Draft'}</span></td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-sm btn-secondary" onclick="editInvoice(${i})">Edit</button>
+          <button class="btn btn-sm btn-secondary" onclick="viewInvoicePDF(${i})">PDF</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteInvoice(${i})">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openInvoiceModal() {
+  document.getElementById('invoice-modal-title').textContent = 'Create Invoice';
+  document.getElementById('inv-edit-idx').value = -1;
+  document.getElementById('inv-number').value = nextInvoiceNum();
+  document.getElementById('inv-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('inv-client').value = '';
+  document.getElementById('inv-client-address').value = '';
+  document.getElementById('inv-notes').value = '';
+  document.getElementById('inv-vat-toggle').checked = true;
+  document.getElementById('inv-terms').value = 'Net 14 days';
+  window._invLines = [{ jobRef: '', desc: '', amount: 0 }];
+  renderInvLines();
+  renderInvTotals();
+  document.getElementById('invoice-modal').style.display = 'flex';
+}
+
+function editInvoice(idx) {
+  const inv = db.invoices[idx];
+  if (!inv) return;
+  document.getElementById('invoice-modal-title').textContent = 'Edit Invoice';
+  document.getElementById('inv-edit-idx').value = idx;
+  document.getElementById('inv-number').value = inv.number || '';
+  document.getElementById('inv-date').value = inv.date || '';
+  document.getElementById('inv-client').value = inv.client || '';
+  document.getElementById('inv-client-address').value = inv.clientAddress || '';
+  document.getElementById('inv-notes').value = inv.notes || '';
+  document.getElementById('inv-vat-toggle').checked = inv.addVat || false;
+  document.getElementById('inv-terms').value = inv.terms || 'Net 14 days';
+  window._invLines = (inv.lines || []).map(l => ({...l}));
+  renderInvLines();
+  renderInvTotals();
+  document.getElementById('invoice-modal').style.display = 'flex';
+}
+
+function deleteInvoice(idx) {
+  if (!confirm('Delete invoice ' + (db.invoices[idx]?.number||'') + '?')) return;
+  db.invoices.splice(idx, 1);
+  saveInvoices();
+  renderInvoicesPage();
+}
+
+function addInvLine() {
+  if (!window._invLines) window._invLines = [];
+  window._invLines.push({ jobRef: '', desc: '', amount: 0 });
+  renderInvLines();
+}
+
+function removeInvLine(i) {
+  window._invLines.splice(i, 1);
+  renderInvLines();
+  renderInvTotals();
+}
+
+function addInvFromGates() {
+  const jobs = db.jobs.filter(j => ['Confirmed','In Progress','Snagging','Completed - Not Paid'].includes(j.status));
+  let modal = document.getElementById('inv-gates-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'inv-gates-modal';
+    modal.className = 'modal-overlay';
+    modal.onclick = function(e) { if(e.target===modal) closeModal('inv-gates-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:550px;"><div class="modal-header"><div class="modal-title">Add from Payment Gates</div><button class="modal-close" onclick="closeModal(\'inv-gates-modal\')">×</button></div><div class="modal-body" id="inv-gates-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+  const gates = [];
+  jobs.forEach(j => {
+    (db.paymentGates||[]).filter(g => g.jobRef === j.ref && g.status !== 'Paid').forEach(g => {
+      gates.push({ jobRef: j.ref, jobName: j.name, gateName: g.name, amount: parseFloat(g.amount)||0, gateId: g.id });
+    });
+  });
+  let html = '<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Select payment gates to add as invoice lines:</p>';
+  if (!gates.length) {
+    html += '<p style="color:var(--text-muted);">No unpaid payment gates found.</p>';
+  } else {
+    gates.forEach((g, i) => {
+      html += '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;">';
+      html += '<input type="checkbox" class="gate-check" data-idx="' + i + '" style="flex-shrink:0;width:18px;height:18px;">';
+      html += '<span style="flex:1;"><strong>' + g.jobRef + '</strong> — ' + g.gateName + '</span>';
+      html += '<span style="font-weight:600;">£' + g.amount.toFixed(2) + '</span>';
+      html += '</label>';
+    });
+  }
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">';
+  html += '<button class="btn btn-secondary" onclick="closeModal(\'inv-gates-modal\')">Cancel</button>';
+  html += '<button class="btn btn-primary" onclick="applyGateSelection()">Add Selected</button>';
+  html += '</div>';
+  document.getElementById('inv-gates-body').innerHTML = html;
+  window._gateOptions = gates;
+  modal.style.display = 'flex';
+}
+
+function applyGateSelection() {
+  const checks = document.querySelectorAll('.gate-check:checked');
+  if (!window._invLines) window._invLines = [];
+  checks.forEach(chk => {
+    const g = window._gateOptions[parseInt(chk.dataset.idx)];
+    if (g) {
+      window._invLines.push({ jobRef: g.jobRef, desc: g.jobRef + ' — ' + g.gateName, amount: g.amount });
+      // Also auto-fill client if empty
+      const clientEl = document.getElementById('inv-client');
+      if (clientEl && !clientEl.value) {
+        const job = db.jobs.find(j => j.ref === g.jobRef);
+        if (job) { clientEl.value = job.client?.name || ''; }
+      }
+    }
+  });
+  closeModal('inv-gates-modal');
+  renderInvLines();
+  renderInvTotals();
+}
+
+function renderInvLines() {
+  const container = document.getElementById('inv-lines-container');
+  if (!container) return;
+  const lines = window._invLines || [];
+  const jobOpts = db.jobs.map(j => '<option value="' + j.ref + '">' + j.ref + ' — ' + (j.name||'') + '</option>').join('');
+  container.innerHTML = lines.map((l, i) => {
+    return '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">'
+      + '<select onchange="window._invLines[' + i + '].jobRef=this.value" style="width:160px;font-size:12px;padding:4px 6px;"><option value="">No job</option>' + jobOpts.replace('value="' + l.jobRef + '"', 'value="' + l.jobRef + '" selected') + '</select>'
+      + '<input type="text" value="' + (l.desc||'').replace(/"/g,'&quot;') + '" placeholder="Description of work..." oninput="window._invLines[' + i + '].desc=this.value" style="flex:1;font-size:12px;padding:4px 8px;">'
+      + '<input type="number" value="' + (l.amount||0) + '" placeholder="Amount" oninput="window._invLines[' + i + '].amount=parseFloat(this.value)||0;renderInvTotals()" style="width:100px;font-size:12px;padding:4px 8px;text-align:right;">'
+      + '<button onclick="removeInvLine(' + i + ')" style="border:none;background:none;cursor:pointer;color:var(--danger);font-size:14px;">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+function renderInvTotals() {
+  const el = document.getElementById('inv-totals');
+  if (!el) return;
+  const lines = window._invLines || [];
+  const subtotal = lines.reduce((s, l) => s + (l.amount||0), 0);
+  const addVat = document.getElementById('inv-vat-toggle')?.checked;
+  const vat = addVat ? subtotal * 0.2 : 0;
+  const total = subtotal + vat;
+  el.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>Subtotal</span><span style="font-weight:600;">£' + subtotal.toFixed(2) + '</span></div>'
+    + (addVat ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>VAT (20%)</span><span style="font-weight:600;">£' + vat.toFixed(2) + '</span></div>' : '')
+    + '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;border-top:2px solid var(--copper);padding-top:8px;margin-top:4px;"><span>Total</span><span style="color:var(--copper);">£' + total.toFixed(2) + '</span></div>';
+}
+
+function saveInvoice() {
+  const idx = parseInt(document.getElementById('inv-edit-idx').value);
+  const lines = window._invLines || [];
+  const addVat = document.getElementById('inv-vat-toggle')?.checked;
+  const subtotal = lines.reduce((s, l) => s + (l.amount||0), 0);
+  const vatAmount = addVat ? subtotal * 0.2 : 0;
+  const inv = {
+    number: document.getElementById('inv-number').value,
+    date: document.getElementById('inv-date').value,
+    client: document.getElementById('inv-client').value,
+    clientAddress: document.getElementById('inv-client-address').value,
+    lines: lines,
+    jobRefs: [...new Set(lines.map(l => l.jobRef).filter(Boolean))],
+    addVat: addVat,
+    subtotal: subtotal,
+    vatAmount: vatAmount,
+    total: subtotal + vatAmount,
+    terms: document.getElementById('inv-terms').value,
+    notes: document.getElementById('inv-notes').value,
+    status: 'Draft'
+  };
+  if (idx >= 0) {
+    inv.status = db.invoices[idx].status || 'Draft';
+    db.invoices[idx] = inv;
+  } else {
+    db.invoices.push(inv);
+  }
+  saveInvoices();
+  closeModal('invoice-modal');
+  renderInvoicesPage();
+}
+
+function viewInvoicePDF(idx) {
+  const inv = db.invoices[idx];
+  if (!inv) return;
+  exportInvoiceFromData(inv);
+}
+
+function exportInvoicePDF() {
+  const lines = window._invLines || [];
+  const addVat = document.getElementById('inv-vat-toggle')?.checked;
+  const subtotal = lines.reduce((s, l) => s + (l.amount||0), 0);
+  const vatAmount = addVat ? subtotal * 0.2 : 0;
+  const inv = {
+    number: document.getElementById('inv-number').value,
+    date: document.getElementById('inv-date').value,
+    client: document.getElementById('inv-client').value,
+    clientAddress: document.getElementById('inv-client-address').value,
+    lines: lines,
+    addVat: addVat,
+    subtotal: subtotal,
+    vatAmount: vatAmount,
+    total: subtotal + vatAmount,
+    terms: document.getElementById('inv-terms').value,
+    notes: document.getElementById('inv-notes').value
+  };
+  exportInvoiceFromData(inv);
+}
+
+function exportInvoiceFromData(inv) {
+  const lineRows = (inv.lines||[]).map(l => {
+    return '<tr><td style="padding:10px 12px;border-bottom:1px solid #e8e0d5;">' + (l.jobRef||'') + '</td>'
+      + '<td style="padding:10px 12px;border-bottom:1px solid #e8e0d5;">' + (l.desc||'') + '</td>'
+      + '<td style="padding:10px 12px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£' + (l.amount||0).toFixed(2) + '</td></tr>';
+  }).join('');
+
+  const fmtDate = inv.date ? new Date(inv.date).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Invoice ${inv.number} — Livingstone Projects</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: Georgia, 'Times New Roman', serif; color: #1a2530; }
+.page { max-width:800px; margin:0 auto; padding:48px 50px; }
+.header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:20px; border-bottom:3px solid #B87333; margin-bottom:30px; }
+.brand { font-size:26px; font-weight:700; } .brand span { color:#B87333; }
+.brand-sub { font-size:11px; color:#6b7e8e; text-transform:uppercase; letter-spacing:0.08em; margin-top:3px; }
+.inv-meta { text-align:right; font-size:13px; color:#6b7e8e; line-height:1.8; }
+.inv-meta strong { color:#1a2530; font-size:15px; }
+.client { margin-bottom:30px; }
+.client h3 { font-size:11px; color:#6b7e8e; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+.client p { font-size:14px; line-height:1.7; }
+table { width:100%; border-collapse:collapse; margin-bottom:24px; font-size:13px; }
+thead tr { background:#1a2530; color:white; }
+thead th { padding:10px 12px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; }
+.total-section { margin-top:8px; }
+.total-row { display:flex; justify-content:space-between; padding:6px 12px; font-size:14px; }
+.total-row.grand { background:#B87333; color:white; font-weight:700; font-size:16px; padding:10px 12px; border-radius:4px; margin-top:4px; }
+.terms { margin-top:30px; font-size:12px; color:#6b7e8e; line-height:1.8; border-top:1px solid #e8e0d5; padding-top:20px; }
+.footer { margin-top:30px; text-align:center; font-size:10px; color:#6b7e8e; border-top:1px solid #e8e0d5; padding-top:12px; }
+@media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+</style></head><body>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="brand">Livingstone <span>Projects</span></div>
+      <div class="brand-sub">Premium Home Improvement</div>
+    </div>
+    <div class="inv-meta">
+      <strong>INVOICE</strong><br>
+      ${inv.number}<br>
+      Date: ${fmtDate}<br>
+      ${inv.terms || ''}
+    </div>
+  </div>
+  <div class="client">
+    <h3>Invoice To</h3>
+    <p><strong>${inv.client||''}</strong><br>${(inv.clientAddress||'').replace(/\n/g,'<br>')}</p>
+  </div>
+  <table>
+    <thead><tr><th>Ref</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+    <tbody>${lineRows}</tbody>
+  </table>
+  <div class="total-section">
+    <div class="total-row"><span>Subtotal</span><span>£${(inv.subtotal||0).toFixed(2)}</span></div>
+    ${inv.addVat ? '<div class="total-row"><span>VAT (20%)</span><span>£' + (inv.vatAmount||0).toFixed(2) + '</span></div>' : ''}
+    <div class="total-row grand"><span>Total Due</span><span>£${(inv.total||0).toFixed(2)}</span></div>
+  </div>
+  ${inv.notes ? '<div style="margin-top:20px;padding:12px 16px;background:#F5F0E8;border-radius:6px;font-size:13px;"><strong>Notes:</strong> ' + inv.notes + '</div>' : ''}
+  <div class="terms">
+    <strong>Payment Terms:</strong> ${inv.terms||'Net 14 days'}<br>
+    <strong>Bank Details:</strong> [Add your bank details here]<br>
+    <strong>Company:</strong> Livingstone Projects
+  </div>
+  <div class="footer"><strong>Livingstone Projects</strong> · Premium Home Improvement · Registered in England &amp; Wales</div>
+</div></body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
+}
+
+// ============================================================
 // H&S / CPP (Construction Phase Plan)
 // ============================================================
 function renderJobHS() {
@@ -5804,7 +6189,7 @@ function openCPPWizard() {
     modal = document.createElement('div');
     modal.id = 'cpp-wizard-modal';
     modal.className = 'modal-overlay';
-    modal.onclick = function(e) { if(e.target===modal) closeModal('cpp-wizard-modal'); };
+    modal.onclick = function(e) { if(e.target===modal) { if(confirm('Close CPP wizard? Your changes are auto-saved.')) closeModal('cpp-wizard-modal'); } };
     modal.innerHTML = '<div class="modal" style="max-width:650px;max-height:90vh;overflow-y:auto;"><div class="modal-header"><div class="modal-title">📝 Construction Phase Plan — ' + ref + '</div><button class="modal-close" onclick="closeModal(\'cpp-wizard-modal\')">×</button></div><div class="modal-body" id="cpp-wizard-body"></div></div>';
     document.body.appendChild(modal);
   } else {
@@ -5814,53 +6199,62 @@ function openCPPWizard() {
   const subs = db.tasks.filter(t => t.jobRef === ref && t.responsible).map(t => t.responsible).filter((v,i,a) => a.indexOf(v)===i);
 
   document.getElementById('cpp-wizard-body').innerHTML = `
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Complete the sections below. Fields are pre-filled where possible from job data.</p>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Complete the sections below. <strong>Changes auto-save as you type.</strong></p>
 
     <h3 style="font-size:14px;color:var(--copper);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">1. Project Details</h3>
-    <div class="form-group"><label>Project Name</label><input type="text" id="cpp-project" value="${cpp.project || job.name || ''}" style="width:100%;"></div>
-    <div class="form-group"><label>Site Address</label><textarea id="cpp-address" rows="2" style="width:100%;">${cpp.address || job.address || ''}</textarea></div>
-    <div class="form-group"><label>Client Name</label><input type="text" id="cpp-client" value="${cpp.client || job.client?.name || ''}" style="width:100%;"></div>
+    <div class="form-group"><label>Project Name</label><input type="text" id="cpp-project" value="${cpp.project || job.name || ''}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
+    <div class="form-group"><label>Site Address</label><textarea id="cpp-address" rows="2" style="width:100%;" oninput="autoSaveCPP('${ref}')">${cpp.address || job.address || ''}</textarea></div>
+    <div class="form-group"><label>Client Name</label><input type="text" id="cpp-client" value="${cpp.client || job.client?.name || ''}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
     <div class="grid-2" style="gap:12px;">
-      <div class="form-group"><label>Start Date</label><input type="date" id="cpp-start" value="${cpp.start || job.startDate || ''}" style="width:100%;"></div>
-      <div class="form-group"><label>End Date</label><input type="date" id="cpp-end" value="${cpp.end || job.endDate || ''}" style="width:100%;"></div>
+      <div class="form-group"><label>Start Date</label><input type="date" id="cpp-start" value="${cpp.start || job.startDate || ''}" style="width:100%;" onchange="autoSaveCPP('${ref}')"></div>
+      <div class="form-group"><label>End Date</label><input type="date" id="cpp-end" value="${cpp.end || job.endDate || ''}" style="width:100%;" onchange="autoSaveCPP('${ref}')"></div>
     </div>
 
     <h3 style="font-size:14px;color:var(--copper);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">2. Duty Holders</h3>
-    <div class="form-group"><label>Principal Contractor</label><input type="text" id="cpp-pc" value="${cpp.pc || 'Livingstone Projects'}" style="width:100%;"></div>
-    <div class="form-group"><label>Site Manager / Supervisor</label><input type="text" id="cpp-manager" value="${cpp.manager || 'Adam Hemming'}" style="width:100%;"></div>
-    <div class="form-group"><label>Designer (if appointed)</label><input type="text" id="cpp-designer" value="${cpp.designer || ''}" style="width:100%;"></div>
-    <div class="form-group"><label>Subcontractors on this job</label><textarea id="cpp-subs" rows="2" style="width:100%;">${cpp.subs || subs.join(', ')}</textarea></div>
+    <div class="form-group"><label>Principal Contractor</label><input type="text" id="cpp-pc" value="${cpp.pc || 'Livingstone Projects'}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
+    <div class="form-group"><label>Site Manager / Supervisor</label><input type="text" id="cpp-manager" value="${cpp.manager || 'Adam Hemming'}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
+    <div class="form-group"><label>Designer (if appointed)</label><input type="text" id="cpp-designer" value="${cpp.designer || ''}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
+    <div class="form-group"><label>Subcontractors on this job</label><textarea id="cpp-subs" rows="2" style="width:100%;" oninput="autoSaveCPP('${ref}')">${cpp.subs || subs.join(', ')}</textarea></div>
 
     <h3 style="font-size:14px;color:var(--copper);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">3. Description of Works</h3>
-    <div class="form-group"><label>Scope of Works</label><textarea id="cpp-scope" rows="3" style="width:100%;">${cpp.scope || job.desc || ''}</textarea></div>
+    <div class="form-group"><label>Scope of Works</label><textarea id="cpp-scope" rows="3" style="width:100%;" oninput="autoSaveCPP('${ref}')">${cpp.scope || job.desc || ''}</textarea></div>
 
     <h3 style="font-size:14px;color:var(--copper);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">4. Key Risks & Control Measures</h3>
     <div class="form-group"><label>Select applicable hazards:</label></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px;">
       ${['Working at height','Excavation','Demolition','Asbestos','Manual handling','Electrical work','Hot works','Confined spaces','Dust / silica','Noise','Falling objects','Plant / machinery','Lead paint','Structural instability','Public access / interface'].map(h => {
-        const hid = h.replace(/[^a-zA-Z]/g,'_').toLowerCase();
         const checked = cpp.hazards && cpp.hazards.includes(h) ? 'checked' : '';
-        return '<label style="font-size:12px;cursor:pointer;padding:3px 0;"><input type="checkbox" class="cpp-hazard" value="' + h + '" ' + checked + '> ' + h + '</label>';
+        return '<label style="font-size:12px;cursor:pointer;padding:3px 0;"><input type="checkbox" class="cpp-hazard" value="' + h + '" ' + checked + ' onchange="autoSaveCPP(\'' + ref + '\')"> ' + h + '</label>';
       }).join('')}
     </div>
-    <div class="form-group"><label>Additional risks / control measures</label><textarea id="cpp-controls" rows="3" style="width:100%;">${cpp.controls || ''}</textarea></div>
+    <div class="form-group"><label>Additional risks / control measures</label><textarea id="cpp-controls" rows="3" style="width:100%;" oninput="autoSaveCPP('${ref}')">${cpp.controls || ''}</textarea></div>
 
     <h3 style="font-size:14px;color:var(--copper);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">5. Site Rules & Welfare</h3>
-    <div class="form-group"><label>Site working hours</label><input type="text" id="cpp-hours" value="${cpp.hours || '08:00 - 17:00 Mon-Fri'}" style="width:100%;"></div>
-    <div class="form-group"><label>PPE Requirements</label><input type="text" id="cpp-ppe" value="${cpp.ppe || 'Hard hat, safety boots, hi-vis, gloves, eye protection as needed'}" style="width:100%;"></div>
-    <div class="form-group"><label>Welfare Facilities</label><textarea id="cpp-welfare" rows="2" style="width:100%;">${cpp.welfare || 'Client facilities available / portable welfare unit on site'}</textarea></div>
-    <div class="form-group"><label>Nearest A&E</label><input type="text" id="cpp-ae" value="${cpp.ae || ''}" style="width:100%;"></div>
+    <div class="form-group"><label>Site working hours</label><input type="text" id="cpp-hours" value="${cpp.hours || '08:00 - 17:00 Mon-Fri'}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
+    <div class="form-group"><label>PPE Requirements</label><input type="text" id="cpp-ppe" value="${cpp.ppe || 'Hard hat, safety boots, hi-vis, gloves, eye protection as needed'}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
+    <div class="form-group"><label>Welfare Facilities</label><textarea id="cpp-welfare" rows="2" style="width:100%;" oninput="autoSaveCPP('${ref}')">${cpp.welfare || 'Client facilities available / portable welfare unit on site'}</textarea></div>
+    <div class="form-group"><label>Nearest A&E</label><input type="text" id="cpp-ae" value="${cpp.ae || ''}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
 
     <h3 style="font-size:14px;color:var(--copper);margin:16px 0 8px;border-bottom:1px solid var(--border);padding-bottom:4px;">6. Emergency Procedures</h3>
-    <div class="form-group"><label>Emergency contacts</label><textarea id="cpp-emergency" rows="2" style="width:100%;">${cpp.emergency || 'Emergency services: 999\\nAdam Hemming: [phone]\\nTom: [phone]'}</textarea></div>
-    <div class="form-group"><label>Fire assembly point</label><input type="text" id="cpp-fire" value="${cpp.fire || ''}" style="width:100%;"></div>
+    <div class="form-group"><label>Emergency contacts</label><textarea id="cpp-emergency" rows="2" style="width:100%;" oninput="autoSaveCPP('${ref}')">${cpp.emergency || 'Emergency services: 999\\nAdam Hemming: [phone]\\nTom: [phone]'}</textarea></div>
+    <div class="form-group"><label>Fire assembly point</label><input type="text" id="cpp-fire" value="${cpp.fire || ''}" style="width:100%;" oninput="autoSaveCPP('${ref}')"></div>
 
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
-      <button class="btn btn-secondary" onclick="closeModal('cpp-wizard-modal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveCPP('${ref}')">Save CPP</button>
+      <button class="btn btn-secondary" onclick="closeModal('cpp-wizard-modal')">Close</button>
+      <span style="font-size:11px;color:var(--success);align-self:center;" id="cpp-save-status">✓ Auto-saved</span>
     </div>
   `;
   modal.style.display = 'flex';
+}
+
+function autoSaveCPP(ref) {
+  clearTimeout(window._cppSaveTimer);
+  const statusEl = document.getElementById('cpp-save-status');
+  if (statusEl) { statusEl.textContent = '⏳ Saving...'; statusEl.style.color = 'var(--text-muted)'; }
+  window._cppSaveTimer = setTimeout(() => {
+    saveCPP(ref);
+    if (statusEl) { statusEl.textContent = '✓ Auto-saved'; statusEl.style.color = 'var(--success)'; }
+  }, 500);
 }
 
 function saveCPP(ref) {
@@ -5889,8 +6283,6 @@ function saveCPP(ref) {
     created: new Date().toISOString()
   };
   localStorage.setItem('livingstoneHS', JSON.stringify(window._jobHS));
-  closeModal('cpp-wizard-modal');
-  renderJobHS();
 }
 
 function exportCPP() {
