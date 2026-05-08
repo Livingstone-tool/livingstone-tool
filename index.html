@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.70 -->
+<!-- Livingstone v3.72 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1492,33 +1492,43 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="inv-edit-idx" value="-1">
+
+      <h4 style="margin:0 0 8px;font-size:13px;color:var(--copper);">Step 1 — Select Jobs</h4>
+      <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:16px;" id="inv-job-selector"></div>
+
       <div class="grid-2" style="gap:12px;">
         <div class="form-group"><label>Invoice Number</label><input type="text" id="inv-number" style="width:100%;"></div>
         <div class="form-group"><label>Invoice Date</label><input type="date" id="inv-date" style="width:100%;"></div>
       </div>
-      <div class="form-group"><label>Client Name</label><input type="text" id="inv-client" style="width:100%;"></div>
+      <div class="grid-2" style="gap:12px;">
+        <div class="form-group"><label>Client Name</label><input type="text" id="inv-client" style="width:100%;"></div>
+        <div class="form-group"><label>Payment Terms</label>
+          <select id="inv-terms" style="width:100%;">
+            <option>Payment on completion</option>
+            <option>Net 7 days</option>
+            <option selected>Net 14 days</option>
+            <option>Net 30 days</option>
+          </select>
+        </div>
+      </div>
       <div class="form-group"><label>Client Address</label><textarea id="inv-client-address" rows="2" style="width:100%;"></textarea></div>
 
-      <h4 style="margin:16px 0 8px;font-size:13px;color:var(--copper);">Line Items</h4>
+      <h4 style="margin:16px 0 8px;font-size:13px;color:var(--copper);">Step 2 — Invoice Lines</h4>
       <div id="inv-lines-container"></div>
       <div style="display:flex;gap:8px;margin:8px 0 16px;">
         <button class="btn btn-sm btn-secondary" onclick="addInvLine()">+ Add Line</button>
         <button class="btn btn-sm btn-secondary" onclick="addInvFromGates()">+ From Payment Gates</button>
       </div>
 
+      <div class="form-group"><label><input type="checkbox" id="inv-vat-toggle" onchange="renderInvTotals()"> Add VAT (20%)</label></div>
       <div class="grid-2" style="gap:12px;">
-        <div class="form-group"><label><input type="checkbox" id="inv-vat-toggle" onchange="renderInvTotals()"> Add VAT (20%)</label></div>
-        <div class="form-group"><label>Payment Terms</label>
-          <select id="inv-terms" style="width:100%;">
-            <option>Payment on completion</option>
-            <option>Net 7 days</option>
-            <option>Net 14 days</option>
-            <option>Net 30 days</option>
+        <div class="form-group"><label>Status</label>
+          <select id="inv-status" style="width:100%;">
+            <option>Draft</option><option>Sent</option><option>Paid</option>
           </select>
         </div>
+        <div class="form-group"><label>Notes / Additional Info</label><textarea id="inv-notes" rows="1" style="width:100%;"></textarea></div>
       </div>
-
-      <div class="form-group"><label>Notes / Additional Info</label><textarea id="inv-notes" rows="2" style="width:100%;"></textarea></div>
 
       <div id="inv-totals" style="background:var(--limestone);border-radius:8px;padding:14px 18px;margin-top:12px;"></div>
     </div>
@@ -1868,6 +1878,7 @@
         <button class="btn btn-sm btn-secondary" id="wish-filter-feature" onclick="setWishFilter('feature')">✨ Features</button>
         <button class="btn btn-sm btn-secondary" id="wish-filter-fix" onclick="setWishFilter('fix')">🔧 Fixes</button>
         <button class="btn btn-sm btn-secondary" id="wish-filter-implemented" onclick="setWishFilter('implemented')">✅ Done</button>
+        <button class="btn btn-sm btn-secondary" onclick="exportWishlist()" style="margin-left:auto;" title="Export as text file for Claude">📋 Export for Dev</button>
       </div>
       <div id="wish-section-features">
         <div style="margin-bottom:8px;font-weight:700;font-size:13px;color:var(--copper);">✨ New Features</div>
@@ -4662,6 +4673,51 @@ function openWishlist() {
   document.getElementById('wishlist-modal').style.display='flex';
 }
 
+function exportWishlist() {
+  const items = db.wishlist || [];
+  const active = items.filter(w => w.status !== 'implemented');
+  if (!active.length) { alert('No active wishlist items to export.'); return; }
+
+  let text = '# Livingstone Projects — Feature Requests & Fixes\n';
+  text += '# Exported: ' + new Date().toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'}) + '\n';
+  text += '# Current version: ' + (document.querySelector('html')?.children[0]?.textContent?.match(/v[\d.]+/)?.[0] || 'unknown') + '\n\n';
+
+  const features = active.filter(w => w.type === 'feature');
+  const fixes = active.filter(w => w.type === 'fix');
+
+  if (features.length) {
+    text += '## FEATURES (' + features.length + ')\n\n';
+    features.forEach((w, i) => {
+      text += (i+1) + '. ' + w.text + '\n';
+      if (w.votes > 1) text += '   Priority: ' + w.votes + ' votes\n';
+    });
+    text += '\n';
+  }
+  if (fixes.length) {
+    text += '## FIXES (' + fixes.length + ')\n\n';
+    fixes.forEach((w, i) => {
+      text += (i+1) + '. ' + w.text + '\n';
+      if (w.votes > 1) text += '   Priority: ' + w.votes + ' votes\n';
+    });
+    text += '\n';
+  }
+
+  text += '## CONTEXT\n';
+  text += '- Platform: Single HTML file on GitHub Pages + Supabase backend\n';
+  text += '- Total jobs: ' + db.jobs.length + '\n';
+  text += '- Total quotes: ' + (db.quotes||[]).length + '\n';
+  text += '- Total costs logged: ' + (db.costs||[]).length + '\n';
+  text += '- Please implement these changes to the index.html file\n';
+
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'livingstone-feature-requests-' + new Date().toISOString().split('T')[0] + '.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function renderWishlist() {
   const filter = window._wishFilter || 'all';
   const active = db.wishlist.filter(w => !w.status || w.status === 'active');
@@ -5795,7 +5851,7 @@ function renderInvoicesPage() {
   }).join('');
 }
 
-function openInvoiceModal() {
+function openInvoiceModal(preselectedRef) {
   document.getElementById('invoice-modal-title').textContent = 'Create Invoice';
   document.getElementById('inv-edit-idx').value = -1;
   document.getElementById('inv-number').value = nextInvoiceNum();
@@ -5805,10 +5861,79 @@ function openInvoiceModal() {
   document.getElementById('inv-notes').value = '';
   document.getElementById('inv-vat-toggle').checked = true;
   document.getElementById('inv-terms').value = 'Net 14 days';
-  window._invLines = [{ jobRef: '', desc: '', amount: 0 }];
+  window._invLines = [];
+
+  // Populate job selector with checkboxes
+  const invoiceableStatuses = ['Confirmed','In Progress','Snagging','Completed - Not Paid','Quoted'];
+  const jobs = db.jobs.filter(j => invoiceableStatuses.includes(j.status)).sort((a,b) => (parseInt((a.ref||'').replace(/\D/g,''))||0) - (parseInt((b.ref||'').replace(/\D/g,''))||0));
+  const selector = document.getElementById('inv-job-selector');
+  selector.innerHTML = jobs.map(j => {
+    const checked = preselectedRef === j.ref ? ' checked' : '';
+    const quoteVal = j.quoteValue ? '£' + Math.round(j.quoteValue).toLocaleString() : '—';
+    const gates = (db.paymentGates||[]).filter(g => g.jobRef === j.ref);
+    const unpaidGates = gates.filter(g => g.status !== 'Paid');
+    const gateInfo = unpaidGates.length ? '<span style="color:var(--copper);">' + unpaidGates.length + ' unpaid gate' + (unpaidGates.length>1?'s':'') + '</span>' : '';
+    return '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--limestone)\'" onmouseout="this.style.background=\'\'">'
+      + '<input type="checkbox" class="inv-job-check" value="' + j.ref + '"' + checked + ' onchange="onInvJobSelect()" style="flex-shrink:0;width:18px;height:18px;">'
+      + '<span style="flex:1;"><strong>' + j.ref + '</strong> — ' + (j.name||'') + '</span>'
+      + '<span style="font-size:11px;color:var(--text-muted);">' + quoteVal + '</span>'
+      + (gateInfo ? '<span style="font-size:11px;margin-left:4px;">' + gateInfo + '</span>' : '')
+      + '</label>';
+  }).join('');
+
+  if (preselectedRef) onInvJobSelect();
   renderInvLines();
   renderInvTotals();
   document.getElementById('invoice-modal').style.display = 'flex';
+}
+
+function onInvJobSelect() {
+  const checked = [...document.querySelectorAll('.inv-job-check:checked')].map(c => c.value);
+  if (!checked.length) return;
+
+  // Auto-fill client from first selected job
+  const firstJob = db.jobs.find(j => j.ref === checked[0]);
+  const clientEl = document.getElementById('inv-client');
+  const addrEl = document.getElementById('inv-client-address');
+  if (firstJob && !clientEl.value) {
+    clientEl.value = firstJob.client?.name || '';
+    addrEl.value = firstJob.address || '';
+  }
+
+  // Auto-populate lines from payment gates and/or quote values
+  window._invLines = [];
+  checked.forEach(ref => {
+    const job = db.jobs.find(j => j.ref === ref);
+    const gates = (db.paymentGates||[]).filter(g => g.jobRef === ref && g.status !== 'Paid');
+
+    if (gates.length) {
+      // Add each unpaid gate as a line
+      gates.forEach(g => {
+        window._invLines.push({
+          jobRef: ref,
+          desc: (job?.name||ref) + ' — ' + g.name,
+          amount: parseFloat(g.amount) || 0
+        });
+      });
+    } else if (job?.quoteValue) {
+      // No gates — add the full quote value as one line
+      window._invLines.push({
+        jobRef: ref,
+        desc: (job?.name||ref) + ' — as per quote ' + ref,
+        amount: job.quoteValue
+      });
+    } else {
+      // No quote value either — add blank line
+      window._invLines.push({
+        jobRef: ref,
+        desc: job?.name || ref,
+        amount: 0
+      });
+    }
+  });
+
+  renderInvLines();
+  renderInvTotals();
 }
 
 function editInvoice(idx) {
@@ -5823,6 +5948,7 @@ function editInvoice(idx) {
   document.getElementById('inv-notes').value = inv.notes || '';
   document.getElementById('inv-vat-toggle').checked = inv.addVat || false;
   document.getElementById('inv-terms').value = inv.terms || 'Net 14 days';
+  document.getElementById('inv-status').value = inv.status || 'Draft';
   window._invLines = (inv.lines || []).map(l => ({...l}));
   renderInvLines();
   renderInvTotals();
@@ -5953,10 +6079,9 @@ function saveInvoice() {
     total: subtotal + vatAmount,
     terms: document.getElementById('inv-terms').value,
     notes: document.getElementById('inv-notes').value,
-    status: 'Draft'
+    status: document.getElementById('inv-status').value || 'Draft'
   };
   if (idx >= 0) {
-    inv.status = db.invoices[idx].status || 'Draft';
     db.invoices[idx] = inv;
   } else {
     db.invoices.push(inv);
