@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.72 -->
+<!-- Livingstone v3.73 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1873,12 +1873,15 @@
         </select>
         <button class="btn btn-primary" style="flex-shrink:0;" onclick="addWish()">Add</button>
       </div>
-      <div style="display:flex;gap:6px;margin-bottom:16px;">
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
         <button class="btn btn-sm" id="wish-filter-all" onclick="setWishFilter('all')" style="background:var(--slate);color:white;">All</button>
         <button class="btn btn-sm btn-secondary" id="wish-filter-feature" onclick="setWishFilter('feature')">✨ Features</button>
         <button class="btn btn-sm btn-secondary" id="wish-filter-fix" onclick="setWishFilter('fix')">🔧 Fixes</button>
         <button class="btn btn-sm btn-secondary" id="wish-filter-implemented" onclick="setWishFilter('implemented')">✅ Done</button>
-        <button class="btn btn-sm btn-secondary" onclick="exportWishlist()" style="margin-left:auto;" title="Export as text file for Claude">📋 Export for Dev</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <button class="btn btn-sm btn-primary" onclick="exportWishlist()" title="Download as text file to upload to Claude">📋 Export for Dev</button>
+      </div>
       </div>
       <div id="wish-section-features">
         <div style="margin-bottom:8px;font-weight:700;font-size:13px;color:var(--copper);">✨ New Features</div>
