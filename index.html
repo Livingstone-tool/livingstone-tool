@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.80 -->
+<!-- Livingstone v3.81 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5946,8 +5946,12 @@ function saveInvoices() {
   localStorage.setItem('livingstoneInvoices', JSON.stringify(db.invoices));
 }
 
-function nextInvoiceNum() {
-  const nums = db.invoices.map(i => { const m = (i.number||'').match(/(\d+)/); return m ? parseInt(m[1]) : 0; });
+function nextInvoiceNum(jobRef) {
+  if (jobRef) {
+    const existing = db.invoices.filter(i => (i.jobRefs||[]).includes(jobRef) || (i.number||'').startsWith(jobRef));
+    return jobRef + '-INV-' + String(existing.length + 1).padStart(2, '0');
+  }
+  const nums = db.invoices.map(i => { const m = (i.number||'').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; });
   return 'LP-INV-' + String((Math.max(0,...nums) + 1)).padStart(3, '0');
 }
 
@@ -6027,6 +6031,16 @@ function onInvJobSelect() {
   if (firstJob) {
     if (!clientEl.value) clientEl.value = firstJob.client?.name || '';
     if (!addrEl.value) addrEl.value = firstJob.address || '';
+  }
+
+  // Auto-set invoice number based on selected job(s)
+  const invNumEl = document.getElementById('inv-number');
+  if (invNumEl) {
+    if (checked.length === 1) {
+      invNumEl.value = nextInvoiceNum(checked[0]);
+    } else {
+      invNumEl.value = nextInvoiceNum(checked[0]);
+    }
   }
 }
 
@@ -6334,6 +6348,7 @@ thead th { padding:10px 12px; text-align:left; font-size:11px; text-transform:up
     <strong>Account Name:</strong> Livingstone Projects Ltd<br>
     <strong>Sort Code:</strong> 82-11-07<br>
     <strong>Account Number:</strong> 20529880<br>
+    <strong>Payment Reference:</strong> ${inv.number}<br>
     <strong>Payment Terms:</strong> ${inv.terms||'Net 14 days'}
   </div>
   <div class="footer">
