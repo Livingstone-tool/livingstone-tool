@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.76 -->
+<!-- Livingstone v3.77 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1681,7 +1681,7 @@
         <div class="tab active" onclick="switchTab('jd','overview',this)">Overview</div>
         <div class="tab" onclick="switchTab('jd','financials',this)">Financials</div>
         <div class="tab" onclick="switchTab('jd','tasks',this)">Tasks</div>
-        <div class="tab" onclick="switchTab('jd','payments',this)">Payments</div>
+        <div class="tab" onclick="switchTab('jd','payments',this);renderJobPayments()">Payments</div>
         <div class="tab" onclick="switchTab('jd','costs',this);loadJobCostsTab()">Costs</div>
         <div class="tab" onclick="switchTab('jd','todos',this);renderJobTodos()">To Do</div>
         <div class="tab" onclick="switchTab('jd','docs',this);loadJobDocs()">Documents</div>
@@ -1732,7 +1732,7 @@
         <button class="btn btn-sm btn-secondary" style="margin-top:12px;" onclick="addTaskToJob()">+ Add Task</button>
       </div>
       <div id="jd-tab-payments" class="tab-content">
-        <div class="alert alert-warning">Set up payment gates once this job is confirmed.</div>
+        <div id="jd-payments-content" style="min-height:100px;">Loading...</div>
       </div>
       <div id="jd-tab-costs" class="tab-content">
         <div id="jd-costs-content" style="min-height:100px;"><div style="color:var(--text-muted);font-size:13px;padding:16px 0;">Loading costs...</div></div>
@@ -5813,6 +5813,120 @@ function globalSearch(q) {
     showPage('jobs');
     setTimeout(()=>openJob(matches[0].ref),100);
   }
+}
+
+// ============================================================
+// JOB PAYMENTS TAB
+// ============================================================
+function renderJobPayments() {
+  const ref = window._currentJobRef;
+  const el = document.getElementById('jd-payments-content');
+  if (!el || !ref) return;
+  const job = db.jobs.find(j => j.ref === ref);
+  if (!job) return;
+
+  const gates = (db.paymentGates||[]).filter(g => g.jobRef === ref).sort((a,b) => (a.sortOrder||0) - (b.sortOrder||0));
+  const quoteVal = job.quoteValue || 0;
+  const totalGated = gates.reduce((s,g) => s + (parseFloat(g.amount)||0), 0);
+  const totalPaid = gates.filter(g => g.status === 'Paid').reduce((s,g) => s + (parseFloat(g.amount)||0), 0);
+
+  let html = '<div style="display:flex;gap:8px;margin-bottom:16px;">';
+  html += '<button class="btn btn-sm btn-primary" onclick="addPaymentGateForJob(\'' + ref + '\')">+ Add Payment Gate</button>';
+  if (quoteVal && !gates.length) {
+    html += '<button class="btn btn-sm btn-secondary" onclick="autoCreateGates(\'' + ref + '\')">⚡ Auto-create (25% × 4 stages)</button>';
+  }
+  html += '</div>';
+
+  // Stats
+  html += '<div class="grid-3" style="gap:12px;margin-bottom:16px;">';
+  html += '<div class="stat-card" style="padding:12px;"><div class="stat-label">Quote Value</div><div style="font-size:18px;font-weight:700;color:var(--copper);">£' + Math.round(quoteVal).toLocaleString() + '</div></div>';
+  html += '<div class="stat-card" style="padding:12px;"><div class="stat-label">Total Gated</div><div style="font-size:18px;font-weight:700;">£' + Math.round(totalGated).toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">' + (quoteVal ? Math.round(totalGated/quoteVal*100) + '% of quote' : '') + '</div></div>';
+  html += '<div class="stat-card" style="padding:12px;"><div class="stat-label">Paid</div><div style="font-size:18px;font-weight:700;color:var(--success);">£' + Math.round(totalPaid).toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">' + (totalGated ? Math.round(totalPaid/totalGated*100) + '% collected' : '') + '</div></div>';
+  html += '</div>';
+
+  if (!gates.length) {
+    html += '<div style="color:var(--text-muted);font-size:13px;padding:16px 0;text-align:center;">No payment gates set up yet. Add them manually or use auto-create.</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  // Gates table
+  html += '<table style="width:100%;font-size:13px;">';
+  html += '<thead><tr><th>Stage</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:center;">Status</th><th></th></tr></thead><tbody>';
+  gates.forEach((g, i) => {
+    const statusCol = g.status==='Paid'?'badge-confirmed':g.status==='Invoiced'?'badge-quoted':'badge-preparing';
+    html += '<tr>';
+    html += '<td style="font-weight:600;">' + (i+1) + '</td>';
+    html += '<td>' + (g.name||'') + '</td>';
+    html += '<td style="text-align:right;font-weight:600;">£' + (parseFloat(g.amount)||0).toFixed(2) + '</td>';
+    html += '<td style="text-align:center;"><select onchange="updateGateStatus(\'' + g.id + '\',this.value)" style="font-size:12px;padding:2px 6px;">';
+    ['Pending','Invoiced','Paid'].forEach(s => {
+      html += '<option' + (g.status===s?' selected':'') + '>' + s + '</option>';
+    });
+    html += '</select></td>';
+    html += '<td><button class="btn btn-sm btn-danger" onclick="deletePaymentGate(\'' + g.id + '\')" style="font-size:10px;">✕</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  // Progress bar
+  const paidPct = totalGated ? Math.round(totalPaid/totalGated*100) : 0;
+  html += '<div class="progress-bar" style="margin-top:12px;"><div class="progress-fill" style="width:' + paidPct + '%;background:var(--success);"></div></div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right;">' + paidPct + '% paid</div>';
+
+  el.innerHTML = html;
+}
+
+function addPaymentGateForJob(ref) {
+  const name = prompt('Payment gate name (e.g. "Initial deposit", "Stage 2 - First fix complete"):');
+  if (!name) return;
+  const amount = parseFloat(prompt('Amount (£):', '0'));
+  if (!amount) return;
+  const gate = {
+    id: 'pg_' + Date.now(),
+    jobRef: ref,
+    name: name,
+    amount: amount,
+    status: 'Pending',
+    sortOrder: (db.paymentGates||[]).filter(g => g.jobRef === ref).length
+  };
+  if (!db.paymentGates) db.paymentGates = [];
+  db.paymentGates.push(gate);
+  saveData();
+  renderJobPayments();
+}
+
+function autoCreateGates(ref) {
+  const job = db.jobs.find(j => j.ref === ref);
+  if (!job || !job.quoteValue) return;
+  const val = job.quoteValue;
+  const quarter = Math.round(val / 4 * 100) / 100;
+  const names = ['Initial Deposit', 'Stage 2 - Progress Payment', 'Stage 3 - Progress Payment', 'Final Payment - On Completion'];
+  if (!db.paymentGates) db.paymentGates = [];
+  names.forEach((n, i) => {
+    db.paymentGates.push({
+      id: 'pg_' + Date.now() + '_' + i,
+      jobRef: ref,
+      name: n,
+      amount: i === 3 ? val - (quarter * 3) : quarter, // last one gets remainder
+      status: 'Pending',
+      sortOrder: i
+    });
+  });
+  saveData();
+  renderJobPayments();
+}
+
+function updateGateStatus(gateId, status) {
+  const gate = (db.paymentGates||[]).find(g => g.id === gateId);
+  if (gate) { gate.status = status; saveData(); renderJobPayments(); }
+}
+
+function deletePaymentGate(gateId) {
+  if (!confirm('Delete this payment gate?')) return;
+  db.paymentGates = (db.paymentGates||[]).filter(g => g.id !== gateId);
+  saveData();
+  renderJobPayments();
 }
 
 // ============================================================
