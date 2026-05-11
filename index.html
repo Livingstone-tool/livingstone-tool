@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.83 -->
+<!-- Livingstone v3.84 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2218,6 +2218,7 @@ async function loadFromSupabase() {
       amount: parseFloat(g.amount) || 0,
       due: g.due_date || '',
       status: g.status || 'Pending',
+      sortOrder: g.sort_order || 0,
       notes: g.notes || ''
     }));
 
@@ -5897,8 +5898,8 @@ function renderJobPayments() {
   gates.forEach((g, i) => {
     html += '<tr>';
     html += '<td style="font-weight:600;width:40px;">' + (i+1) + '</td>';
-    html += '<td><input type="text" value="' + (g.name||'').replace(/"/g,'&quot;') + '" oninput="debouncedGateUpdate(\'' + g.id + '\',\'name\',this.value)" style="width:100%;font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;"></td>';
-    html += '<td style="width:110px;"><input type="number" value="' + (parseFloat(g.amount)||0) + '" oninput="debouncedGateUpdate(\'' + g.id + '\',\'amount\',parseFloat(this.value)||0)" style="width:100%;font-size:13px;padding:4px 8px;text-align:right;border:1px solid var(--border);border-radius:4px;"></td>';
+    html += '<td><input type="text" value="' + (g.name||'').replace(/"/g,'&quot;') + '" oninput="markGateDirty(\'' + g.id + '\',\'name\',this.value)" style="width:100%;font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;"></td>';
+    html += '<td style="width:110px;"><input type="number" value="' + (parseFloat(g.amount)||0) + '" oninput="markGateDirty(\'' + g.id + '\',\'amount\',parseFloat(this.value)||0)" style="width:100%;font-size:13px;padding:4px 8px;text-align:right;border:1px solid var(--border);border-radius:4px;"></td>';
     html += '<td style="text-align:center;width:100px;"><select onchange="updateGateStatus(\'' + g.id + '\',this.value)" style="font-size:12px;padding:2px 6px;">';
     ['Pending','Invoiced','Paid'].forEach(s => {
       html += '<option' + (g.status===s?' selected':'') + '>' + s + '</option>';
@@ -5911,7 +5912,11 @@ function renderJobPayments() {
 
   // Progress bar
   const paidPct = totalGated ? Math.round(totalPaid/totalGated*100) : 0;
-  html += '<div class="progress-bar" style="margin-top:12px;"><div class="progress-fill" style="width:' + paidPct + '%;background:var(--success);"></div></div>';
+  html += '<div style="display:flex;gap:8px;margin-top:10px;margin-bottom:8px;">';
+  html += '<button class="btn btn-sm btn-primary" onclick="saveAllPaymentGates(\'' + ref + '\')">💾 Save Payment Gates</button>';
+  html += '<span id="gates-save-status" style="font-size:11px;color:var(--text-muted);align-self:center;"></span>';
+  html += '</div>';
+  html += '<div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" style="width:' + paidPct + '%;background:var(--success);"></div></div>';
   html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right;">' + paidPct + '% paid</div>';
 
   el.innerHTML = html;
@@ -5967,18 +5972,28 @@ function updateGateStatus(gateId, status) {
 
 function updateGateField(gateId, field, value) {
   const gate = (db.paymentGates||[]).find(g => g.id === gateId);
-  if (gate) { gate[field] = value; saveData(); syncPaymentGateToSupabase(gate); }
+  if (gate) { gate[field] = value; }
 }
 
-function debouncedGateUpdate(gateId, field, value) {
+function markGateDirty(gateId, field, value) {
   const gate = (db.paymentGates||[]).find(g => g.id === gateId);
-  if (!gate) return;
-  gate[field] = value;
-  clearTimeout(window._gateUpdateTimer);
-  window._gateUpdateTimer = setTimeout(() => {
-    saveData();
-    syncPaymentGateToSupabase(gate);
-  }, 500);
+  if (gate) { gate[field] = value; }
+  const statusEl = document.getElementById('gates-save-status');
+  if (statusEl) { statusEl.textContent = '⚠ Unsaved changes'; statusEl.style.color = 'var(--danger)'; }
+}
+
+async function saveAllPaymentGates(ref) {
+  const gates = (db.paymentGates||[]).filter(g => g.jobRef === ref);
+  // Update sort orders
+  gates.forEach((g, i) => { g.sortOrder = i; });
+  saveData();
+  const statusEl = document.getElementById('gates-save-status');
+  if (statusEl) { statusEl.textContent = '⏳ Saving...'; statusEl.style.color = 'var(--text-muted)'; }
+  for (const gate of gates) {
+    await syncPaymentGateToSupabase(gate);
+  }
+  if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--success)'; }
+  renderJobPayments();
 }
 
 function deletePaymentGate(gateId) {
