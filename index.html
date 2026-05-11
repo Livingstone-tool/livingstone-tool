@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.82 -->
+<!-- Livingstone v3.83 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5897,8 +5897,8 @@ function renderJobPayments() {
   gates.forEach((g, i) => {
     html += '<tr>';
     html += '<td style="font-weight:600;width:40px;">' + (i+1) + '</td>';
-    html += '<td><input type="text" value="' + (g.name||'').replace(/"/g,'&quot;') + '" onchange="updateGateField(\'' + g.id + '\',\'name\',this.value)" style="width:100%;font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;"></td>';
-    html += '<td style="width:110px;"><input type="number" value="' + (parseFloat(g.amount)||0) + '" onchange="updateGateField(\'' + g.id + '\',\'amount\',parseFloat(this.value)||0)" style="width:100%;font-size:13px;padding:4px 8px;text-align:right;border:1px solid var(--border);border-radius:4px;"></td>';
+    html += '<td><input type="text" value="' + (g.name||'').replace(/"/g,'&quot;') + '" oninput="debouncedGateUpdate(\'' + g.id + '\',\'name\',this.value)" style="width:100%;font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;"></td>';
+    html += '<td style="width:110px;"><input type="number" value="' + (parseFloat(g.amount)||0) + '" oninput="debouncedGateUpdate(\'' + g.id + '\',\'amount\',parseFloat(this.value)||0)" style="width:100%;font-size:13px;padding:4px 8px;text-align:right;border:1px solid var(--border);border-radius:4px;"></td>';
     html += '<td style="text-align:center;width:100px;"><select onchange="updateGateStatus(\'' + g.id + '\',this.value)" style="font-size:12px;padding:2px 6px;">';
     ['Pending','Invoiced','Paid'].forEach(s => {
       html += '<option' + (g.status===s?' selected':'') + '>' + s + '</option>';
@@ -5968,6 +5968,17 @@ function updateGateStatus(gateId, status) {
 function updateGateField(gateId, field, value) {
   const gate = (db.paymentGates||[]).find(g => g.id === gateId);
   if (gate) { gate[field] = value; saveData(); syncPaymentGateToSupabase(gate); }
+}
+
+function debouncedGateUpdate(gateId, field, value) {
+  const gate = (db.paymentGates||[]).find(g => g.id === gateId);
+  if (!gate) return;
+  gate[field] = value;
+  clearTimeout(window._gateUpdateTimer);
+  window._gateUpdateTimer = setTimeout(() => {
+    saveData();
+    syncPaymentGateToSupabase(gate);
+  }, 500);
 }
 
 function deletePaymentGate(gateId) {
