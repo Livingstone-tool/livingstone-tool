@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.79 -->
+<!-- Livingstone v3.80 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5857,17 +5857,16 @@ function renderJobPayments() {
   html += '<table style="width:100%;font-size:13px;">';
   html += '<thead><tr><th>Stage</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:center;">Status</th><th></th></tr></thead><tbody>';
   gates.forEach((g, i) => {
-    const statusCol = g.status==='Paid'?'badge-confirmed':g.status==='Invoiced'?'badge-quoted':'badge-preparing';
     html += '<tr>';
-    html += '<td style="font-weight:600;">' + (i+1) + '</td>';
-    html += '<td>' + (g.name||'') + '</td>';
-    html += '<td style="text-align:right;font-weight:600;">£' + (parseFloat(g.amount)||0).toFixed(2) + '</td>';
-    html += '<td style="text-align:center;"><select onchange="updateGateStatus(\'' + g.id + '\',this.value)" style="font-size:12px;padding:2px 6px;">';
+    html += '<td style="font-weight:600;width:40px;">' + (i+1) + '</td>';
+    html += '<td><input type="text" value="' + (g.name||'').replace(/"/g,'&quot;') + '" onchange="updateGateField(\'' + g.id + '\',\'name\',this.value)" style="width:100%;font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;"></td>';
+    html += '<td style="width:110px;"><input type="number" value="' + (parseFloat(g.amount)||0) + '" onchange="updateGateField(\'' + g.id + '\',\'amount\',parseFloat(this.value)||0)" style="width:100%;font-size:13px;padding:4px 8px;text-align:right;border:1px solid var(--border);border-radius:4px;"></td>';
+    html += '<td style="text-align:center;width:100px;"><select onchange="updateGateStatus(\'' + g.id + '\',this.value)" style="font-size:12px;padding:2px 6px;">';
     ['Pending','Invoiced','Paid'].forEach(s => {
       html += '<option' + (g.status===s?' selected':'') + '>' + s + '</option>';
     });
     html += '</select></td>';
-    html += '<td><button class="btn btn-sm btn-danger" onclick="deletePaymentGate(\'' + g.id + '\')" style="font-size:10px;">✕</button></td>';
+    html += '<td style="width:30px;"><button class="btn btn-sm btn-danger" onclick="deletePaymentGate(\'' + g.id + '\')" style="font-size:10px;">✕</button></td>';
     html += '</tr>';
   });
   html += '</tbody></table>';
@@ -5923,6 +5922,11 @@ function autoCreateGates(ref) {
 function updateGateStatus(gateId, status) {
   const gate = (db.paymentGates||[]).find(g => g.id === gateId);
   if (gate) { gate.status = status; saveData(); renderJobPayments(); }
+}
+
+function updateGateField(gateId, field, value) {
+  const gate = (db.paymentGates||[]).find(g => g.id === gateId);
+  if (gate) { gate[field] = value; saveData(); }
 }
 
 function deletePaymentGate(gateId) {
@@ -6132,11 +6136,11 @@ function renderInvLines() {
   const lines = window._invLines || [];
   const jobOpts = db.jobs.map(j => '<option value="' + j.ref + '">' + j.ref + ' — ' + (j.name||'') + '</option>').join('');
   container.innerHTML = lines.map((l, i) => {
-    return '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">'
-      + '<select onchange="window._invLines[' + i + '].jobRef=this.value" style="width:160px;font-size:12px;padding:4px 6px;"><option value="">No job</option>' + jobOpts.replace('value="' + l.jobRef + '"', 'value="' + l.jobRef + '" selected') + '</select>'
-      + '<input type="text" value="' + (l.desc||'').replace(/"/g,'&quot;') + '" placeholder="Description of work..." oninput="window._invLines[' + i + '].desc=this.value" style="flex:1;font-size:12px;padding:4px 8px;">'
-      + '<input type="number" value="' + (l.amount||0) + '" placeholder="Amount" oninput="window._invLines[' + i + '].amount=parseFloat(this.value)||0;renderInvTotals()" style="width:100px;font-size:12px;padding:4px 8px;text-align:right;">'
-      + '<button onclick="removeInvLine(' + i + ')" style="border:none;background:none;cursor:pointer;color:var(--danger);font-size:14px;">✕</button>'
+    return '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start;">'
+      + '<select onchange="window._invLines[' + i + '].jobRef=this.value" style="width:130px;font-size:12px;padding:4px 6px;flex-shrink:0;"><option value="">No job</option>' + jobOpts.replace('value="' + l.jobRef + '"', 'value="' + l.jobRef + '" selected') + '</select>'
+      + '<textarea oninput="window._invLines[' + i + '].desc=this.value" placeholder="Description of work..." style="flex:1;font-size:12px;padding:4px 8px;min-height:36px;resize:vertical;" rows="1">' + (l.desc||'') + '</textarea>'
+      + '<input type="number" value="' + (l.amount||0) + '" placeholder="Amount" oninput="window._invLines[' + i + '].amount=parseFloat(this.value)||0;renderInvTotals()" style="width:100px;font-size:12px;padding:4px 8px;text-align:right;flex-shrink:0;">'
+      + '<button onclick="removeInvLine(' + i + ')" style="border:none;background:none;cursor:pointer;color:var(--danger);font-size:14px;flex-shrink:0;padding-top:6px;">✕</button>'
       + '</div>';
   }).join('');
 }
