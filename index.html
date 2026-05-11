@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.84 -->
+<!-- Livingstone v3.85 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5984,16 +5984,32 @@ function markGateDirty(gateId, field, value) {
 
 async function saveAllPaymentGates(ref) {
   const gates = (db.paymentGates||[]).filter(g => g.jobRef === ref);
-  // Update sort orders
   gates.forEach((g, i) => { g.sortOrder = i; });
   saveData();
   const statusEl = document.getElementById('gates-save-status');
   if (statusEl) { statusEl.textContent = '⏳ Saving...'; statusEl.style.color = 'var(--text-muted)'; }
-  for (const gate of gates) {
-    await syncPaymentGateToSupabase(gate);
+  try {
+    // Delete all existing gates for this job in Supabase
+    await supa.deleteWhere('payment_gates', 'job_ref=eq.' + ref);
+    // Re-insert all current gates
+    for (const gate of gates) {
+      const res = await supa.post('payment_gates', {
+        job_ref: gate.jobRef,
+        name: gate.name || '',
+        amount: gate.amount || 0,
+        due_date: gate.due || null,
+        status: gate.status || 'Pending',
+        notes: gate.notes || '',
+        sort_order: gate.sortOrder || 0
+      });
+      if (res && res[0] && res[0].id) { gate.id = res[0].id; }
+    }
+    saveData();
+    if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--success)'; }
+  } catch(e) {
+    console.warn('Save gates failed:', e);
+    if (statusEl) { statusEl.textContent = '✗ Save failed'; statusEl.style.color = 'var(--danger)'; }
   }
-  if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.style.color = 'var(--success)'; }
-  renderJobPayments();
 }
 
 function deletePaymentGate(gateId) {
