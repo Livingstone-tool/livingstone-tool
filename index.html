@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.81 -->
+<!-- Livingstone v3.82 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1961,6 +1961,11 @@ const supa = {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?job_ref=eq.${jobRef}`, {method:'PATCH', headers: {...this.headers, 'Prefer':'return=representation'}, body: JSON.stringify(data)});
     if (!r.ok) throw new Error(await r.text());
     return r.json();
+  },
+  async upsert(table, data) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {method:'POST', headers: {...this.headers, 'Prefer':'return=representation,resolution=merge-duplicates'}, body: JSON.stringify(data)});
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
   }
 };
 
@@ -1977,6 +1982,39 @@ function saveData() {
     localStorage.setItem('livingstoneCosts', JSON.stringify(db.costs||[]));
     localStorage.setItem('livingstoneWishlist', JSON.stringify(db.wishlist||[]));
   } catch(e) {}
+}
+
+async function syncPaymentGateToSupabase(gate) {
+  if (!gate) return;
+  const payload = {
+    job_ref: gate.jobRef,
+    name: gate.name || '',
+    amount: gate.amount || 0,
+    due_date: gate.due || null,
+    status: gate.status || 'Pending',
+    notes: gate.notes || '',
+    sort_order: gate.sortOrder || 0
+  };
+  try {
+    // Check if this gate has a real UUID (from Supabase) or a local ID
+    const isLocalId = (gate.id||'').startsWith('pg_');
+    if (isLocalId) {
+      // New gate — post and update local ID with server-generated UUID
+      const res = await supa.post('payment_gates', payload);
+      if (res && res[0] && res[0].id) {
+        gate.id = res[0].id;
+        saveData();
+      }
+    } else {
+      // Existing gate — patch
+      await supa.patch('payment_gates', gate.id, payload);
+    }
+  } catch(e) { console.warn('Payment gate sync failed:', e); }
+}
+
+async function deletePaymentGateFromSupabase(gateId) {
+  if ((gateId||'').startsWith('pg_')) return; // local-only, not in Supabase
+  try { await supa.delete('payment_gates', gateId); } catch(e) { console.warn('Payment gate delete failed:', e); }
 }
 
 
@@ -5895,6 +5933,7 @@ function addPaymentGateForJob(ref) {
   if (!db.paymentGates) db.paymentGates = [];
   db.paymentGates.push(gate);
   saveData();
+  syncPaymentGateToSupabase(gate);
   renderJobPayments();
 }
 
@@ -5906,14 +5945,16 @@ function autoCreateGates(ref) {
   const names = ['Initial Deposit', 'Stage 2 - Progress Payment', 'Stage 3 - Progress Payment', 'Final Payment - On Completion'];
   if (!db.paymentGates) db.paymentGates = [];
   names.forEach((n, i) => {
-    db.paymentGates.push({
+    const gate = {
       id: 'pg_' + Date.now() + '_' + i,
       jobRef: ref,
       name: n,
-      amount: i === 3 ? val - (quarter * 3) : quarter, // last one gets remainder
+      amount: i === 3 ? val - (quarter * 3) : quarter,
       status: 'Pending',
       sortOrder: i
-    });
+    };
+    db.paymentGates.push(gate);
+    syncPaymentGateToSupabase(gate);
   });
   saveData();
   renderJobPayments();
@@ -5921,18 +5962,19 @@ function autoCreateGates(ref) {
 
 function updateGateStatus(gateId, status) {
   const gate = (db.paymentGates||[]).find(g => g.id === gateId);
-  if (gate) { gate.status = status; saveData(); renderJobPayments(); }
+  if (gate) { gate.status = status; saveData(); syncPaymentGateToSupabase(gate); renderJobPayments(); }
 }
 
 function updateGateField(gateId, field, value) {
   const gate = (db.paymentGates||[]).find(g => g.id === gateId);
-  if (gate) { gate[field] = value; saveData(); }
+  if (gate) { gate[field] = value; saveData(); syncPaymentGateToSupabase(gate); }
 }
 
 function deletePaymentGate(gateId) {
   if (!confirm('Delete this payment gate?')) return;
   db.paymentGates = (db.paymentGates||[]).filter(g => g.id !== gateId);
   saveData();
+  deletePaymentGateFromSupabase(gateId);
   renderJobPayments();
 }
 
