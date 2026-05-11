@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.78 -->
+<!-- Livingstone v3.79 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6020,45 +6020,10 @@ function onInvJobSelect() {
   const firstJob = db.jobs.find(j => j.ref === checked[0]);
   const clientEl = document.getElementById('inv-client');
   const addrEl = document.getElementById('inv-client-address');
-  if (firstJob && !clientEl.value) {
-    clientEl.value = firstJob.client?.name || '';
-    addrEl.value = firstJob.address || '';
+  if (firstJob) {
+    if (!clientEl.value) clientEl.value = firstJob.client?.name || '';
+    if (!addrEl.value) addrEl.value = firstJob.address || '';
   }
-
-  // Auto-populate lines from payment gates and/or quote values
-  window._invLines = [];
-  checked.forEach(ref => {
-    const job = db.jobs.find(j => j.ref === ref);
-    const gates = (db.paymentGates||[]).filter(g => g.jobRef === ref && g.status !== 'Paid');
-
-    if (gates.length) {
-      // Add each unpaid gate as a line
-      gates.forEach(g => {
-        window._invLines.push({
-          jobRef: ref,
-          desc: (job?.name||ref) + ' — ' + g.name,
-          amount: parseFloat(g.amount) || 0
-        });
-      });
-    } else if (job?.quoteValue) {
-      // No gates — add the full quote value as one line
-      window._invLines.push({
-        jobRef: ref,
-        desc: (job?.name||ref) + ' — as per quote ' + ref,
-        amount: job.quoteValue
-      });
-    } else {
-      // No quote value either — add blank line
-      window._invLines.push({
-        jobRef: ref,
-        desc: job?.name || ref,
-        amount: 0
-      });
-    }
-  });
-
-  renderInvLines();
-  renderInvTotals();
 }
 
 function editInvoice(idx) {
@@ -6101,7 +6066,10 @@ function removeInvLine(i) {
 }
 
 function addInvFromGates() {
-  const jobs = db.jobs.filter(j => ['Confirmed','In Progress','Snagging','Completed - Not Paid'].includes(j.status));
+  const selectedRefs = [...document.querySelectorAll('.inv-job-check:checked')].map(c => c.value);
+  const jobs = selectedRefs.length
+    ? db.jobs.filter(j => selectedRefs.includes(j.ref))
+    : db.jobs.filter(j => ['Confirmed','In Progress','Snagging','Completed - Not Paid'].includes(j.status));
   let modal = document.getElementById('inv-gates-modal');
   if (!modal) {
     modal = document.createElement('div');
