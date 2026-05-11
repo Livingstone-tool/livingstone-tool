@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.77 -->
+<!-- Livingstone v3.78 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1521,7 +1521,10 @@
         <button class="btn btn-sm btn-secondary" onclick="addInvFromGates()">+ From Payment Gates</button>
       </div>
 
-      <div class="form-group"><label><input type="checkbox" id="inv-vat-toggle" onchange="renderInvTotals()"> Add VAT (20%)</label></div>
+      <div class="form-group">
+        <label><input type="checkbox" id="inv-vat-toggle" onchange="renderInvTotals()"> Add VAT (20%) on top</label>
+        <label style="margin-left:16px;"><input type="checkbox" id="inv-vat-inclusive" onchange="renderInvTotals()"> Amounts are VAT-inclusive (extract VAT)</label>
+      </div>
       <div class="grid-2" style="gap:12px;">
         <div class="form-group"><label>Status</label>
           <select id="inv-status" style="width:100%;">
@@ -6069,6 +6072,7 @@ function editInvoice(idx) {
   document.getElementById('inv-client-address').value = inv.clientAddress || '';
   document.getElementById('inv-notes').value = inv.notes || '';
   document.getElementById('inv-vat-toggle').checked = inv.addVat || false;
+  document.getElementById('inv-vat-inclusive').checked = inv.vatInclusive || false;
   document.getElementById('inv-terms').value = inv.terms || 'Net 14 days';
   document.getElementById('inv-status').value = inv.status || 'Draft';
   window._invLines = (inv.lines || []).map(l => ({...l}));
@@ -6173,21 +6177,46 @@ function renderInvTotals() {
   const el = document.getElementById('inv-totals');
   if (!el) return;
   const lines = window._invLines || [];
-  const subtotal = lines.reduce((s, l) => s + (l.amount||0), 0);
+  const lineTotal = lines.reduce((s, l) => s + (l.amount||0), 0);
   const addVat = document.getElementById('inv-vat-toggle')?.checked;
-  const vat = addVat ? subtotal * 0.2 : 0;
-  const total = subtotal + vat;
-  el.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>Subtotal</span><span style="font-weight:600;">£' + subtotal.toFixed(2) + '</span></div>'
-    + (addVat ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>VAT (20%)</span><span style="font-weight:600;">£' + vat.toFixed(2) + '</span></div>' : '')
-    + '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;border-top:2px solid var(--copper);padding-top:8px;margin-top:4px;"><span>Total</span><span style="color:var(--copper);">£' + total.toFixed(2) + '</span></div>';
+  const vatInclusive = document.getElementById('inv-vat-inclusive')?.checked;
+
+  let subtotal, vat, total;
+  if (vatInclusive) {
+    // Amounts entered are VAT-inclusive — extract VAT
+    subtotal = Math.round(lineTotal / 1.2 * 100) / 100;
+    vat = Math.round((lineTotal - subtotal) * 100) / 100;
+    total = lineTotal;
+    el.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;color:var(--text-muted);"><span>Line total (VAT-inclusive)</span><span>£' + lineTotal.toFixed(2) + '</span></div>'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>Net (ex-VAT)</span><span style="font-weight:600;">£' + subtotal.toFixed(2) + '</span></div>'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>VAT (20%)</span><span style="font-weight:600;">£' + vat.toFixed(2) + '</span></div>'
+      + '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;border-top:2px solid var(--copper);padding-top:8px;margin-top:4px;"><span>Total</span><span style="color:var(--copper);">£' + total.toFixed(2) + '</span></div>';
+  } else {
+    subtotal = lineTotal;
+    vat = addVat ? subtotal * 0.2 : 0;
+    total = subtotal + vat;
+    el.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>Subtotal</span><span style="font-weight:600;">£' + subtotal.toFixed(2) + '</span></div>'
+      + (addVat ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>VAT (20%)</span><span style="font-weight:600;">£' + vat.toFixed(2) + '</span></div>' : '')
+      + '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;border-top:2px solid var(--copper);padding-top:8px;margin-top:4px;"><span>Total</span><span style="color:var(--copper);">£' + total.toFixed(2) + '</span></div>';
+  }
 }
 
 function saveInvoice() {
   const idx = parseInt(document.getElementById('inv-edit-idx').value);
   const lines = window._invLines || [];
   const addVat = document.getElementById('inv-vat-toggle')?.checked;
-  const subtotal = lines.reduce((s, l) => s + (l.amount||0), 0);
-  const vatAmount = addVat ? subtotal * 0.2 : 0;
+  const vatInclusive = document.getElementById('inv-vat-inclusive')?.checked;
+  const lineTotal = lines.reduce((s, l) => s + (l.amount||0), 0);
+  let subtotal, vatAmount, total;
+  if (vatInclusive) {
+    subtotal = Math.round(lineTotal / 1.2 * 100) / 100;
+    vatAmount = Math.round((lineTotal - subtotal) * 100) / 100;
+    total = lineTotal;
+  } else {
+    subtotal = lineTotal;
+    vatAmount = addVat ? subtotal * 0.2 : 0;
+    total = subtotal + vatAmount;
+  }
   const inv = {
     number: document.getElementById('inv-number').value,
     date: document.getElementById('inv-date').value,
@@ -6196,9 +6225,10 @@ function saveInvoice() {
     lines: lines,
     jobRefs: [...new Set(lines.map(l => l.jobRef).filter(Boolean))],
     addVat: addVat,
+    vatInclusive: vatInclusive,
     subtotal: subtotal,
     vatAmount: vatAmount,
-    total: subtotal + vatAmount,
+    total: total,
     terms: document.getElementById('inv-terms').value,
     notes: document.getElementById('inv-notes').value,
     status: document.getElementById('inv-status').value || 'Draft'
@@ -6222,18 +6252,29 @@ function viewInvoicePDF(idx) {
 function exportInvoicePDF() {
   const lines = window._invLines || [];
   const addVat = document.getElementById('inv-vat-toggle')?.checked;
-  const subtotal = lines.reduce((s, l) => s + (l.amount||0), 0);
-  const vatAmount = addVat ? subtotal * 0.2 : 0;
+  const vatInclusive = document.getElementById('inv-vat-inclusive')?.checked;
+  const lineTotal = lines.reduce((s, l) => s + (l.amount||0), 0);
+  let subtotal, vatAmount, total;
+  if (vatInclusive) {
+    subtotal = Math.round(lineTotal / 1.2 * 100) / 100;
+    vatAmount = Math.round((lineTotal - subtotal) * 100) / 100;
+    total = lineTotal;
+  } else {
+    subtotal = lineTotal;
+    vatAmount = addVat ? subtotal * 0.2 : 0;
+    total = subtotal + vatAmount;
+  }
   const inv = {
     number: document.getElementById('inv-number').value,
     date: document.getElementById('inv-date').value,
     client: document.getElementById('inv-client').value,
     clientAddress: document.getElementById('inv-client-address').value,
     lines: lines,
-    addVat: addVat,
+    addVat: addVat || vatInclusive,
+    vatInclusive: vatInclusive,
     subtotal: subtotal,
     vatAmount: vatAmount,
-    total: subtotal + vatAmount,
+    total: total,
     terms: document.getElementById('inv-terms').value,
     notes: document.getElementById('inv-notes').value
   };
@@ -6241,13 +6282,25 @@ function exportInvoicePDF() {
 }
 
 function exportInvoiceFromData(inv) {
+  // For VAT-inclusive invoices, show ex-VAT amounts on the lines
+  const showExVat = inv.vatInclusive;
   const lineRows = (inv.lines||[]).map(l => {
+    const displayAmt = showExVat ? Math.round((l.amount||0) / 1.2 * 100) / 100 : (l.amount||0);
     return '<tr><td style="padding:10px 12px;border-bottom:1px solid #e8e0d5;">' + (l.jobRef||'') + '</td>'
       + '<td style="padding:10px 12px;border-bottom:1px solid #e8e0d5;">' + (l.desc||'') + '</td>'
-      + '<td style="padding:10px 12px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£' + (l.amount||0).toFixed(2) + '</td></tr>';
+      + '<td style="padding:10px 12px;border-bottom:1px solid #e8e0d5;text-align:right;font-weight:600;">£' + displayAmt.toFixed(2) + '</td></tr>';
   }).join('');
 
   const fmtDate = inv.date ? new Date(inv.date).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : '';
+
+  // Calculate due date
+  let dueDate = '';
+  if (inv.date && inv.terms) {
+    const d = new Date(inv.date);
+    const daysMatch = (inv.terms||'').match(/(\d+)/);
+    if (daysMatch) { d.setDate(d.getDate() + parseInt(daysMatch[1])); dueDate = d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}); }
+    else if (inv.terms.includes('completion')) { dueDate = 'On completion'; }
+  }
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Invoice ${inv.number} — Livingstone Projects</title>
@@ -6258,6 +6311,7 @@ body { font-family: Georgia, 'Times New Roman', serif; color: #1a2530; }
 .header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:20px; border-bottom:3px solid #B87333; margin-bottom:30px; }
 .brand { font-size:26px; font-weight:700; } .brand span { color:#B87333; }
 .brand-sub { font-size:11px; color:#6b7e8e; text-transform:uppercase; letter-spacing:0.08em; margin-top:3px; }
+.brand-addr { font-size:10px; color:#6b7e8e; margin-top:6px; line-height:1.6; }
 .inv-meta { text-align:right; font-size:13px; color:#6b7e8e; line-height:1.8; }
 .inv-meta strong { color:#1a2530; font-size:15px; }
 .client { margin-bottom:30px; }
@@ -6269,8 +6323,9 @@ thead th { padding:10px 12px; text-align:left; font-size:11px; text-transform:up
 .total-section { margin-top:8px; }
 .total-row { display:flex; justify-content:space-between; padding:6px 12px; font-size:14px; }
 .total-row.grand { background:#B87333; color:white; font-weight:700; font-size:16px; padding:10px 12px; border-radius:4px; margin-top:4px; }
-.terms { margin-top:30px; font-size:12px; color:#6b7e8e; line-height:1.8; border-top:1px solid #e8e0d5; padding-top:20px; }
-.footer { margin-top:30px; text-align:center; font-size:10px; color:#6b7e8e; border-top:1px solid #e8e0d5; padding-top:12px; }
+.bank-details { margin-top:24px; background:#F5F0E8; border-radius:8px; padding:18px 22px; font-size:12px; line-height:1.8; }
+.bank-details h4 { font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:#B87333; margin-bottom:6px; }
+.footer { margin-top:24px; text-align:center; font-size:9px; color:#6b7e8e; border-top:1px solid #e8e0d5; padding-top:12px; line-height:1.6; }
 @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
 </style></head><body>
 <div class="page">
@@ -6278,11 +6333,13 @@ thead th { padding:10px 12px; text-align:left; font-size:11px; text-transform:up
     <div>
       <div class="brand">Livingstone <span>Projects</span></div>
       <div class="brand-sub">Premium Home Improvement</div>
+      <div class="brand-addr">3 The Yard, Hooksgreen<br>Oulton Heath, Stone, ST15 8SR</div>
     </div>
     <div class="inv-meta">
       <strong>INVOICE</strong><br>
       ${inv.number}<br>
       Date: ${fmtDate}<br>
+      ${dueDate ? 'Due: ' + dueDate + '<br>' : ''}
       ${inv.terms || ''}
     </div>
   </div>
@@ -6291,21 +6348,27 @@ thead th { padding:10px 12px; text-align:left; font-size:11px; text-transform:up
     <p><strong>${inv.client||''}</strong><br>${(inv.clientAddress||'').replace(/\n/g,'<br>')}</p>
   </div>
   <table>
-    <thead><tr><th>Ref</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+    <thead><tr><th>Ref</th><th>Description</th><th style="text-align:right;">Amount (ex-VAT)</th></tr></thead>
     <tbody>${lineRows}</tbody>
   </table>
   <div class="total-section">
-    <div class="total-row"><span>Subtotal</span><span>£${(inv.subtotal||0).toFixed(2)}</span></div>
-    ${inv.addVat ? '<div class="total-row"><span>VAT (20%)</span><span>£' + (inv.vatAmount||0).toFixed(2) + '</span></div>' : ''}
+    <div class="total-row"><span>Subtotal (ex-VAT)</span><span>£${(inv.subtotal||0).toFixed(2)}</span></div>
+    ${(inv.addVat || inv.vatInclusive) ? '<div class="total-row"><span>VAT (20%)</span><span>£' + (inv.vatAmount||0).toFixed(2) + '</span></div>' : ''}
     <div class="total-row grand"><span>Total Due</span><span>£${(inv.total||0).toFixed(2)}</span></div>
   </div>
   ${inv.notes ? '<div style="margin-top:20px;padding:12px 16px;background:#F5F0E8;border-radius:6px;font-size:13px;"><strong>Notes:</strong> ' + inv.notes + '</div>' : ''}
-  <div class="terms">
-    <strong>Payment Terms:</strong> ${inv.terms||'Net 14 days'}<br>
-    <strong>Bank Details:</strong> [Add your bank details here]<br>
-    <strong>Company:</strong> Livingstone Projects
+  <div class="bank-details">
+    <h4>Payment Details</h4>
+    <strong>Account Name:</strong> Livingstone Projects Ltd<br>
+    <strong>Sort Code:</strong> 82-11-07<br>
+    <strong>Account Number:</strong> 20529880<br>
+    <strong>Payment Terms:</strong> ${inv.terms||'Net 14 days'}
   </div>
-  <div class="footer"><strong>Livingstone Projects</strong> · Premium Home Improvement · Registered in England &amp; Wales</div>
+  <div class="footer">
+    <strong>Livingstone Projects Ltd</strong><br>
+    Company Number: 14811385 · VAT Number: 516471886<br>
+    3 The Yard, Hooksgreen, Oulton Heath, Stone, ST15 8SR
+  </div>
 </div></body></html>`;
 
   const win = window.open('', '_blank');
