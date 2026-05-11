@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.85 -->
+<!-- Livingstone v3.87 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6117,15 +6117,62 @@ function onInvJobSelect() {
     if (!addrEl.value) addrEl.value = firstJob.address || '';
   }
 
-  // Auto-set invoice number based on selected job(s)
+  // Auto-set invoice number — combine refs
   const invNumEl = document.getElementById('inv-number');
   if (invNumEl) {
     if (checked.length === 1) {
       invNumEl.value = nextInvoiceNum(checked[0]);
     } else {
-      invNumEl.value = nextInvoiceNum(checked[0]);
+      // Combine: LP-001+024+025-INV-01
+      const firstRef = checked[0];
+      const otherNums = checked.slice(1).map(r => r.replace(/^LP-0*/,''));
+      const combined = firstRef + '+' + otherNums.join('+');
+      const existing = db.invoices.filter(i => checked.some(r => (i.jobRefs||[]).includes(r)));
+      invNumEl.value = combined + '-INV-' + String(existing.length + 1).padStart(2, '0');
     }
   }
+
+  // Auto-populate lines from selected jobs (additive — only add new jobs)
+  const existingRefs = (window._invLines||[]).map(l => l.jobRef);
+  checked.forEach(ref => {
+    if (existingRefs.includes(ref)) return; // already have lines for this job
+    const job = db.jobs.find(j => j.ref === ref);
+    const gates = (db.paymentGates||[]).filter(g => g.jobRef === ref && g.status !== 'Paid');
+
+    if (gates.length) {
+      gates.forEach(g => {
+        window._invLines.push({
+          jobRef: ref,
+          desc: (job?.name||ref) + ' — ' + g.name,
+          amount: parseFloat(g.amount) || 0
+        });
+      });
+    } else if (job?.quoteValue) {
+      window._invLines.push({
+        jobRef: ref,
+        desc: (job?.name||ref) + ' — as per quote ' + ref,
+        amount: job.quoteValue
+      });
+    } else if (job?.estimate) {
+      window._invLines.push({
+        jobRef: ref,
+        desc: (job?.name||ref) + ' — (estimate, no formal quote)',
+        amount: job.estimate
+      });
+    } else {
+      window._invLines.push({
+        jobRef: ref,
+        desc: (job?.name||ref) + ' — enter amount',
+        amount: 0
+      });
+    }
+  });
+
+  // Remove lines for unchecked jobs
+  window._invLines = (window._invLines||[]).filter(l => !l.jobRef || checked.includes(l.jobRef));
+
+  renderInvLines();
+  renderInvTotals();
 }
 
 function editInvoice(idx) {
