@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.88 -->
+<!-- Livingstone v3.89 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -692,13 +692,9 @@
     </div>
 
     <!-- Weather Widget -->
-    <div class="card" style="margin-bottom:24px;">
-      <div class="card-header">
-        <div class="card-title">🌤 Weather — Stone, Staffordshire</div>
-        <span style="font-size:11px;color:var(--text-muted);" id="weather-updated"></span>
-      </div>
-      <div class="card-body" id="weather-content" style="padding:12px;">
-        <div style="color:var(--text-muted);font-size:13px;">Loading weather...</div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;padding:10px 16px;background:var(--limestone);border-radius:8px;flex-wrap:wrap;" id="weather-bar">
+      <div id="weather-content" style="display:flex;gap:12px;align-items:center;flex:1;font-size:13px;">
+        <span style="color:var(--text-muted);">Loading weather...</span>
       </div>
     </div>
 
@@ -5901,55 +5897,53 @@ async function loadWeather() {
     const wDesc = weatherCodeToDesc(cw.weathercode);
     const wIcon = weatherCodeToIcon(cw.weathercode);
 
-    // Current weather
-    let html = '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">';
-    html += '<div style="font-size:36px;">' + wIcon + '</div>';
-    html += '<div><div style="font-size:24px;font-weight:700;">' + Math.round(cw.temperature) + '°C</div>';
-    html += '<div style="font-size:13px;color:var(--text-muted);">' + wDesc + ' · Wind ' + Math.round(cw.windspeed) + ' km/h</div></div>';
+    // Compact single bar: current + next few hours + 7 day mini
+    let html = '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">';
+    html += '<span style="font-size:20px;">' + wIcon + '</span>';
+    html += '<span style="font-weight:700;font-size:15px;">' + Math.round(cw.temperature) + '°C</span>';
+    html += '<span style="color:var(--text-muted);font-size:11px;">' + wDesc + '</span>';
     html += '</div>';
 
-    // Today hourly (next 12 hours)
+    // Divider
+    html += '<div style="width:1px;height:24px;background:var(--border);flex-shrink:0;"></div>';
+
+    // Next 6 hours mini
     const nowHour = new Date().getHours();
-    html += '<div style="display:flex;gap:2px;overflow-x:auto;margin-bottom:16px;">';
-    for (let i = nowHour; i < Math.min(nowHour + 12, 24); i++) {
+    html += '<div style="display:flex;gap:2px;flex-shrink:0;">';
+    for (let i = nowHour + 1; i < Math.min(nowHour + 7, 24); i++) {
       const temp = Math.round(data.hourly.temperature_2m[i]);
       const rain = data.hourly.precipitation_probability[i];
-      const code = data.hourly.weathercode[i];
-      const icon = weatherCodeToIcon(code);
-      const rainBar = rain > 0 ? '<div style="height:' + Math.max(2, rain/2) + 'px;background:rgba(52,152,219,0.4);border-radius:2px;margin-top:2px;"></div>' : '';
-      html += '<div style="text-align:center;min-width:48px;padding:4px;border-radius:6px;' + (i===nowHour?'background:rgba(184,115,51,0.1);':'') + '">';
-      html += '<div style="font-size:10px;color:var(--text-muted);">' + String(i).padStart(2,'0') + ':00</div>';
-      html += '<div style="font-size:16px;">' + icon + '</div>';
-      html += '<div style="font-size:12px;font-weight:600;">' + temp + '°</div>';
-      if (rain > 0) html += '<div style="font-size:9px;color:#3498db;">' + rain + '%</div>';
-      html += rainBar + '</div>';
+      const icon = weatherCodeToIcon(data.hourly.weathercode[i]);
+      html += '<div style="text-align:center;min-width:32px;">';
+      html += '<div style="font-size:9px;color:var(--text-muted);">' + String(i).padStart(2,'0') + '</div>';
+      html += '<div style="font-size:12px;">' + icon + '</div>';
+      html += '<div style="font-size:10px;font-weight:600;">' + temp + '°</div>';
+      if (rain > 30) html += '<div style="font-size:8px;color:#3498db;">' + rain + '%</div>';
+      html += '</div>';
     }
     html += '</div>';
 
-    // 7-day forecast
-    html += '<div style="display:flex;gap:4px;">';
+    // Divider
+    html += '<div style="width:1px;height:24px;background:var(--border);flex-shrink:0;"></div>';
+
+    // 7-day mini
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    for (let d = 0; d < 7; d++) {
+    html += '<div style="display:flex;gap:2px;flex:1;">';
+    for (let d = 1; d < 7; d++) {
       const date = new Date(data.daily.time[d]);
-      const dayName = d === 0 ? 'Today' : dayNames[date.getDay()];
       const hi = Math.round(data.daily.temperature_2m_max[d]);
-      const lo = Math.round(data.daily.temperature_2m_min[d]);
-      const rain = data.daily.precipitation_probability_max[d];
       const icon = weatherCodeToIcon(data.daily.weathercode[d]);
-      html += '<div style="flex:1;text-align:center;padding:8px 4px;border-radius:8px;' + (d===0?'background:rgba(184,115,51,0.08);':'') + '">';
-      html += '<div style="font-size:11px;font-weight:600;">' + dayName + '</div>';
-      html += '<div style="font-size:11px;color:var(--text-muted);">' + date.getDate() + '/' + (date.getMonth()+1) + '</div>';
-      html += '<div style="font-size:20px;margin:4px 0;">' + icon + '</div>';
-      html += '<div style="font-size:12px;font-weight:600;">' + hi + '°</div>';
-      html += '<div style="font-size:11px;color:var(--text-muted);">' + lo + '°</div>';
-      if (rain > 20) html += '<div style="font-size:9px;color:#3498db;">💧' + rain + '%</div>';
+      const rain = data.daily.precipitation_probability_max[d];
+      html += '<div style="text-align:center;min-width:28px;">';
+      html += '<div style="font-size:9px;color:var(--text-muted);">' + dayNames[date.getDay()] + '</div>';
+      html += '<div style="font-size:11px;">' + icon + '</div>';
+      html += '<div style="font-size:10px;font-weight:600;">' + hi + '°</div>';
+      if (rain > 30) html += '<div style="font-size:8px;color:#3498db;">💧</div>';
       html += '</div>';
     }
     html += '</div>';
 
     el.innerHTML = html;
-    const updEl = document.getElementById('weather-updated');
-    if (updEl) updEl.textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
   } catch(e) {
     el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Unable to load weather data.</div>';
     console.warn('Weather load failed:', e);
