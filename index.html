@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.90 -->
+<!-- Livingstone v3.91 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3735,9 +3735,10 @@ function renderQBRooms() {
   const dl = document.getElementById('supplier-list');
   if (dl) {
     const subOpts = (db.subs||[]).map(s => `<option value="${s.name}" label="Sub — ${s.trade} — £${s.dayRate}/day">`);
+    const labOpts = (db.labourers||[]).map(l => `<option value="${l.name}" label="Labourer — ${l.location||''} — £${l.rate}/day">`);
     const prodOpts = (db.products||[]).map(p => `<option value="${p.name}" label="Material — £${p.rate}/${p.unit||'each'}">`);
     const otherOpts = (db.otherCosts||[]).map(c => `<option value="${c.name}" label="${c.category} — £${c.rate}/${c.unit||'each'}">`);
-    dl.innerHTML = subOpts.join('') + prodOpts.join('') + otherOpts.join('');
+    dl.innerHTML = subOpts.join('') + labOpts.join('') + prodOpts.join('') + otherOpts.join('');
   }
 
   const mode = window._quoteMode || 'detailed';
@@ -4242,6 +4243,7 @@ function saveQuote() {
   const existingNames = new Set([
     ...(db.products||[]).map(p => p.name.toLowerCase()),
     ...(db.subs||[]).map(s => s.name.toLowerCase()),
+    ...(db.labourers||[]).map(l => l.name.toLowerCase()),
     ...(db.otherCosts||[]).map(c => c.name.toLowerCase())
   ]);
   let newCount = 0;
@@ -6140,7 +6142,7 @@ function initDailyPlan() {
   if (dateEl && !dateEl.value) {
     dateEl.value = new Date().toISOString().split('T')[0];
   }
-  // Add subs to person dropdown
+  // Add subs and labourers to person dropdown
   const personEl = document.getElementById('dp-person');
   if (personEl && personEl.options.length <= 2) {
     (db.subs||[]).forEach(s => {
@@ -6148,6 +6150,14 @@ function initDailyPlan() {
         const opt = document.createElement('option');
         opt.value = s.name;
         opt.textContent = s.name + (s.trade ? ' (' + s.trade + ')' : '');
+        personEl.appendChild(opt);
+      }
+    });
+    (db.labourers||[]).forEach(l => {
+      if (l.name && !Array.from(personEl.options).some(o => o.value === l.name)) {
+        const opt = document.createElement('option');
+        opt.value = l.name;
+        opt.textContent = l.name + ' (Labourer)';
         personEl.appendChild(opt);
       }
     });
@@ -7665,6 +7675,10 @@ function openKanbanTaskEdit(taskIdx) {
     const selected = t.responsible === s.name ? ' selected' : '';
     sel.innerHTML += '<option value="' + s.name + '"' + selected + '>' + s.name + (s.trade ? ' (' + s.trade + ')' : '') + '</option>';
   });
+  (db.labourers||[]).forEach(l => {
+    const selected = t.responsible === l.name ? ' selected' : '';
+    sel.innerHTML += '<option value="' + l.name + '"' + selected + '>' + l.name + ' (Labourer)</option>';
+  });
   // If current responsible doesn't match any option, add it
   if (t.responsible && !sel.querySelector('option[value="' + t.responsible + '"]')) {
     sel.innerHTML += '<option value="' + t.responsible + '" selected>' + t.responsible + '</option>';
@@ -7821,7 +7835,7 @@ function renderPlanning() {
 
   // Populate sub datalist
   const dl = document.getElementById('we-sub-list');
-  if (dl && db.subs) dl.innerHTML = db.subs.map(s => `<option value="${s.name}">`).join('');
+  if (dl && db.subs) dl.innerHTML = db.subs.map(s => `<option value="${s.name}">`).join('') + (db.labourers||[]).map(l => `<option value="${l.name}">`).join('');
 
   renderGantt();
   renderWeekly();
@@ -9221,7 +9235,7 @@ function addWeeklyEntryModal(dateStr) {
 
   // Populate sub datalist
   const dl = document.getElementById('we-sub-list');
-  if (dl) dl.innerHTML = db.subs.map(s => `<option value="${s.name}">`).join('');
+  if (dl) dl.innerHTML = db.subs.map(s => `<option value="${s.name}">`).join('') + (db.labourers||[]).map(l => `<option value="${l.name}">`).join('');
 
   document.getElementById('we-date').value = dateStr || (weekStart ? weekStart.toISOString().split('T')[0] : '');
   document.getElementById('we-sub').value = '';
@@ -9511,7 +9525,8 @@ function openCostModal(editIdx) {
   // Populate sub dropdown
   const subSel = document.getElementById('cost-sub');
   subSel.innerHTML = '<option value="">— Select Sub —</option>' +
-    (db.subs||[]).map(s => `<option value="${s.name}" data-rate="${s.dayRate}">${s.name} — ${s.trade} (£${s.dayRate}/day)</option>`).join('');
+    (db.subs||[]).map(s => `<option value="${s.name}" data-rate="${s.dayRate}">${s.name} — ${s.trade} (£${s.dayRate}/day)</option>`).join('') +
+    (db.labourers||[]).map(l => `<option value="${l.name}" data-rate="${l.rate}">${l.name} — Labourer (£${l.rate}/day)</option>`).join('');
 
   // Set today's date
   document.getElementById('cost-date').value = new Date().toISOString().split('T')[0];
