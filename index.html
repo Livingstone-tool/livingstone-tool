@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.89 -->
+<!-- Livingstone v3.90 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -975,6 +975,13 @@
 
   <!-- SUBCONTRACTORS PAGE -->
   <div id="page-subs" class="page content">
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;">
+      <div class="tab active" onclick="switchSubsTab('subs',this)">👷 Subcontractors</div>
+      <div class="tab" onclick="switchSubsTab('labourers',this)">🔨 Labourers</div>
+    </div>
+
+    <!-- SUBS TAB -->
+    <div id="subs-tab-subs">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <div></div>
       <button class="btn btn-primary" onclick="addSubModal()">+ Add Subcontractor</button>
@@ -1002,6 +1009,54 @@
           </div>
         </div>
       </div>
+    </div>
+    </div>
+
+    <!-- LABOURERS TAB -->
+    <div id="subs-tab-labourers" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <div></div>
+      <button class="btn btn-primary" onclick="addLabourerModal()">+ Add Labourer</button>
+    </div>
+    <div class="grid-2" style="gap:20px;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Labourer Database</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Location</th><th>Day Rate</th><th>Skills / Tickets</th><th>Reliability</th><th>Phone</th><th></th></tr></thead>
+            <tbody id="labourers-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="height:fit-content;">
+        <div class="card-header"><div class="card-title" id="lab-form-title">Add / Edit Labourer</div></div>
+        <div class="card-body">
+          <input type="hidden" id="lab-edit-idx" value="-1">
+          <div class="form-group"><label>Full Name</label><input type="text" id="lab-name"></div>
+          <div class="form-group"><label>Phone</label><input type="tel" id="lab-phone"></div>
+          <div class="form-group"><label>Location</label><input type="text" id="lab-location" placeholder="e.g. Stone, Stafford, Stoke..."></div>
+          <div class="form-group"><label>Day Rate (£)</label><input type="number" id="lab-rate"></div>
+          <div class="form-group"><label>Skills / Tickets</label></div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="CSCS"> CSCS</label>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="Forklift"> Forklift</label>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="IPAF"> IPAF</label>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="PASMA"> PASMA</label>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="First Aid"> First Aid</label>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="Asbestos Aware"> Asbestos Aware</label>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="Manual Handling"> Manual Handling</label>
+            <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="Driving Licence"> Driving Licence</label>
+          </div>
+          <div class="form-group"><label>Other Skills</label><input type="text" id="lab-other-skills" placeholder="e.g. plastering, tiling..."></div>
+          <div class="form-group"><label>Reliability (1-10)</label><input type="number" id="lab-reliability" min="1" max="10"></div>
+          <div class="form-group"><label>Notes</label><textarea id="lab-notes" rows="2"></textarea></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" onclick="saveLabourer()">Save</button>
+            <button class="btn btn-secondary" onclick="clearLabourerForm()">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -4474,6 +4529,115 @@ function clearSubForm() {
 function addSubModal() {
   clearSubForm();
   document.getElementById('sub-name').focus();
+}
+
+// ============================================================
+// SUBS PAGE TAB SWITCHER
+// ============================================================
+function switchSubsTab(tab, el) {
+  document.querySelectorAll('#page-subs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('subs-tab-subs').style.display = tab === 'subs' ? 'block' : 'none';
+  document.getElementById('subs-tab-labourers').style.display = tab === 'labourers' ? 'block' : 'none';
+  if (tab === 'labourers') renderLabourers();
+}
+
+// ============================================================
+// LABOURERS DATABASE
+// ============================================================
+if (!db.labourers) db.labourers = [];
+try { const ll = JSON.parse(localStorage.getItem('livingstoneLabourers')); if (ll) db.labourers = ll; } catch(e) {}
+
+function saveLabourers() {
+  localStorage.setItem('livingstoneLabourers', JSON.stringify(db.labourers));
+}
+
+function renderLabourers() {
+  const tbody = document.getElementById('labourers-table-body');
+  if (!tbody) return;
+  if (!db.labourers.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No labourers added yet. Click "+ Add Labourer" to start.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = db.labourers.map((l, i) => {
+    const stars = l.reliability ? '⭐'.repeat(Math.min(5, Math.round(l.reliability/2))) : '—';
+    const skills = (l.skills||[]).map(s => '<span class="chip" style="font-size:10px;margin:1px;">' + s + '</span>').join(' ');
+    const otherSkills = l.otherSkills ? '<span style="font-size:10px;color:var(--text-muted);"> ' + l.otherSkills + '</span>' : '';
+    return '<tr>'
+      + '<td style="font-weight:600;">' + (l.name||'') + '</td>'
+      + '<td style="font-size:12px;">' + (l.location||'') + '</td>'
+      + '<td style="font-weight:600;">£' + (l.rate||0) + '</td>'
+      + '<td>' + skills + otherSkills + '</td>'
+      + '<td style="font-size:12px;">' + stars + '</td>'
+      + '<td style="font-size:12px;">' + (l.phone ? '<a href="tel:' + l.phone + '" style="color:var(--copper);">' + l.phone + '</a>' : '—') + '</td>'
+      + '<td><div style="display:flex;gap:4px;">'
+      + '<button class="btn btn-sm btn-secondary" onclick="editLabourer(' + i + ')">Edit</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="deleteLabourer(' + i + ')">✕</button>'
+      + '</div></td></tr>';
+  }).join('');
+}
+
+function addLabourerModal() {
+  clearLabourerForm();
+  document.getElementById('lab-name').focus();
+}
+
+function saveLabourer() {
+  const idx = parseInt(document.getElementById('lab-edit-idx').value);
+  const skills = [...document.querySelectorAll('.lab-skill:checked')].map(c => c.value);
+  const lab = {
+    name: document.getElementById('lab-name').value,
+    phone: document.getElementById('lab-phone').value,
+    location: document.getElementById('lab-location').value,
+    rate: parseFloat(document.getElementById('lab-rate').value) || 0,
+    skills: skills,
+    otherSkills: document.getElementById('lab-other-skills').value,
+    reliability: parseInt(document.getElementById('lab-reliability').value) || 0,
+    notes: document.getElementById('lab-notes').value
+  };
+  if (!lab.name) { alert('Please enter a name.'); return; }
+  if (idx >= 0) {
+    db.labourers[idx] = lab;
+  } else {
+    db.labourers.push(lab);
+  }
+  saveLabourers();
+  clearLabourerForm();
+  renderLabourers();
+}
+
+function editLabourer(idx) {
+  const l = db.labourers[idx];
+  if (!l) return;
+  document.getElementById('lab-edit-idx').value = idx;
+  document.getElementById('lab-name').value = l.name || '';
+  document.getElementById('lab-phone').value = l.phone || '';
+  document.getElementById('lab-location').value = l.location || '';
+  document.getElementById('lab-rate').value = l.rate || '';
+  document.getElementById('lab-other-skills').value = l.otherSkills || '';
+  document.getElementById('lab-reliability').value = l.reliability || '';
+  document.getElementById('lab-notes').value = l.notes || '';
+  // Set skill checkboxes
+  document.querySelectorAll('.lab-skill').forEach(cb => {
+    cb.checked = (l.skills||[]).includes(cb.value);
+  });
+  document.getElementById('lab-form-title').textContent = 'Edit Labourer — ' + l.name;
+}
+
+function deleteLabourer(idx) {
+  if (!confirm('Delete labourer "' + (db.labourers[idx]?.name||'') + '"?')) return;
+  db.labourers.splice(idx, 1);
+  saveLabourers();
+  renderLabourers();
+}
+
+function clearLabourerForm() {
+  document.getElementById('lab-edit-idx').value = -1;
+  ['lab-name','lab-phone','lab-location','lab-rate','lab-other-skills','lab-reliability','lab-notes']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  document.querySelectorAll('.lab-skill').forEach(cb => cb.checked = false);
+  const header = document.getElementById('lab-form-title');
+  if (header) header.textContent = 'Add / Edit Labourer';
 }
 
 // ============================================================
