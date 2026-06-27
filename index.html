@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.97 -->
+<!-- Livingstone v3.98 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -601,7 +601,6 @@
   .job-row-tip strong { color: #d4956a; }
 
   </style>
-<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="app-wrapper" style="opacity:0;">
@@ -641,7 +640,7 @@
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.97</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.98</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6543,12 +6542,13 @@ function generateWeeklyReport(method) {
   if (method === 'pdf') {
     generateWeeklyReportPDF(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
   } else if (method === 'xlsx') {
-    generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
+    loadSheetJS().then(() => {
+      generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
+    }).catch(e => alert('Could not load spreadsheet library. Try PDF instead.'));
   } else if (method === 'email_xlsx') {
-    // Download spreadsheet first
-    generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
-    // Then open email with summary text
-    const subject = 'Livingstone Projects — Weekly Report ' + weekLabel;
+    loadSheetJS().then(() => {
+      generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
+      const subject = 'Livingstone Projects — Weekly Report ' + weekLabel;
     const body = 'Hi,\n\nPlease find attached the weekly report for Livingstone Projects.\n\n'
       + 'Period: ' + weekLabel + '\n'
       + 'Total spend: £' + Math.round(totalWeekCost).toLocaleString() + '\n'
@@ -6561,6 +6561,7 @@ function generateWeeklyReport(method) {
     setTimeout(() => {
       window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
     }, 500);
+    }).catch(e => alert('Could not load spreadsheet library. Try PDF instead.'));
   } else {
     const text = generateWeeklyReportText(weekLabel, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
     if (method === 'email') {
@@ -6629,6 +6630,24 @@ function generateWeeklyReportText(weekLabel, allJobs, newJobRefs, weekCosts, tot
   text += '  Company No: 14811385 | VAT: 516471886\n';
 
   return text;
+}
+
+function loadSheetJS() {
+  return new Promise((resolve, reject) => {
+    if (typeof XLSX !== 'undefined') { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+    s.onload = resolve;
+    s.onerror = () => {
+      // Fallback CDN
+      const s2 = document.createElement('script');
+      s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s2.onload = resolve;
+      s2.onerror = () => reject(new Error('Could not load spreadsheet library'));
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  });
 }
 
 function generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob) {
@@ -11055,4 +11074,29 @@ async function loadQuoteDocAttachments(ref) {
   }
 
   const cats = {};
-  docs.forEach(d => { const c = d.category 
+  docs.forEach(d => { const c = d.category || 'General'; if(!cats[c]) cats[c]=[]; cats[c].push(d); });
+
+  let html = '';
+  Object.keys(cats).sort().forEach(cat => {
+    html += '<div style="margin-bottom:10px;">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--copper);margin-bottom:4px;">' + cat + '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+    cats[cat].forEach(d => {
+      const isImage = (d.file_type||'').startsWith('image/');
+      html += '<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:white;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;" onmouseover="this.style.borderColor=\'var(--copper)\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
+      html += '<input type="checkbox" class="qb-doc-check" data-url="' + d.url + '" data-name="' + d.filename + '" data-type="' + (d.file_type||'') + '">';
+      if (isImage) {
+        html += '<img src="' + d.url + '" style="width:36px;height:28px;object-fit:cover;border-radius:3px;">';
+      } else {
+        html += '<span style="font-size:18px;">📄</span>';
+      }
+      html += '<span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + d.filename + '</span>';
+      html += '</label>';
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
+}
+</script>
+</html>
