@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.95 -->
+<!-- Livingstone v3.96 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -641,7 +641,7 @@
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.95</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.96</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6488,10 +6488,10 @@ function generateWeeklyReport(method) {
   const materialsTotal = weekMaterials.reduce((s,c) => s + (c.amount||0), 0);
   const otherTotal = weekOther.reduce((s,c) => s + (c.amount||0), 0);
 
-  // 3. Labour breakdown by person
+  // 3. Labour breakdown by person — use sub field (the person's name), not description
   const labourByPerson = {};
   weekLabour.forEach(c => {
-    const name = c.supplier || c.description || 'Unknown';
+    const name = c.sub || c.supplier || (c.description||'').split(' — ')[0] || 'Unknown';
     if (!labourByPerson[name]) labourByPerson[name] = { total: 0, jobs: new Set(), days: 0 };
     labourByPerson[name].total += c.amount || 0;
     labourByPerson[name].days += c.days || 1;
