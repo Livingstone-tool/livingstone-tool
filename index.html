@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.96 -->
+<!-- Livingstone v3.97 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -641,7 +641,7 @@
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.96</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.97</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1707,6 +1707,10 @@
         <div class="form-group">
           <label>Livingstone Lead</label>
           <select id="job-lead"><option value="A">Adam</option><option value="T">Tom</option></select>
+        </div>
+        <div class="form-group">
+          <label>Payment Method</label>
+          <select id="job-payment-method"><option value="account">Account</option><option value="cash">Cash</option></select>
         </div>
         <div class="form-group"><label>Client Name</label><input type="text" id="job-client-name"></div>
         <div class="form-group"><label>Client Phone</label><input type="tel" id="job-client-phone"></div>
@@ -3351,6 +3355,7 @@ function newJobModal() {
   document.getElementById('job-name').value = '';
   document.getElementById('job-status').value = 'Initial Enquiry';
   document.getElementById('job-lead').value = 'A';
+  document.getElementById('job-payment-method').value = 'account';
   document.getElementById('job-client-name').value = '';
   document.getElementById('job-client-phone').value = '';
   document.getElementById('job-client-email').value = '';
@@ -3376,6 +3381,7 @@ function editJobByRef(ref) {
   document.getElementById('job-name').value = j.name || '';
   document.getElementById('job-status').value = j.status || 'Initial Enquiry';
   document.getElementById('job-lead').value = j.lead || 'A';
+  document.getElementById('job-payment-method').value = j.paymentMethod || 'account';
   document.getElementById('job-client-name').value = j.client?.name || '';
   document.getElementById('job-client-phone').value = j.client?.phone || '';
   document.getElementById('job-client-email').value = j.client?.email || '';
@@ -3406,6 +3412,7 @@ async function saveJob() {
     },
     status: document.getElementById('job-status').value,
     lead: document.getElementById('job-lead').value,
+    paymentMethod: document.getElementById('job-payment-method').value || 'account',
     scale: parseInt(document.getElementById('job-scale').value) || 5,
     estimate: parseFloat(document.getElementById('job-estimate').value) || 0,
     startDate: document.getElementById('job-start').value || '',
@@ -6449,6 +6456,14 @@ function openWeeklyReportModal() {
       <div class="form-group"><label>Week Starting (Mon)</label><input type="date" id="wr-start" value="${fmtD(monday)}" style="width:100%;"></div>
       <div class="form-group"><label>Week Ending (Sun)</label><input type="date" id="wr-end" value="${fmtD(sunday)}" style="width:100%;"></div>
     </div>
+    <div class="form-group">
+      <label>Include Jobs</label>
+      <select id="wr-payment-filter" style="width:100%;">
+        <option value="account">Account jobs only</option>
+        <option value="cash">Cash jobs only</option>
+        <option value="all">All jobs</option>
+      </select>
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap;">
       <button class="btn btn-secondary" onclick="closeModal('weekly-report-modal')">Cancel</button>
       <button class="btn btn-secondary" onclick="generateWeeklyReport('copy')">📋 Copy</button>
@@ -6464,13 +6479,21 @@ function openWeeklyReportModal() {
 function generateWeeklyReport(method) {
   const startDate = document.getElementById('wr-start')?.value;
   const endDate = document.getElementById('wr-end')?.value;
+  const paymentFilter = document.getElementById('wr-payment-filter')?.value || 'all';
   if (!startDate || !endDate) { alert('Please select dates.'); return; }
 
   const fmtDateNice = d => new Date(d).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
   const weekLabel = fmtDateNice(startDate) + ' — ' + fmtDateNice(endDate);
 
+  // Filter jobs by payment method
+  const jobFilter = j => {
+    if (paymentFilter === 'all') return true;
+    return (j.paymentMethod || 'account') === paymentFilter;
+  };
+  const filteredJobRefs = new Set(db.jobs.filter(jobFilter).map(j => j.ref));
+
   // 1. All active jobs (highlight new ones added this week)
-  const allJobs = db.jobs.filter(j => j.status && j.status !== 'Completed - Paid');
+  const allJobs = db.jobs.filter(j => j.status && j.status !== 'Completed - Paid' && jobFilter(j));
   const newJobs = db.jobs.filter(j => {
     if (!j.createdAt && !j.created_at) return false;
     const created = j.createdAt || j.created_at || '';
@@ -6478,8 +6501,14 @@ function generateWeeklyReport(method) {
   });
   const newJobRefs = new Set(newJobs.map(j => j.ref));
 
-  // 2. Costs incurred this week
-  const weekCosts = (db.costs||[]).filter(c => c.date >= startDate && c.date <= endDate);
+  // 2. Costs incurred this week (filtered by job payment method)
+  let weekCosts = (db.costs||[]).filter(c => c.date >= startDate && c.date <= endDate);
+  if (paymentFilter !== 'all') {
+    weekCosts = weekCosts.filter(c => {
+      const costJobRefs = (c.allocations||[]).map(a => a.jobRef);
+      return costJobRefs.some(r => filteredJobRefs.has(r));
+    });
+  }
   const totalWeekCost = weekCosts.reduce((s,c) => s + (c.amount||0), 0);
   const weekLabour = weekCosts.filter(c => c.type === 'Labour');
   const weekMaterials = weekCosts.filter(c => c.type === 'Material');
@@ -11026,29 +11055,4 @@ async function loadQuoteDocAttachments(ref) {
   }
 
   const cats = {};
-  docs.forEach(d => { const c = d.category || 'General'; if(!cats[c]) cats[c]=[]; cats[c].push(d); });
-
-  let html = '';
-  Object.keys(cats).sort().forEach(cat => {
-    html += '<div style="margin-bottom:10px;">';
-    html += '<div style="font-size:11px;font-weight:700;color:var(--copper);margin-bottom:4px;">' + cat + '</div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
-    cats[cat].forEach(d => {
-      const isImage = (d.file_type||'').startsWith('image/');
-      html += '<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:white;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;" onmouseover="this.style.borderColor=\'var(--copper)\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
-      html += '<input type="checkbox" class="qb-doc-check" data-url="' + d.url + '" data-name="' + d.filename + '" data-type="' + (d.file_type||'') + '">';
-      if (isImage) {
-        html += '<img src="' + d.url + '" style="width:36px;height:28px;object-fit:cover;border-radius:3px;">';
-      } else {
-        html += '<span style="font-size:18px;">📄</span>';
-      }
-      html += '<span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + d.filename + '</span>';
-      html += '</label>';
-    });
-    html += '</div></div>';
-  });
-
-  el.innerHTML = html;
-}
-</script>
-</html>
+  docs.forEach(d => { const c = d.category 
