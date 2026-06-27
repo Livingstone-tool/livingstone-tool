@@ -11096,4 +11096,20 @@ async function loadQuoteDocAttachments(ref) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
     cats[cat].forEach(d => {
       const isImage = (d.file_type||'').startsWith('image/');
-      html += '<label style="display:flex;align-items:cente
+      html += '<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:white;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;" onmouseover="this.style.borderColor=\'var(--copper)\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
+      html += '<input type="checkbox" class="qb-doc-check" data-url="' + d.url + '" data-name="' + d.filename + '" data-type="' + (d.file_type||'') + '">';
+      if (isImage) {
+        html += '<img src="' + d.url + '" style="width:36px;height:28px;object-fit:cover;border-radius:3px;">';
+      } else {
+        html += '<span style="font-size:18px;">📄</span>';
+      }
+      html += '<span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + d.filename + '</span>';
+      html += '</label>';
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
+}
+</script>
+</html>
