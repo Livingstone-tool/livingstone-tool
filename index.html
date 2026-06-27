@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v3.98 -->
+<!-- Livingstone v3.99 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -640,7 +640,7 @@
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.98</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v3.99</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -789,7 +789,7 @@
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th><th>Quote</th><th>Est. Cost</th><th>Margin £</th>
+              <th>Lead</th><th>Type</th><th>Quote</th><th>Est. Cost</th><th>Margin £</th>
               <th>Margin %</th><th>Start</th><th></th>
             </tr>
           </thead>
@@ -3262,6 +3262,10 @@ function renderJobsTable() {
     row += '<td>' + (j.client && j.client.name ? j.client.name : '') + '</td>';
     row += '<td>' + statusDisplay + '</td>';
     row += '<td><span class="chip chip-' + leadClass + '">' + leadName + '</span></td>';
+    var pmType = j.paymentMethod || 'account';
+    var pmLabel = pmType === 'cash' ? '💵' : '🏦';
+    var pmColor = pmType === 'cash' ? 'background:#27ae60;color:white;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
+    row += '<td><button onclick="event.stopPropagation();toggleJobPaymentMethod(\'' + j.ref + '\',' + i + ')" style="border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;' + pmColor + '" title="' + (pmType==='cash'?'Cash':'Account') + '">' + pmLabel + ' ' + (pmType==='cash'?'Cash':'Acc') + '</button></td>';
     row += '<td>' + quoteDisplay + '</td>';
     row += '<td>' + estCostDisplay + '</td>';
     row += '<td>' + marginValDisplay + '</td>';
@@ -3278,7 +3282,7 @@ function renderJobsTable() {
   var totalMarginVal = totalQuote && totalCost ? totalQuote - totalCost : null;
   var totalMarginPct = totalQuote && totalCost ? Math.round((totalQuote - totalCost) / totalQuote * 100) : null;
   var totalsRow = '<tr style="background:var(--limestone-dark);font-weight:700;border-top:2px solid var(--slate);">';
-  totalsRow += '<td colspan="5" style="text-align:right;padding-right:12px;">' + jobs.length + ' jobs</td>';
+  totalsRow += '<td colspan="6" style="text-align:right;padding-right:12px;">' + jobs.length + ' jobs</td>';
   totalsRow += '<td>£' + Math.round(totalQuote).toLocaleString() + '</td>';
   totalsRow += '<td>£' + Math.round(totalCost).toLocaleString() + '</td>';
   totalsRow += '<td>' + (totalMarginVal !== null ? '<span style="color:' + (totalMarginVal > 0 ? 'var(--success)' : 'var(--danger)') + ';">£' + Math.round(totalMarginVal).toLocaleString() + '</span>' : '') + '</td>';
@@ -4542,6 +4546,15 @@ function clearSubForm() {
 function addSubModal() {
   clearSubForm();
   document.getElementById('sub-name').focus();
+}
+
+async function toggleJobPaymentMethod(ref, idx) {
+  const job = db.jobs.find(j => j.ref === ref);
+  if (!job) return;
+  job.paymentMethod = (job.paymentMethod || 'account') === 'account' ? 'cash' : 'account';
+  saveData();
+  await syncJobToSupabase(ref);
+  renderJobsTable();
 }
 
 // ============================================================
@@ -11083,20 +11096,4 @@ async function loadQuoteDocAttachments(ref) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
     cats[cat].forEach(d => {
       const isImage = (d.file_type||'').startsWith('image/');
-      html += '<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:white;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;" onmouseover="this.style.borderColor=\'var(--copper)\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
-      html += '<input type="checkbox" class="qb-doc-check" data-url="' + d.url + '" data-name="' + d.filename + '" data-type="' + (d.file_type||'') + '">';
-      if (isImage) {
-        html += '<img src="' + d.url + '" style="width:36px;height:28px;object-fit:cover;border-radius:3px;">';
-      } else {
-        html += '<span style="font-size:18px;">📄</span>';
-      }
-      html += '<span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + d.filename + '</span>';
-      html += '</label>';
-    });
-    html += '</div></div>';
-  });
-
-  el.innerHTML = html;
-}
-</script>
-</html>
+      html += '<label style="display:flex;align-items:cente
