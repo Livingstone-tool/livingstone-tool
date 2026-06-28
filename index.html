@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.02 -->
+<!-- Livingstone v4.04 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -47,18 +47,18 @@
   }
   .sidebar-logo .wordmark {
     font-family: 'Inter', sans-serif;
-    font-size: 17px;
+    font-size: 15px;
     color: var(--white);
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-weight: 700;
+    letter-spacing: 0.12em;
     line-height: 1.2;
   }
   .sidebar-logo .sub {
     font-size: 10px;
-    color: var(--copper-light);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-top: 2px;
+    color: #B5DD3C;
+    letter-spacing: 0.06em;
+    margin-top: 1px;
+    font-weight: 400;
   }
   .nav-section { padding: 16px 0 8px; }
   .nav-label {
@@ -81,8 +81,8 @@
   .nav-item:hover { color: white; background: rgba(255,255,255,0.06); }
   .nav-item.active {
     color: white;
-    background: rgba(181,221,60,0.18);
-    border-left-color: var(--copper);
+    background: rgba(181,221,60,0.12);
+    border-left-color: #B5DD3C;
   }
   .nav-item .icon { font-size: 16px; width: 18px; text-align: center; flex-shrink: 0; }
   .sidebar-footer {
@@ -101,6 +101,7 @@
   .topbar {
     background: var(--white);
     border-bottom: 1px solid var(--border);
+    border-top: 2px solid #B5DD3C;
     padding: 0 32px;
     height: 58px;
     display: flex; align-items: center; justify-content: space-between;
@@ -165,8 +166,8 @@
   .badge-enquiry { background: #e8f4fd; color: #1a6fa8; }
   .badge-preparing { background: #fff3cd; color: #8a6000; }
   .badge-quoted { background: #e8f0fe; color: #3d57b5; }
-  .badge-confirmed { background: #d4edda; color: #1a6633; }
-  .badge-progress { background: #cce5ff; color: #004085; }
+  .badge-confirmed { background: rgba(181,221,60,0.2); color: #4a6115; }
+  .badge-progress { background: rgba(181,221,60,0.3); color: #3a5510; }
   .badge-hold { background: #f8d7da; color: #721c24; }
   .badge-completed { background: #d1ecf1; color: #0c5460; }
   .badge-completed-unpaid { background: #fff3cd; color: #856404; }
@@ -182,6 +183,7 @@
   .stat-card {
     background: var(--white);
     border: 1px solid var(--border);
+    border-top: 3px solid #B5DD3C;
     border-radius: 10px;
     padding: 20px;
   }
@@ -300,7 +302,7 @@
     transition: all 0.15s;
   }
   .tab:hover { color: var(--text); }
-  .tab.active { color: var(--copper); border-bottom-color: var(--copper); }
+  .tab.active { color: var(--copper); border-bottom-color: #B5DD3C; }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
   /* FAB */
@@ -322,7 +324,7 @@
   .fab-wishlist:hover { background: var(--slate); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
   /* PROGRESS BAR */
   .progress-bar { background: var(--limestone-dark); border-radius: 4px; height: 6px; overflow: hidden; }
-  .progress-fill { height: 100%; border-radius: 4px; background: var(--copper); transition: width 0.3s; }
+  .progress-fill { height: 100%; border-radius: 4px; background: #B5DD3C; transition: width 0.3s; }
   .gantt-task-bar:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important; }
   .gantt-task-bar:active { cursor: grabbing !important; }
   .gantt-resize-handle:hover { background: rgba(255,255,255,0.3); }
@@ -605,13 +607,35 @@
 </head>
 <body>
 <div id="app-wrapper" style="opacity:0;">
-<div id="js-error-display" style="display:none;position:fixed;top:0;left:0;right:0;background:#e74c3c;color:white;padding:12px 20px;z-index:99999;font-family:monospace;font-size:12px;"></div>
-<script>window.onerror=function(m,s,l,c,e){var d=document.getElementById('js-error-display');if(d){d.style.display='block';d.textContent='JS Error: '+m+' (line '+l+')';} return false;};</script>
+<div id="js-error-display" style="position:fixed;top:0;left:0;right:0;background:#e74c3c;color:white;padding:12px 20px;z-index:99999;font-family:monospace;font-size:12px;display:none;"></div>
+<script>
+window.onerror=function(m,s,l,c,e){
+  document.getElementById('js-error-display').style.display='block';
+  document.getElementById('js-error-display').textContent='ERROR: '+m+' (line '+l+', col '+c+')';
+  document.getElementById('app-wrapper').style.opacity='1';
+  return false;
+};
+</script>
 <!-- SIDEBAR -->
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <div class="wordmark">Livingstone<br>Projects</div>
-    <div class="sub">Project Management</div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="13" y="0" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="26" y="0" width="10" height="10" fill="#B5DD3C" rx="1"/>
+        <rect x="0" y="13" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="13" y="13" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="26" y="13" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="0" y="26" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="13" y="26" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+        <rect x="26" y="26" width="10" height="10" fill="rgba(255,255,255,0.25)" rx="1"/>
+      </svg>
+      <div>
+        <div class="wordmark">LIVINGSTONE</div>
+        <div class="sub">Projects</div>
+      </div>
+    </div>
   </div>
   <div style="overflow-y:auto; flex:1;">
     <div class="nav-section">
@@ -643,7 +667,7 @@
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.02</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.04</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -4461,7 +4485,7 @@ function renderSubs() {
             <div style="color:var(--copper);font-size:13px;margin-top:2px;">${s.trade}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-family:'Inter',sans-serif;font-size:16px;font-weight:700;">£${s.dayRate}<span style="font-size:12px;font-weight:400;color:var(--text-muted)">/day</span></div>
+            <div style="font-family:Inter,sans-serif;font-size:16px;font-weight:700;">£${s.dayRate}<span style="font-size:12px;font-weight:400;color:var(--text-muted)">/day</span></div>
             <div style="font-size:12px;color:var(--text-muted);">${stars} ${avg||''}</div>
           </div>
         </div>
@@ -8335,10 +8359,10 @@ function exportProjectPlanPDF() {
   .brand span { color:#B5DD3C; }
   .brand-sub { font-size:11px; color:#6b7e8e; letter-spacing:0.08em; text-transform:uppercase; margin-top:3px; }
   .meta { text-align:right; font-size:13px; color:#6b7e8e; line-height:1.8; }
-  h2 { font-family:'Inter',sans-serif; font-size:18px; margin-bottom:16px; color:#0D0D0D; }
+  h2 { font-family:Inter,sans-serif; font-size:18px; margin-bottom:16px; color:#0D0D0D; }
   .summary { display:flex; gap:32px; flex-wrap:wrap; margin-bottom:32px; padding:16px 20px; background:#F4F1EB; border-radius:8px; }
   .summary-item .lbl { font-size:10px; color:#6b7e8e; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
-  .summary-item .val { font-family:'Inter',sans-serif; font-size:18px; font-weight:700; }
+  .summary-item .val { font-family:Inter,sans-serif; font-size:18px; font-weight:700; }
   .progress-bar { height:8px; background:#e8e4db; border-radius:4px; margin:8px 0 24px; }
   .progress-fill { height:100%; background:#B5DD3C; border-radius:4px; }
   table { width:100%; border-collapse:collapse; margin-bottom:24px; font-size:12px; }
@@ -8923,7 +8947,7 @@ function renderJobPlan() {
     <div class="card accent-top" style="margin-bottom:20px;overflow:visible;">
       <div class="card-header">
         <div>
-          <div style="font-family:'Inter',sans-serif;font-size:17px;font-weight:600;">${job.ref} — ${job.name}</div>
+          <div style="font-family:Inter,sans-serif;font-size:17px;font-weight:600;">${job.ref} — ${job.name}</div>
           <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">${job.client?.name || ''}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -8953,9 +8977,9 @@ function renderJobPlan() {
       <div class="card-body">
         <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:16px;">
           <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Quote Value</div>
-            <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:700;color:var(--copper);">${job.quoteValue ? '£'+job.quoteValue.toLocaleString() : '—'}</div></div>
+            <div style="font-family:Inter,sans-serif;font-size:18px;font-weight:700;color:var(--copper);">${job.quoteValue ? '£'+job.quoteValue.toLocaleString() : '—'}</div></div>
           <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Est. Margin</div>
-            <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:700;color:var(--success);">${margin ? '£'+margin.toLocaleString() : '—'} <span style="font-size:13px;font-weight:400;">(${marginPct}%)</span></div></div>
+            <div style="font-family:Inter,sans-serif;font-size:18px;font-weight:700;color:var(--success);">${margin ? '£'+margin.toLocaleString() : '—'} <span style="font-size:13px;font-weight:400;">(${marginPct}%)</span></div></div>
           <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Timeline</div>
             <div style="font-size:14px;font-weight:600;">${job.startDate||'TBC'} → ${job.endDate||'TBC'}</div></div>
           <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Lead</div>
@@ -11004,7 +11028,7 @@ ${(() => {
   const checks = document.querySelectorAll('.qb-doc-check:checked');
   if (!checks.length) return '';
   let docHtml = '<div style="page-break-before:always;padding:40px 50px;">';
-  docHtml += '<h2 style="font-family:'Inter',sans-serif;font-size:20px;margin-bottom:20px;color:#0D0D0D;">Appendix — Supporting Documents</h2>';
+  docHtml += '<h2 style="font-family:Inter,sans-serif;font-size:20px;margin-bottom:20px;color:#0D0D0D;">Appendix — Supporting Documents</h2>';
   checks.forEach(chk => {
     const url = chk.dataset.url;
     const name = chk.dataset.name;
