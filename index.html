@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.05 -->
+<!-- Livingstone v4.06 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.05</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.06</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6491,14 +6491,25 @@ function openWeeklyReportModal() {
 
   document.getElementById('weekly-report-body').innerHTML = `
     <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Select the week to generate a report for your bookkeeper.</p>
+    <div class="form-group" style="margin-bottom:4px;"><label style="font-weight:600;">Jobs & Costs Period</label></div>
     <div class="grid-2" style="gap:12px;">
-      <div class="form-group"><label>Week Starting (Mon)</label><input type="date" id="wr-start" value="${fmtD(monday)}" style="width:100%;"></div>
-      <div class="form-group"><label>Week Ending (Sun)</label><input type="date" id="wr-end" value="${fmtD(sunday)}" style="width:100%;"></div>
+      <div class="form-group"><label>From</label><input type="date" id="wr-start" value="${fmtD(monday)}" style="width:100%;"></div>
+      <div class="form-group"><label>To</label><input type="date" id="wr-end" value="${fmtD(sunday)}" style="width:100%;"></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
       <button class="btn btn-sm btn-secondary" onclick="document.getElementById('wr-start').value='${fmtD(monday)}';document.getElementById('wr-end').value='${fmtD(sunday)}';">This Week</button>
       <button class="btn btn-sm btn-secondary" onclick="var m=new Date();m.setDate(m.getDate()-((m.getDay()+6)%7)-7);var s=new Date(m);s.setDate(s.getDate()+6);document.getElementById('wr-start').value=m.toISOString().split('T')[0];document.getElementById('wr-end').value=s.toISOString().split('T')[0];">Last Week</button>
       <button class="btn btn-sm btn-secondary" onclick="document.getElementById('wr-start').value='2024-01-01';document.getElementById('wr-end').value='${fmtD(new Date())}';">All Time</button>
+    </div>
+    <div class="form-group" style="margin-bottom:4px;"><label style="font-weight:600;">Labour Breakdown Period</label></div>
+    <div class="grid-2" style="gap:12px;">
+      <div class="form-group"><label>From</label><input type="date" id="wr-lab-start" value="${fmtD(monday)}" style="width:100%;"></div>
+      <div class="form-group"><label>To</label><input type="date" id="wr-lab-end" value="${fmtD(sunday)}" style="width:100%;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('wr-lab-start').value='${fmtD(monday)}';document.getElementById('wr-lab-end').value='${fmtD(sunday)}';">This Week</button>
+      <button class="btn btn-sm btn-secondary" onclick="var m=new Date();m.setDate(m.getDate()-((m.getDay()+6)%7)-7);var s=new Date(m);s.setDate(s.getDate()+6);document.getElementById('wr-lab-start').value=m.toISOString().split('T')[0];document.getElementById('wr-lab-end').value=s.toISOString().split('T')[0];">Last Week</button>
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('wr-lab-start').value=document.getElementById('wr-start').value;document.getElementById('wr-lab-end').value=document.getElementById('wr-end').value;">Same as Above</button>
     </div>
     <div class="form-group">
       <label>Include Jobs</label>
@@ -6523,11 +6534,14 @@ function openWeeklyReportModal() {
 function generateWeeklyReport(method) {
   const startDate = document.getElementById('wr-start')?.value;
   const endDate = document.getElementById('wr-end')?.value;
+  const labStartDate = document.getElementById('wr-lab-start')?.value || startDate;
+  const labEndDate = document.getElementById('wr-lab-end')?.value || endDate;
   const paymentFilter = document.getElementById('wr-payment-filter')?.value || 'all';
   if (!startDate || !endDate) { alert('Please select dates.'); return; }
 
   const fmtDateNice = d => new Date(d).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
   const weekLabel = fmtDateNice(startDate) + ' — ' + fmtDateNice(endDate);
+  const labLabel = fmtDateNice(labStartDate) + ' — ' + fmtDateNice(labEndDate);
 
   // Filter jobs by payment method
   const jobFilter = j => {
@@ -6561,9 +6575,16 @@ function generateWeeklyReport(method) {
   const materialsTotal = weekMaterials.reduce((s,c) => s + (c.amount||0), 0);
   const otherTotal = weekOther.reduce((s,c) => s + (c.amount||0), 0);
 
-  // 3. Labour breakdown by person — use sub field (the person's name), not description
+  // 3. Labour breakdown by person — uses LABOUR period dates
+  const labourCostsForPeriod = (db.costs||[]).filter(c => c.date >= labStartDate && c.date <= labEndDate && c.type === 'Labour');
+  if (paymentFilter !== 'all') {
+    labourCostsForPeriod.filter(c => {
+      const costJobRefs = (c.allocations||[]).map(a => a.jobRef);
+      return costJobRefs.some(r => filteredJobRefs.has(r));
+    });
+  }
   const labourByPerson = {};
-  weekLabour.forEach(c => {
+  labourCostsForPeriod.forEach(c => {
     const name = c.sub || c.supplier || (c.description||'').split(' — ')[0] || 'Unknown';
     if (!labourByPerson[name]) labourByPerson[name] = { total: 0, jobs: new Set(), days: 0 };
     labourByPerson[name].total += c.amount || 0;
@@ -6585,14 +6606,14 @@ function generateWeeklyReport(method) {
   closeModal('weekly-report-modal');
 
   if (method === 'pdf') {
-    generateWeeklyReportPDF(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
+    generateWeeklyReportPDF(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob, labLabel);
   } else if (method === 'xlsx') {
     loadSheetJS().then(() => {
-      generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
+      generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob, labLabel);
     }).catch(e => alert('Could not load spreadsheet library. Try PDF instead.'));
   } else if (method === 'email_xlsx') {
     loadSheetJS().then(() => {
-      generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
+      generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob, labLabel);
       const subject = 'Livingstone Projects — Weekly Report ' + weekLabel;
     const body = 'Hi,\n\nPlease find attached the weekly report for Livingstone Projects.\n\n'
       + 'Period: ' + weekLabel + '\n'
@@ -6608,7 +6629,7 @@ function generateWeeklyReport(method) {
     }, 500);
     }).catch(e => alert('Could not load spreadsheet library. Try PDF instead.'));
   } else {
-    const text = generateWeeklyReportText(weekLabel, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob);
+    const text = generateWeeklyReportText(weekLabel, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob, labLabel);
     if (method === 'email') {
       window.location.href = 'mailto:?subject=' + encodeURIComponent('Livingstone Projects — Weekly Report ' + weekLabel) + '&body=' + encodeURIComponent(text);
     } else {
@@ -6617,7 +6638,7 @@ function generateWeeklyReport(method) {
   }
 }
 
-function generateWeeklyReportText(weekLabel, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob) {
+function generateWeeklyReportText(weekLabel, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob, labLabel) {
   const fmtM = v => '£' + Math.round(v).toLocaleString();
   let text = '═══════════════════════════════════════\n';
   text += '  LIVINGSTONE PROJECTS — WEEKLY REPORT\n';
@@ -6655,7 +6676,7 @@ function generateWeeklyReportText(weekLabel, allJobs, newJobRefs, weekCosts, tot
   text += '\n';
 
   // Labour breakdown
-  text += '👷 LABOUR BREAKDOWN\n';
+  text += '👷 LABOUR BREAKDOWN' + (labLabel ? ' (' + labLabel + ')' : '') + '\n';
   text += '───────────────────────────────────────\n';
   Object.entries(labourByPerson).sort((a,b) => b[1].total - a[1].total).forEach(([name, d]) => {
     text += '   ' + name + ': ' + fmtM(d.total) + ' (' + d.days + ' day' + (d.days!==1?'s':'') + ')\n';
@@ -6695,7 +6716,7 @@ function loadSheetJS() {
   });
 }
 
-function generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob) {
+function generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob, labLabel) {
   const fmtM = v => Math.round(v * 100) / 100;
   const wb = XLSX.utils.book_new();
 
@@ -6740,7 +6761,7 @@ function generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJob
   XLSX.utils.book_append_sheet(wb, wsCostJob, 'Costs by Job');
 
   // Sheet 4: Labour Breakdown
-  const labourData = [['Person', 'Days', 'Total Cost', 'Jobs']];
+  const labourData = [['Labour Breakdown' + (labLabel && labLabel !== weekLabel ? ' — ' + labLabel : '')], ['Person', 'Days', 'Total Cost', 'Jobs']];
   Object.entries(labourByPerson).sort((a,b) => b[1].total - a[1].total).forEach(([name, d]) => {
     labourData.push([name, d.days, fmtM(d.total), [...d.jobs].join(', ')]);
   });
@@ -6767,7 +6788,7 @@ function generateWeeklyReportXLSX(weekLabel, startDate, endDate, allJobs, newJob
   XLSX.writeFile(wb, fileName);
 }
 
-function generateWeeklyReportPDF(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob) {
+function generateWeeklyReportPDF(weekLabel, startDate, endDate, allJobs, newJobRefs, weekCosts, totalWeekCost, labourTotal, materialsTotal, otherTotal, labourByPerson, costsByJob, labLabel) {
   const fmtM = v => '£' + Math.round(v).toLocaleString();
 
   const jobRows = allJobs.sort((a,b) => (a.ref||'').localeCompare(b.ref||'')).map(j => {
@@ -6860,7 +6881,7 @@ thead th { padding:6px 10px; text-align:left; font-size:10px; text-transform:upp
     <tbody>${costJobRows || '<tr><td colspan="6" style="padding:8px;color:#6b7e8e;text-align:center;">No costs logged this week</td></tr>'}</tbody>
   </table>
 
-  <h2>Labour Breakdown</h2>
+  <h2>Labour Breakdown${labLabel && labLabel !== weekLabel ? ' <span style="font-size:11px;font-weight:400;color:#6b7e8e;">(' + labLabel + ')</span>' : ''}</h2>
   <table>
     <thead><tr><th>Person</th><th style="text-align:center;">Days</th><th style="text-align:right;">Cost</th><th>Jobs</th></tr></thead>
     <tbody>${labourRows || '<tr><td colspan="4" style="padding:8px;color:#6b7e8e;text-align:center;">No labour costs this week</td></tr>'}</tbody>
