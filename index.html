@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.04 -->
+<!-- Livingstone v4.05 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.04</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.05</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6494,6 +6494,11 @@ function openWeeklyReportModal() {
     <div class="grid-2" style="gap:12px;">
       <div class="form-group"><label>Week Starting (Mon)</label><input type="date" id="wr-start" value="${fmtD(monday)}" style="width:100%;"></div>
       <div class="form-group"><label>Week Ending (Sun)</label><input type="date" id="wr-end" value="${fmtD(sunday)}" style="width:100%;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('wr-start').value='${fmtD(monday)}';document.getElementById('wr-end').value='${fmtD(sunday)}';">This Week</button>
+      <button class="btn btn-sm btn-secondary" onclick="var m=new Date();m.setDate(m.getDate()-((m.getDay()+6)%7)-7);var s=new Date(m);s.setDate(s.getDate()+6);document.getElementById('wr-start').value=m.toISOString().split('T')[0];document.getElementById('wr-end').value=s.toISOString().split('T')[0];">Last Week</button>
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('wr-start').value='2024-01-01';document.getElementById('wr-end').value='${fmtD(new Date())}';">All Time</button>
     </div>
     <div class="form-group">
       <label>Include Jobs</label>
