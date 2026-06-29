@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.06 -->
+<!-- Livingstone v4.07 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.06</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.07</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1051,7 +1051,7 @@ window.onerror=function(m,s,l,c,e){
         <div class="card-header"><div class="card-title">Labourer Database</div></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name</th><th>Location</th><th>Day Rate</th><th>Skills / Tickets</th><th>Reliability</th><th>Phone</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Location</th><th>Day Rate</th><th>Skills / Tickets</th><th>Rel</th><th>Qual</th><th>Cost</th><th>Phone</th><th></th></tr></thead>
             <tbody id="labourers-table-body"></tbody>
           </table>
         </div>
@@ -1076,7 +1076,11 @@ window.onerror=function(m,s,l,c,e){
             <label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="lab-skill" value="Driving Licence"> Driving Licence</label>
           </div>
           <div class="form-group"><label>Other Skills</label><input type="text" id="lab-other-skills" placeholder="e.g. plastering, tiling..."></div>
-          <div class="form-group"><label>Reliability (1-10)</label><input type="number" id="lab-reliability" min="1" max="10"></div>
+          <div class="grid-3" style="gap:12px;">
+            <div class="form-group"><label>Reliability (1-10)</label><input type="number" id="lab-reliability" min="1" max="10"></div>
+            <div class="form-group"><label>Quality (1-10)</label><input type="number" id="lab-quality" min="1" max="10"></div>
+            <div class="form-group"><label>Cost Score (1-10)</label><input type="number" id="lab-costscore" min="1" max="10"></div>
+          </div>
           <div class="form-group"><label>Notes</label><textarea id="lab-notes" rows="2"></textarea></div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-primary" onclick="saveLabourer()">Save</button>
@@ -4609,24 +4613,28 @@ function renderLabourers() {
   const tbody = document.getElementById('labourers-table-body');
   if (!tbody) return;
   if (!db.labourers.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No labourers added yet. Click "+ Add Labourer" to start.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px;">No labourers added yet. Click "+ Add Labourer" to start.</td></tr>';
     return;
   }
   tbody.innerHTML = db.labourers.map((l, i) => {
-    const stars = l.reliability ? '⭐'.repeat(Math.min(5, Math.round(l.reliability/2))) : '—';
+    const scoreBar = (val) => {
+      if (!val) return '<span style="color:var(--text-muted);">—</span>';
+      const col = val >= 7 ? 'var(--success)' : val >= 4 ? 'var(--warning)' : 'var(--danger)';
+      return '<span style="font-weight:600;color:' + col + ';">' + val + '</span>';
+    };
     const skills = (l.skills||[]).map(s => '<span class="chip" style="font-size:10px;margin:1px;">' + s + '</span>').join(' ');
     const otherSkills = l.otherSkills ? '<span style="font-size:10px;color:var(--text-muted);"> ' + l.otherSkills + '</span>' : '';
-    return '<tr>'
+    return '<tr style="cursor:pointer;" onclick="editLabourer(' + i + ')">'
       + '<td style="font-weight:600;">' + (l.name||'') + '</td>'
       + '<td style="font-size:12px;">' + (l.location||'') + '</td>'
       + '<td style="font-weight:600;">£' + (l.rate||0) + '</td>'
       + '<td>' + skills + otherSkills + '</td>'
-      + '<td style="font-size:12px;">' + stars + '</td>'
-      + '<td style="font-size:12px;">' + (l.phone ? '<a href="tel:' + l.phone + '" style="color:var(--copper);">' + l.phone + '</a>' : '—') + '</td>'
-      + '<td><div style="display:flex;gap:4px;">'
-      + '<button class="btn btn-sm btn-secondary" onclick="editLabourer(' + i + ')">Edit</button>'
-      + '<button class="btn btn-sm btn-danger" onclick="deleteLabourer(' + i + ')">✕</button>'
-      + '</div></td></tr>';
+      + '<td style="text-align:center;">' + scoreBar(l.reliability) + '</td>'
+      + '<td style="text-align:center;">' + scoreBar(l.quality) + '</td>'
+      + '<td style="text-align:center;">' + scoreBar(l.costScore) + '</td>'
+      + '<td style="font-size:12px;">' + (l.phone ? '<a href="tel:' + l.phone + '" onclick="event.stopPropagation()" style="color:var(--copper);">' + l.phone + '</a>' : '—') + '</td>'
+      + '<td><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteLabourer(' + i + ')">✕</button></td>'
+      + '</tr>';
   }).join('');
 }
 
@@ -4646,6 +4654,8 @@ function saveLabourer() {
     skills: skills,
     otherSkills: document.getElementById('lab-other-skills').value,
     reliability: parseInt(document.getElementById('lab-reliability').value) || 0,
+    quality: parseInt(document.getElementById('lab-quality').value) || 0,
+    costScore: parseInt(document.getElementById('lab-costscore').value) || 0,
     notes: document.getElementById('lab-notes').value
   };
   if (!lab.name) { alert('Please enter a name.'); return; }
@@ -4669,12 +4679,15 @@ function editLabourer(idx) {
   document.getElementById('lab-rate').value = l.rate || '';
   document.getElementById('lab-other-skills').value = l.otherSkills || '';
   document.getElementById('lab-reliability').value = l.reliability || '';
+  document.getElementById('lab-quality').value = l.quality || '';
+  document.getElementById('lab-costscore').value = l.costScore || '';
   document.getElementById('lab-notes').value = l.notes || '';
   // Set skill checkboxes
   document.querySelectorAll('.lab-skill').forEach(cb => {
     cb.checked = (l.skills||[]).includes(cb.value);
   });
   document.getElementById('lab-form-title').textContent = 'Edit Labourer — ' + l.name;
+  document.getElementById('lab-form-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function deleteLabourer(idx) {
@@ -4686,7 +4699,7 @@ function deleteLabourer(idx) {
 
 function clearLabourerForm() {
   document.getElementById('lab-edit-idx').value = -1;
-  ['lab-name','lab-phone','lab-location','lab-rate','lab-other-skills','lab-reliability','lab-notes']
+  ['lab-name','lab-phone','lab-location','lab-rate','lab-other-skills','lab-reliability','lab-quality','lab-costscore','lab-notes']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   document.querySelectorAll('.lab-skill').forEach(cb => cb.checked = false);
   const header = document.getElementById('lab-form-title');
