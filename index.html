@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.07 -->
+<!-- Livingstone v4.08 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.07</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.08</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -10934,40 +10934,42 @@ async function exportQuotePDF() {
     if (bonusVal4) lineRows += `<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">On-Time Bonus</td><td colspan="3"></td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${bonusVal4.toFixed(2)}</td></tr>`;
 
   } else {
-    // Detailed
+    // Detailed — client-facing: no input costs, no supplier names
     tableHeaders = `<tr>
-        <th style="width:35%;text-align:left;">Description</th>
-        <th style="width:20%;text-align:left;">Supplier / Sub</th>
-        <th style="width:10%;text-align:center;">Qty</th>
-        <th style="width:12%;text-align:right;">Rate £</th>
-        <th style="width:12%;text-align:right;">Total £</th>
+        <th style="width:50%;text-align:left;">Description</th>
+        <th style="width:15%;text-align:center;">Qty</th>
+        <th style="width:15%;text-align:right;">Unit Price £</th>
+        <th style="width:20%;text-align:right;">Total £</th>
       </tr>`;
+    tableColspan = 4;
     lineRows = rooms.map(room => {
-      const roomLines = room.lines.map(l => `
+      const roomLines = room.lines.map(l => {
+        const unitPrice = (l.qty && l.qty > 0) ? (l.withMargin||0) / l.qty : (l.withMargin||0);
+        return `
         <tr>
           <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;">${l.desc || ''}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;color:#6b7e8e;">${l.supplier || ''}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:center;">${l.qty || ''}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;">£${(l.rate||0).toFixed(2)}</td>
+          <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;">£${unitPrice.toFixed(2)}</td>
           <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${(l.withMargin||0).toFixed(2)}</td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
       const roomTotal = room.lines.reduce((s,l)=>s+(l.withMargin||0),0);
       return `
         <tr>
-          <td colspan="5" style="padding:10px 10px 6px;background:#F4F1EB;font-weight:700;font-size:13px;color:#0D0D0D;border-top:2px solid #B5DD3C;">
+          <td colspan="4" style="padding:10px 10px 6px;background:#F4F1EB;font-weight:700;font-size:13px;color:#0D0D0D;border-top:2px solid #B5DD3C;">
             ${room.name}
           </td>
         </tr>
         ${roomLines}
         <tr>
-          <td colspan="4" style="padding:7px 10px;text-align:right;font-weight:600;font-size:12px;color:#6b7e8e;">Section Total:</td>
-          <td style="padding:7px 10px;text-align:right;font-weight:700;color:#B5DD3C;">£${roomTotal.toFixed(2)}</td>
+          <td colspan="3" style="padding:7px 10px;text-align:right;font-weight:600;font-size:12px;color:#6b7e8e;">Section Total:</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:700;color:#6B8A1F;">£${roomTotal.toFixed(2)}</td>
         </tr>`;
     }).join('');
     const pmFeeVal3 = parseFloat(document.getElementById('qb-pm-fee')?.value)||0;
     const bonusVal3 = parseFloat(document.getElementById('qb-bonus')?.value)||0;
-    if (pmFeeVal3) lineRows += `<tr><td colspan="4" style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">Project Management</td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${pmFeeVal3.toFixed(2)}</td></tr>`;
-    if (bonusVal3) lineRows += `<tr><td colspan="4" style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">On-Time Bonus</td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${bonusVal3.toFixed(2)}</td></tr>`;
+    if (pmFeeVal3) lineRows += `<tr><td colspan="3" style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">Project Management</td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${pmFeeVal3.toFixed(2)}</td></tr>`;
+    if (bonusVal3) lineRows += `<tr><td colspan="3" style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">On-Time Bonus</td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${bonusVal3.toFixed(2)}</td></tr>`;
   }
 
   const html = `<!DOCTYPE html>
