@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.14 -->
+<!-- Livingstone v4.15 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.14</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.15</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6702,6 +6702,14 @@ Rules:
       })
     });
     const data = await response.json();
+
+    if (data.error) {
+      console.warn('Claude API error:', data.error);
+      alert('Claude error: ' + (data.error.message || JSON.stringify(data.error)));
+      if (thinking) thinking.style.display = 'none';
+      return;
+    }
+
     const text = (data.content || []).map(c => c.text || '').join('').trim();
 
     // Parse the JSON response
@@ -6731,7 +6739,7 @@ Rules:
     }
   } catch(e) {
     console.warn('Schedule generation failed:', e);
-    alert('Could not generate schedule. Check your connection and try again.');
+    alert('Schedule error: ' + e.message);
   }
   if (thinking) thinking.style.display = 'none';
 }
