@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.16 -->
+<!-- Livingstone v4.17 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.16</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.17</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6694,7 +6694,7 @@ KNOWN PEOPLE: ${[...people].join(', ')}
 ${existing.length ? 'CURRENT ENTRIES FOR THIS WEEK (keep unless contradicted):\n' + existing.map(e => '- [' + e.category + '] ' + (e.person||'') + ': ' + (e.task||'') + (e.jobRef?' ('+e.jobRef+')':'') + (e.days?' '+e.days+'d':'') + (e.notes?' — '+e.notes:'')).join('\n') + '\n\n' : ''}MEETING NOTES:
 ${input}
 
-Return ONLY a JSON array of schedule entries. No markdown, no backticks, no explanation. Each entry:
+Return ONLY a JSON array of schedule entries. No preamble, no markdown, no backticks, no explanation before or after. Your ENTIRE response must be a valid JSON array starting with [ and ending with ]. Each entry:
 {
   "category": "own"|"sub"|"delivery"|"admin",
   "person": "name or empty string",
@@ -6747,9 +6747,18 @@ Rules:
 
     const text = (data.content || []).map(c => c.text || '').join('').trim();
 
-    // Parse the JSON response
+    // Parse the JSON response — extract array even if wrapped in text
     const clean = text.replace(/```json|```/g, '').trim();
-    const entries = JSON.parse(clean);
+    let entries;
+    try {
+      entries = JSON.parse(clean);
+    } catch(e1) {
+      // Try to find a JSON array within the text
+      const match = clean.match(/\[[\s\S]*\]/);
+      if (match) {
+        try { entries = JSON.parse(match[0]); } catch(e2) { entries = null; }
+      }
+    }
 
     if (Array.isArray(entries)) {
       // Replace this week's entries
@@ -6770,7 +6779,7 @@ Rules:
       renderSchedule();
       document.getElementById('sch-chat-input').value = '';
     } else {
-      alert('Unexpected response format. Try again.');
+      alert('Could not parse schedule. Claude said: ' + text.substring(0, 200));
     }
   } catch(e) {
     console.warn('Schedule generation failed:', e);
