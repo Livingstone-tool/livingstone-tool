@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.17 -->
+<!-- Livingstone v4.18 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -659,6 +659,7 @@ window.onerror=function(m,s,l,c,e){
     </div>
     <div class="nav-section">
       <div class="nav-label">Business</div>
+      <div class="nav-item" onclick="showPage('growth')"><span class="icon">🚀</span> Growth</div>
       <div class="nav-item" onclick="showPage('actions')"><span class="icon">🎯</span> Business Actions</div>
       <div class="nav-item" onclick="showPage('finance')"><span class="icon">£</span> Finance</div>
     <div class="nav-item" onclick="showPage('costs')"><span class="icon">💰</span> Cost Tracker</div>
@@ -667,7 +668,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.17</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.18</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1166,6 +1167,38 @@ window.onerror=function(m,s,l,c,e){
   </div>
 
   <!-- ACTIONS PAGE -->
+  <!-- GROWTH -->
+  <div id="page-growth" class="page content">
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;">
+      <div class="tab active" onclick="switchGrowthTab('plan',this)">📋 Growth Plan</div>
+      <div class="tab" onclick="switchGrowthTab('pipeline',this)">🏫 Pipeline</div>
+      <div class="tab" onclick="switchGrowthTab('assistant',this)">🤖 Assistant</div>
+    </div>
+
+    <!-- PLAN TRACKER -->
+    <div id="growth-tab-plan">
+      <div id="growth-plan-content"></div>
+    </div>
+
+    <!-- PIPELINE -->
+    <div id="growth-tab-pipeline" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div></div>
+        <button class="btn btn-sm btn-primary" onclick="addPipelineEntry()">+ Add Prospect</button>
+      </div>
+      <div id="pipeline-content"></div>
+    </div>
+
+    <!-- ASSISTANT -->
+    <div id="growth-tab-assistant" style="display:none;">
+      <div id="assistant-messages" style="min-height:200px;max-height:500px;overflow-y:auto;margin-bottom:12px;padding:12px;background:var(--white);border:1px solid var(--border);border-radius:8px;"></div>
+      <div style="display:flex;gap:8px;">
+        <textarea id="assistant-input" rows="2" placeholder="Ask me anything — research schools, find contacts, add prospects to the pipeline...&#10;e.g. 'Find independent schools within 50 miles of Stoke with prep departments'" style="flex:1;font-size:13px;padding:10px;border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+        <button class="btn btn-primary" onclick="sendAssistantMessage()" style="align-self:flex-end;">Send →</button>
+      </div>
+    </div>
+  </div>
+
   <div id="page-actions" class="page content">
     <div style="display:flex;gap:12px;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <div class="tabs" style="margin:0;border:none;">
@@ -3044,7 +3077,7 @@ const SEED = {
 const PAGE_TITLES = {
   dashboard:'Dashboard', pipeline:'Pipeline', jobs:'All Jobs',
   quotes:'Quote Builder', tasks:'Tasks', subs:'Subcontractors',
-  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices'
+  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth'
 };
 
 function toggleMobileNav() {
@@ -3080,6 +3113,7 @@ function renderPage(id) {
   else if(id==='planning') renderPlanning();
   else if(id==='costs') renderCostTracker();
   else if(id==='invoices') renderInvoicesPage();
+  else if(id==='growth') renderGrowthPage();
 }
 
 // ============================================================
@@ -6499,6 +6533,394 @@ function deletePaymentGate(gateId) {
   deletePaymentGateFromSupabase(gateId);
   renderJobPayments();
 }
+
+// ============================================================
+// GROWTH — PLAN TRACKER, PIPELINE, ASSISTANT
+// ============================================================
+if (!db.growthPlan) db.growthPlan = [];
+if (!db.pipeline) db.pipeline = [];
+try { const gp = JSON.parse(localStorage.getItem('livingstoneGrowthPlan')); if (gp) db.growthPlan = gp; } catch(e) {}
+try { const pp = JSON.parse(localStorage.getItem('livingstonePipeline')); if (pp) db.pipeline = pp; } catch(e) {}
+
+// Seed the growth plan if empty
+if (!db.growthPlan.length) {
+  db.growthPlan = [
+    { id:'ws01', num:'01', phase:'Unblock First', title:'Brand-on-a-page update', status:'In Progress', owner:'Adam', timing:'June 2026', updated:'10th June', progress:'Awaiting Tom feedback', nextAction:'Tom to feedback', notes:'' },
+    { id:'ws02', num:'02', phase:'Unblock First', title:'Credentials document', status:'In Progress', owner:'Adam', timing:'June-July 2026', updated:'28th June', progress:'V2 with photography sent to Tom', nextAction:'Feedback from Tom', notes:'' },
+    { id:'ws03', num:'03', phase:'Unblock First', title:'Logo production pack', status:'In Progress', owner:'Adam', timing:'July 2026', updated:'29th July', progress:'Shared with Tara', nextAction:'Adam to work with Tara', notes:'' },
+    { id:'ws04', num:'04', phase:'Unblock First', title:'Yarlet case study capture', status:'In Progress', owner:'Adam', timing:'June-Oct 2026', updated:'29th July', progress:'Classroom case study shared with Tom', nextAction:'Commission photographer', notes:'' },
+    { id:'ws05', num:'05', phase:'Build Capability', title:'Website launch', status:'In Progress', owner:'Adam', timing:'July-Nov 2026', updated:'Jun 2026', progress:'Homepage scaffold built', nextAction:'Confirm domain. Build remaining pages', notes:'' },
+    { id:'ws06', num:'06', phase:'Build Capability', title:'H&S and safeguarding framework', status:'Not Started', owner:'Tom', timing:'July-Sep 2026', updated:'', progress:'Course providers researched', nextAction:'Book IOSH in July', notes:'' },
+    { id:'ws07', num:'07', phase:'Build Capability', title:'Subcontractor & labourer bench', status:'In Progress', owner:'Tom', timing:'June 2026+', updated:'Jun 2026', progress:'Existing sub base on Yarlet', nextAction:'Document onboarding process', notes:'' },
+    { id:'ws08', num:'08', phase:'Convert to Revenue', title:'Schools network approach', status:'Not Started', owner:'Adam', timing:'Sep-Dec 2026', updated:'', progress:'Target school list draft started', nextAction:'Submit ISBA application in September', notes:'' },
+    { id:'ws09', num:'09', phase:'Convert to Revenue', title:'Pipeline tracking in app', status:'Not Started', owner:'Adam', timing:'Sep 2026', updated:'', progress:'App stable. Extension scoped', nextAction:'Build pipeline view', notes:'' },
+    { id:'ws10', num:'10', phase:'Convert to Revenue', title:'Community tender capability', status:'Not Started', owner:'Tom', timing:'Aug 2026-Q2 2027', updated:'', progress:'Tom has identified parish council sources', nextAction:'Research Constructionline requirements', notes:'' },
+    { id:'ws11', num:'11', phase:'Convert to Revenue', title:'Commercial foundations', status:'At Risk', owner:'Tom', timing:'June-Aug 2026', updated:'Jun 2026', progress:'Committed in Partnership Plan. Status unconfirmed', nextAction:'Audit Partnership Plan commitments', notes:'' }
+  ];
+  localStorage.setItem('livingstoneGrowthPlan', JSON.stringify(db.growthPlan));
+}
+
+function saveGrowthData() {
+  localStorage.setItem('livingstoneGrowthPlan', JSON.stringify(db.growthPlan));
+  localStorage.setItem('livingstonePipeline', JSON.stringify(db.pipeline));
+}
+
+function switchGrowthTab(tab, el) {
+  document.querySelectorAll('#page-growth .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['plan','pipeline','assistant'].forEach(t => {
+    const el2 = document.getElementById('growth-tab-' + t);
+    if (el2) el2.style.display = t === tab ? 'block' : 'none';
+  });
+  if (tab === 'plan') renderGrowthPlan();
+  if (tab === 'pipeline') renderPipeline();
+  if (tab === 'assistant' && !document.getElementById('assistant-messages').innerHTML) {
+    document.getElementById('assistant-messages').innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px;">Ask me anything about growing Livingstone. I can research schools, find contacts, and add prospects directly to your pipeline.</div>';
+  }
+}
+
+function renderGrowthPage() { renderGrowthPlan(); }
+
+// --- GROWTH PLAN ---
+function renderGrowthPlan() {
+  const el = document.getElementById('growth-plan-content');
+  if (!el) return;
+
+  const phases = ['Unblock First', 'Build Capability', 'Convert to Revenue'];
+  const phaseColors = { 'Unblock First': '#B5DD3C', 'Build Capability': '#3498db', 'Convert to Revenue': '#6B8A1F' };
+  const statusColors = { 'In Progress': 'rgba(181,221,60,0.2)', 'Not Started': 'rgba(0,0,0,0.05)', 'At Risk': 'rgba(192,57,43,0.15)', 'Complete': 'rgba(45,125,78,0.15)' };
+  const statusTextColors = { 'In Progress': '#6B8A1F', 'Not Started': '#6b7e8e', 'At Risk': '#c0392b', 'Complete': '#2d7d4e' };
+
+  let html = '';
+  phases.forEach(phase => {
+    const items = db.growthPlan.filter(w => w.phase === phase);
+    if (!items.length) return;
+
+    html += '<div style="margin-bottom:24px;">';
+    html += '<div style="font-size:14px;font-weight:700;color:' + phaseColors[phase] + ';margin-bottom:10px;border-bottom:2px solid ' + phaseColors[phase] + ';padding-bottom:4px;">' + phase.toUpperCase() + '</div>';
+
+    items.forEach(w => {
+      html += '<div style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:8px;border-left:4px solid ' + phaseColors[phase] + ';" onclick="editWorkstream(\'' + w.id + '\')" style="cursor:pointer;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;cursor:pointer;" onclick="editWorkstream(\'' + w.id + '\')">';
+      html += '<div style="font-size:14px;font-weight:600;">' + w.num + '. ' + w.title + '</div>';
+      html += '<span style="font-size:11px;padding:2px 10px;border-radius:10px;background:' + (statusColors[w.status]||'') + ';color:' + (statusTextColors[w.status]||'') + ';font-weight:600;">' + w.status + '</span>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:16px;font-size:11px;color:var(--text-muted);margin-bottom:4px;">';
+      html += '<span>👤 ' + (w.owner||'') + '</span>';
+      html += '<span>📅 ' + (w.timing||'') + '</span>';
+      if (w.updated) html += '<span>🔄 ' + w.updated + '</span>';
+      html += '</div>';
+      if (w.progress) html += '<div style="font-size:12px;margin-bottom:4px;">' + w.progress + '</div>';
+      if (w.nextAction) html += '<div style="font-size:12px;color:var(--copper);font-weight:500;">→ ' + w.nextAction + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function editWorkstream(wsId) {
+  const w = db.growthPlan.find(x => x.id === wsId);
+  if (!w) return;
+
+  let modal = document.getElementById('ws-edit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'ws-edit-modal';
+    modal.className = 'modal-overlay';
+    modal.onclick = function(e) { if(e.target===modal) closeModal('ws-edit-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:500px;"><div class="modal-header"><div class="modal-title" id="ws-modal-title"></div><button class="modal-close" onclick="closeModal(\'ws-edit-modal\')">×</button></div><div class="modal-body" id="ws-modal-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('ws-modal-title').textContent = w.num + '. ' + w.title;
+  document.getElementById('ws-modal-body').innerHTML =
+    '<input type="hidden" id="ws-edit-id" value="' + w.id + '">'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Status</label><select id="ws-status" style="width:100%;">'
+    + ['Not Started','In Progress','At Risk','Complete'].map(s => '<option' + (s===w.status?' selected':'') + '>' + s + '</option>').join('') + '</select></div>'
+    + '<div class="form-group"><label>Owner</label><input type="text" id="ws-owner" value="' + (w.owner||'') + '"></div></div>'
+    + '<div class="form-group"><label>Progress</label><textarea id="ws-progress" rows="3" style="width:100%;">' + (w.progress||'') + '</textarea></div>'
+    + '<div class="form-group"><label>Next Action</label><input type="text" id="ws-next" value="' + (w.nextAction||'').replace(/"/g,'&quot;') + '"></div>'
+    + '<div class="form-group"><label>Notes</label><textarea id="ws-notes" rows="2" style="width:100%;">' + (w.notes||'') + '</textarea></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">'
+    + '<button class="btn btn-secondary" onclick="closeModal(\'ws-edit-modal\')">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="saveWorkstream()">Save</button></div>';
+
+  modal.style.display = 'flex';
+}
+
+function saveWorkstream() {
+  const id = document.getElementById('ws-edit-id').value;
+  const w = db.growthPlan.find(x => x.id === id);
+  if (!w) return;
+  w.status = document.getElementById('ws-status').value;
+  w.owner = document.getElementById('ws-owner').value;
+  w.progress = document.getElementById('ws-progress').value;
+  w.nextAction = document.getElementById('ws-next').value;
+  w.notes = document.getElementById('ws-notes').value;
+  w.updated = new Date().toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+  saveGrowthData();
+  closeModal('ws-edit-modal');
+  renderGrowthPlan();
+}
+
+// --- PIPELINE ---
+function renderGrowthPipeline() {
+  const el = document.getElementById('pipeline-content');
+  if (!el) return;
+
+  const stages = ['Research','Contacted','Meeting Booked','Site Visit','Quoting','Quoted','Won','Lost'];
+  const stageColors = { Research:'#6b7e8e', Contacted:'#3498db', 'Meeting Booked':'#6B8A1F', 'Site Visit':'#B5DD3C', Quoting:'#c8890a', Quoted:'#9b59b6', Won:'#2d7d4e', Lost:'#c0392b' };
+
+  if (!db.pipeline.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:13px;">No prospects yet. Add them manually or use the Assistant to research and populate.</div>';
+    return;
+  }
+
+  let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+  html += '<thead><tr><th>School</th><th>Type</th><th>Contact</th><th>Role</th><th>Stage</th><th>Est. Value</th><th>Next Action</th><th>Last Contact</th><th></th></tr></thead><tbody>';
+
+  db.pipeline.sort((a,b) => stages.indexOf(a.stage) - stages.indexOf(b.stage)).forEach((p, i) => {
+    const col = stageColors[p.stage] || '#6b7e8e';
+    html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="editPipelineEntry(' + i + ')">';
+    html += '<td style="padding:8px 10px;font-weight:600;">' + (p.school||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;">' + (p.type||'') + '</td>';
+    html += '<td style="padding:8px 6px;">' + (p.contact||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;color:var(--text-muted);">' + (p.role||'') + '</td>';
+    html += '<td style="padding:8px 6px;"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:' + col + ';color:white;">' + (p.stage||'') + '</span></td>';
+    html += '<td style="padding:8px 6px;font-size:11px;">' + (p.estValue ? '£' + parseInt(p.estValue).toLocaleString() : '') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;color:var(--copper);">' + (p.nextAction||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;color:var(--text-muted);">' + (p.lastContact||'') + '</td>';
+    html += '<td style="padding:8px 4px;"><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deletePipelineEntry(' + i + ')" style="font-size:10px;padding:2px 6px;">✕</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  // Summary
+  const byStage = {};
+  db.pipeline.forEach(p => { byStage[p.stage] = (byStage[p.stage]||0) + 1; });
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">';
+  stages.forEach(s => {
+    if (!byStage[s]) return;
+    html += '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + (stageColors[s]||'') + ';color:white;">' + s + ': ' + byStage[s] + '</span>';
+  });
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+function addPipelineEntry() {
+  showPipelineModal({ school:'', type:'', contact:'', role:'', email:'', phone:'', stage:'Research', estValue:'', nextAction:'', lastContact:'', notes:'', source:'' }, -1);
+}
+
+function editPipelineEntry(idx) {
+  showPipelineModal(db.pipeline[idx], idx);
+}
+
+function showPipelineModal(entry, idx) {
+  let modal = document.getElementById('pipeline-edit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'pipeline-edit-modal';
+    modal.className = 'modal-overlay';
+    modal.onclick = function(e) { if(e.target===modal) closeModal('pipeline-edit-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:500px;"><div class="modal-header"><div class="modal-title" id="pl-modal-title"></div><button class="modal-close" onclick="closeModal(\'pipeline-edit-modal\')">×</button></div><div class="modal-body" id="pl-modal-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('pl-modal-title').textContent = idx < 0 ? 'Add Prospect' : 'Edit — ' + (entry.school||'');
+  const stages = ['Research','Contacted','Meeting Booked','Site Visit','Quoting','Quoted','Won','Lost'];
+  document.getElementById('pl-modal-body').innerHTML =
+    '<input type="hidden" id="pl-idx" value="' + idx + '">'
+    + '<div class="form-group"><label>School Name</label><input type="text" id="pl-school" value="' + (entry.school||'').replace(/"/g,'&quot;') + '"></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Type</label><input type="text" id="pl-type" value="' + (entry.type||'') + '" placeholder="e.g. Prep, Senior, All-through"></div>'
+    + '<div class="form-group"><label>Stage</label><select id="pl-stage" style="width:100%;">' + stages.map(s => '<option' + (s===entry.stage?' selected':'') + '>' + s + '</option>').join('') + '</select></div></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Key Contact</label><input type="text" id="pl-contact" value="' + (entry.contact||'').replace(/"/g,'&quot;') + '"></div>'
+    + '<div class="form-group"><label>Role</label><input type="text" id="pl-role" value="' + (entry.role||'') + '" placeholder="e.g. Bursar, Estates Manager"></div></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Email</label><input type="email" id="pl-email" value="' + (entry.email||'') + '"></div>'
+    + '<div class="form-group"><label>Phone</label><input type="tel" id="pl-phone" value="' + (entry.phone||'') + '"></div></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Est. Value (£)</label><input type="number" id="pl-value" value="' + (entry.estValue||'') + '"></div>'
+    + '<div class="form-group"><label>Source</label><input type="text" id="pl-source" value="' + (entry.source||'') + '" placeholder="e.g. ISBA, Yarlet referral"></div></div>'
+    + '<div class="form-group"><label>Next Action</label><input type="text" id="pl-next" value="' + (entry.nextAction||'').replace(/"/g,'&quot;') + '"></div>'
+    + '<div class="form-group"><label>Notes</label><textarea id="pl-notes" rows="2" style="width:100%;">' + (entry.notes||'') + '</textarea></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">'
+    + '<button class="btn btn-secondary" onclick="closeModal(\'pipeline-edit-modal\')">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="savePipelineEntry()">Save</button></div>';
+
+  modal.style.display = 'flex';
+}
+
+function savePipelineEntry() {
+  const idx = parseInt(document.getElementById('pl-idx').value);
+  const entry = {
+    school: document.getElementById('pl-school').value,
+    type: document.getElementById('pl-type').value,
+    contact: document.getElementById('pl-contact').value,
+    role: document.getElementById('pl-role').value,
+    email: document.getElementById('pl-email').value,
+    phone: document.getElementById('pl-phone').value,
+    stage: document.getElementById('pl-stage').value,
+    estValue: document.getElementById('pl-value').value,
+    source: document.getElementById('pl-source').value,
+    nextAction: document.getElementById('pl-next').value,
+    notes: document.getElementById('pl-notes').value,
+    lastContact: idx >= 0 ? db.pipeline[idx].lastContact : ''
+  };
+  if (!entry.school) { alert('Enter a school name.'); return; }
+  if (idx >= 0) { db.pipeline[idx] = entry; } else { db.pipeline.push(entry); }
+  saveGrowthData();
+  closeModal('pipeline-edit-modal');
+  renderGrowthPipeline();
+}
+
+function deletePipelineEntry(idx) {
+  if (!confirm('Remove ' + (db.pipeline[idx]?.school||'') + ' from pipeline?')) return;
+  db.pipeline.splice(idx, 1);
+  saveGrowthData();
+  renderGrowthPipeline();
+}
+
+// --- CLAUDE ASSISTANT ---
+window._assistantHistory = [];
+
+async function sendAssistantMessage() {
+  const input = document.getElementById('assistant-input');
+  const messagesEl = document.getElementById('assistant-messages');
+  const msg = input?.value?.trim();
+  if (!msg) return;
+
+  // Show user message
+  messagesEl.innerHTML += '<div style="text-align:right;margin-bottom:8px;"><div style="display:inline-block;max-width:80%;padding:8px 12px;background:#B5DD3C;color:#0D0D0D;border-radius:12px 12px 0 12px;font-size:13px;">' + msg.replace(/</g,'&lt;').replace(/\n/g,'<br>') + '</div></div>';
+  input.value = '';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  // Build context
+  const pipelineContext = db.pipeline.length
+    ? 'CURRENT PIPELINE (' + db.pipeline.length + ' prospects):\n' + db.pipeline.map(p => '- ' + p.school + ' [' + p.stage + '] Contact: ' + (p.contact||'none') + ' (' + (p.role||'') + ')').join('\n')
+    : 'PIPELINE: (empty)';
+
+  const jobContext = db.jobs.filter(j => j.status && ['Confirmed','In Progress'].includes(j.status)).map(j => j.ref + ' — ' + (j.name||'')).join('\n');
+
+  const systemPrompt = `You are a growth assistant for Livingstone Projects, a Staffordshire-based building contractor that specialises in independent school and residential renovations. Based in Stone, Staffordshire.
+
+The business has three legs: Livingstone Home (domestic, defensive), Livingstone Academic (independent schools, strategic priority), and Community (exploratory).
+
+${pipelineContext}
+
+ACTIVE JOBS:
+${jobContext || '(none loaded)'}
+
+You can do two things:
+1. ANSWER QUESTIONS — research, strategy advice, school information, contacts
+2. ADD TO PIPELINE — when the user asks you to add schools/prospects, include a JSON block in your response
+
+To add prospects to the pipeline, include this EXACT format somewhere in your response:
+[PIPELINE_ADD]
+[{"school":"Name","type":"Prep/Senior/etc","contact":"Person Name","role":"Bursar/Estates","stage":"Research","notes":"any detail"}]
+[/PIPELINE_ADD]
+
+Important:
+- When researching schools, use your knowledge of UK independent schools
+- For contacts, only include publicly available information (bursar names from school websites)
+- Be specific and practical
+- The target area is within ~60 miles of Stoke-on-Trent / Stone, Staffordshire
+- Focus on independent schools with buildings that might need renovation`;
+
+  // Show thinking indicator
+  messagesEl.innerHTML += '<div id="assistant-thinking" style="margin-bottom:8px;"><div style="display:inline-block;padding:8px 12px;background:var(--limestone);border-radius:12px 12px 12px 0;font-size:13px;color:var(--text-muted);">Thinking...</div></div>';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  window._assistantHistory.push({ role: 'user', content: msg });
+
+  try {
+    const response = await fetch(CLAUDE_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 3000,
+        system: systemPrompt,
+        messages: window._assistantHistory.slice(-10)
+      })
+    });
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error.message || JSON.stringify(data.error));
+    }
+
+    const text = (data.content || []).map(c => c.text || '').join('');
+    window._assistantHistory.push({ role: 'assistant', content: text });
+
+    // Check for pipeline additions
+    const pipelineMatch = text.match(/\[PIPELINE_ADD\]([\s\S]*?)\[\/PIPELINE_ADD\]/);
+    let addedCount = 0;
+    if (pipelineMatch) {
+      try {
+        const newEntries = JSON.parse(pipelineMatch[1].trim());
+        if (Array.isArray(newEntries)) {
+          newEntries.forEach(e => {
+            // Don't add duplicates
+            if (!db.pipeline.some(p => p.school.toLowerCase() === (e.school||'').toLowerCase())) {
+              db.pipeline.push({
+                school: e.school || '',
+                type: e.type || '',
+                contact: e.contact || '',
+                role: e.role || '',
+                email: e.email || '',
+                phone: e.phone || '',
+                stage: e.stage || 'Research',
+                estValue: e.estValue || '',
+                source: e.source || 'Claude research',
+                nextAction: e.nextAction || '',
+                notes: e.notes || '',
+                lastContact: ''
+              });
+              addedCount++;
+            }
+          });
+          saveGrowthData();
+        }
+      } catch(e) { console.warn('Pipeline parse error:', e); }
+    }
+
+    // Clean display text (remove pipeline tags)
+    let displayText = text.replace(/\[PIPELINE_ADD\][\s\S]*?\[\/PIPELINE_ADD\]/g, '').trim();
+    displayText = displayText.replace(/</g,'&lt;').replace(/\n/g,'<br>');
+
+    // Remove thinking indicator and show response
+    const thinkingEl = document.getElementById('assistant-thinking');
+    if (thinkingEl) thinkingEl.remove();
+
+    let responseHtml = '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:12px 12px 12px 0;font-size:13px;line-height:1.6;">' + displayText + '</div>';
+    if (addedCount) {
+      responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Added ' + addedCount + ' prospect' + (addedCount>1?'s':'') + ' to pipeline</div>';
+    }
+    responseHtml += '</div>';
+    messagesEl.innerHTML += responseHtml;
+
+  } catch(e) {
+    const thinkingEl = document.getElementById('assistant-thinking');
+    if (thinkingEl) thinkingEl.remove();
+    messagesEl.innerHTML += '<div style="margin-bottom:8px;"><div style="display:inline-block;padding:8px 12px;background:rgba(192,57,43,0.1);border-radius:12px;font-size:12px;color:var(--danger);">Error: ' + e.message + '</div></div>';
+  }
+
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// Allow Enter to send (Shift+Enter for newline)
+document.addEventListener('keydown', function(e) {
+  if (e.target.id === 'assistant-input' && e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendAssistantMessage();
+  }
+});
 
 // ============================================================
 // SCHEDULE — CHAT-DRIVEN WEEKLY PLANNER
