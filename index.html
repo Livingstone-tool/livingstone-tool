@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.13 -->
+<!-- Livingstone v4.14 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.13</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.14</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6680,13 +6680,25 @@ Rules:
 - Be practical — if the notes say "Tom's plastering all week" that's 5 days`;
 
   try {
+    // Build message content — include PDF if uploaded
+    let messageContent;
+    if (window._schedulePdfData) {
+      messageContent = [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: window._schedulePdfData } },
+        { type: 'text', text: prompt }
+      ];
+      window._schedulePdfData = null;
+    } else {
+      messageContent = prompt;
+    }
+
     const response = await fetch(CLAUDE_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content: messageContent }]
       })
     });
     const data = await response.json();
@@ -6728,11 +6740,22 @@ Rules:
 function loadScheduleTranscript(fileInput) {
   const file = fileInput.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    document.getElementById('sch-chat-input').value = e.target.result;
-  };
-  reader.readAsText(file);
+
+  if (file.type === 'application/pdf') {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      window._schedulePdfData = e.target.result.split(',')[1];
+      document.getElementById('sch-chat-input').value = '[PDF uploaded: ' + file.name + ']\nGenerate the schedule from this document.';
+    };
+    reader.readAsDataURL(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      window._schedulePdfData = null;
+      document.getElementById('sch-chat-input').value = e.target.result;
+    };
+    reader.readAsText(file);
+  }
   fileInput.value = '';
 }
 
