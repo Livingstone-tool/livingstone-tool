@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.15 -->
+<!-- Livingstone v4.16 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -667,7 +667,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.15</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.16</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6552,51 +6552,86 @@ function renderSchedule() {
   }
 
   const entries = db.scheduleEntries.filter(e => e.weekStart === ws);
-  const categories = [
-    { key: 'own', label: '🔨 Our Work', color: '#B5DD3C' },
-    { key: 'sub', label: '👷 Subcontractors', color: '#6B8A1F' },
-    { key: 'delivery', label: '📦 Orders & Deliveries', color: '#3498db' },
-    { key: 'admin', label: '📋 Admin & Other', color: '#6b7e8e' }
-  ];
 
   if (!entries.length) {
     el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:13px;">No schedule for this week yet.<br>Type your meeting notes below and hit "Generate Schedule".</div>';
     return;
   }
 
-  let html = '';
-  categories.forEach(cat => {
-    const catEntries = entries.filter(e => e.category === cat.key);
-    if (!catEntries.length) return;
+  const dayNames = ['mon','tue','wed','thu','fri'];
+  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  const catColors = { own: '#B5DD3C', sub: '#6B8A1F', delivery: '#3498db', admin: '#6b7e8e' };
+  const catIcons = { own: '🔨', sub: '👷', delivery: '📦', admin: '📋' };
 
-    html += '<div style="margin-bottom:16px;">';
-    html += '<div style="font-size:13px;font-weight:600;color:' + cat.color + ';margin-bottom:6px;border-bottom:2px solid ' + cat.color + ';padding-bottom:4px;">' + cat.label + '</div>';
+  // Build day dates
+  const dayDates = dayNames.map((d, i) => {
+    const dt = new Date(weekStart);
+    dt.setDate(dt.getDate() + i);
+    return dt;
+  });
 
-    catEntries.forEach(e => {
-      const globalIdx = db.scheduleEntries.indexOf(e);
-      html += '<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border);">';
-      html += '<input type="checkbox" ' + (e.done?'checked':'') + ' onchange="toggleScheduleDone(' + globalIdx + ')" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;">';
-      html += '<div style="flex:1;' + (e.done?'text-decoration:line-through;opacity:0.5;':'') + '">';
-      html += '<div style="font-size:13px;"><span style="font-weight:600;">' + (e.person||'') + (e.person && e.task ? ': ' : '') + '</span>' + (e.task||'') + '</div>';
-      if (e.days || e.jobRef || e.notes) {
-        html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">';
-        if (e.jobRef) html += '<span style="background:var(--limestone);padding:0 4px;border-radius:3px;margin-right:6px;">' + e.jobRef + '</span>';
-        if (e.days) html += e.days + ' day' + (e.days!==1?'s':'') + ' ';
-        if (e.notes) html += '· ' + e.notes;
+  const today = new Date().toISOString().split('T')[0];
+
+  // Calendar grid
+  let html = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">';
+
+  dayNames.forEach((day, i) => {
+    const dateStr = dayDates[i].toISOString().split('T')[0];
+    const isToday = dateStr === today;
+    const dayEntries = entries.filter(e => Array.isArray(e.days) && e.days.includes(day));
+
+    html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;' + (isToday ? 'border-color:#B5DD3C;border-width:2px;' : '') + '">';
+
+    // Day header
+    html += '<div style="padding:6px 10px;font-size:11px;font-weight:600;background:' + (isToday ? 'rgba(181,221,60,0.15)' : 'var(--limestone)') + ';border-bottom:1px solid var(--border);">';
+    html += dayLabels[i] + ' <span style="font-weight:400;color:var(--text-muted);">' + dayDates[i].getDate() + '/' + (dayDates[i].getMonth()+1) + '</span>';
+    html += '</div>';
+
+    // Day entries
+    html += '<div style="padding:4px;min-height:60px;">';
+    if (!dayEntries.length) {
+      html += '<div style="color:var(--text-muted);font-size:10px;padding:8px 4px;text-align:center;">—</div>';
+    } else {
+      dayEntries.forEach(e => {
+        const globalIdx = db.scheduleEntries.indexOf(e);
+        const col = catColors[e.category] || '#6b7e8e';
+        html += '<div style="padding:4px 6px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:pointer;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '" onclick="toggleScheduleDone(' + globalIdx + ')" title="Click to toggle done">';
+        html += '<div style="font-weight:600;">' + (catIcons[e.category]||'') + ' ' + (e.person||'') + '</div>';
+        html += '<div>' + (e.task||'') + '</div>';
+        if (e.jobRef) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.jobRef + '</div>';
+        if (e.notes) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.notes + '</div>';
         html += '</div>';
-      }
-      html += '</div>';
-      html += '<button onclick="deleteScheduleEntry(' + globalIdx + ')" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:12px;flex-shrink:0;" title="Remove">✕</button>';
+      });
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+
+  // Non-day-specific entries (admin items with no specific day, or entries with empty days)
+  const undated = entries.filter(e => !Array.isArray(e.days) || !e.days.length);
+  if (undated.length) {
+    html += '<div style="margin-top:12px;padding:10px;background:var(--limestone);border-radius:8px;">';
+    html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">📌 THIS WEEK (no specific day)</div>';
+    undated.forEach(e => {
+      const globalIdx = db.scheduleEntries.indexOf(e);
+      const col = catColors[e.category] || '#6b7e8e';
+      html += '<div style="display:flex;gap:6px;align-items:center;padding:3px 0;font-size:12px;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
+      html += '<input type="checkbox" ' + (e.done?'checked':'') + ' onchange="toggleScheduleDone(' + globalIdx + ')" style="width:14px;height:14px;">';
+      html += '<span style="color:' + col + ';">' + (catIcons[e.category]||'') + '</span> ';
+      html += '<span style="font-weight:600;">' + (e.person ? e.person + ': ' : '') + '</span>' + (e.task||'');
+      if (e.jobRef) html += ' <span style="color:var(--text-muted);font-size:10px;">[' + e.jobRef + ']</span>';
+      html += ' <button onclick="deleteScheduleEntry(' + globalIdx + ')" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:11px;margin-left:auto;">✕</button>';
       html += '</div>';
     });
     html += '</div>';
-  });
+  }
 
   // Person day count
   const personDays = {};
   entries.filter(e => !e.done && (e.category === 'own' || e.category === 'sub')).forEach(e => {
     const p = e.person || 'Unassigned';
-    personDays[p] = (personDays[p] || 0) + (e.days || 0);
+    const dc = Array.isArray(e.days) ? e.days.length : 0;
+    personDays[p] = (personDays[p] || 0) + dc;
   });
   if (Object.keys(personDays).length) {
     html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;padding:8px 12px;background:var(--limestone);border-radius:6px;font-size:11px;">';
@@ -6665,7 +6700,7 @@ Return ONLY a JSON array of schedule entries. No markdown, no backticks, no expl
   "person": "name or empty string",
   "task": "what they are doing",
   "jobRef": "LP-XXX or empty string (match to active jobs above where possible)",
-  "days": number or 0,
+  "days": ["mon","tue","wed","thu","fri"] (which days of this week — use lowercase three-letter day names),
   "notes": "any extra detail"
 }
 
@@ -6675,9 +6710,9 @@ Rules:
 - "delivery" = orders, deliveries, skip hire, material pickups
 - "admin" = phone calls, chasing invoices, quoting, booking people, meetings
 - Match job references to the active jobs list where you can
-- If someone is mentioned doing work but no days are stated, estimate from context
+- Assign specific days based on context. "Mon to Thu" = ["mon","tue","wed","thu"]. "All week" = ["mon","tue","wed","thu","fri"]. "1 day" = pick the most logical day. "Friday" = ["fri"].
 - Keep existing entries unless the notes clearly change or cancel them
-- Be practical — if the notes say "Tom's plastering all week" that's 5 days`;
+- Be practical and specific about which days`;
 
   try {
     // Build message content — include PDF if uploaded
@@ -6726,7 +6761,7 @@ Rules:
           person: e.person || '',
           task: e.task || '',
           jobRef: e.jobRef || '',
-          days: parseFloat(e.days) || 0,
+          days: Array.isArray(e.days) ? e.days : (typeof e.days === 'number' ? ['mon','tue','wed','thu','fri'].slice(0, e.days) : []),
           notes: e.notes || '',
           done: false
         });
@@ -6779,25 +6814,33 @@ function shareSchedule(method) {
   let text = '📅 LIVINGSTONE — WEEK OF ' + weekLabel.toUpperCase() + '\n';
   text += '─────────────────────\n\n';
 
-  const cats = [
-    { key: 'own', label: '🔨 OUR WORK' },
-    { key: 'sub', label: '👷 SUBCONTRACTORS' },
-    { key: 'delivery', label: '📦 ORDERS & DELIVERIES' },
-    { key: 'admin', label: '📋 ADMIN' }
-  ];
-  cats.forEach(cat => {
-    const ce = entries.filter(e => e.category === cat.key);
-    if (!ce.length) return;
-    text += cat.label + '\n';
-    ce.forEach(e => {
-      text += (e.done ? '✅ ' : '▪ ') + (e.person ? e.person + ': ' : '') + (e.task||'');
+  const dayNames = ['mon','tue','wed','thu','fri'];
+  const dayLabels = { mon:'MONDAY', tue:'TUESDAY', wed:'WEDNESDAY', thu:'THURSDAY', fri:'FRIDAY' };
+
+  dayNames.forEach(day => {
+    const dayEntries = entries.filter(e => Array.isArray(e.days) && e.days.includes(day));
+    if (!dayEntries.length) return;
+    text += '📅 ' + dayLabels[day] + '\n';
+    dayEntries.forEach(e => {
+      const icon = { own:'🔨', sub:'👷', delivery:'📦', admin:'📋' }[e.category] || '▪';
+      text += (e.done ? '✅ ' : icon + ' ') + (e.person ? e.person + ': ' : '') + (e.task||'');
       if (e.jobRef) text += ' [' + e.jobRef + ']';
-      if (e.days) text += ' (' + e.days + 'd)';
-      if (e.notes) text += '\n  📝 ' + e.notes;
+      if (e.notes) text += ' — ' + e.notes;
       text += '\n';
     });
     text += '\n';
   });
+
+  const undated = entries.filter(e => !Array.isArray(e.days) || !e.days.length);
+  if (undated.length) {
+    text += '📌 THIS WEEK\n';
+    undated.forEach(e => {
+      text += (e.done ? '✅ ' : '▪ ') + (e.person ? e.person + ': ' : '') + (e.task||'');
+      if (e.jobRef) text += ' [' + e.jobRef + ']';
+      text += '\n';
+    });
+    text += '\n';
+  }
   text += '─────────────────────\nLivingstone Projects';
 
   if (method === 'whatsapp') {
