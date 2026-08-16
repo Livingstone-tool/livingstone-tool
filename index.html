@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.25 -->
+<!-- Livingstone v4.27 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.25</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.27</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1541,7 +1541,11 @@ window.onerror=function(m,s,l,c,e){
       </div>
 
       <!-- Response area -->
-      <div id="sch-response" style="display:none;margin-top:12px;padding:12px 16px;background:var(--white);border:1px solid var(--border);border-radius:8px;border-left:3px solid #B5DD3C;font-size:13px;line-height:1.6;"></div>
+      <div id="sch-response" style="display:none;margin-top:12px;padding:12px 16px;background:var(--white);border:1px solid var(--border);border-radius:8px;border-left:3px solid #B5DD3C;font-size:13px;line-height:1.6;max-height:300px;overflow-y:auto;">
+      </div>
+      <div id="sch-response-clear" style="display:none;margin-top:4px;text-align:right;">
+        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('sch-response').innerHTML='';document.getElementById('sch-response').style.display='none';this.parentElement.style.display='none';window._scheduleHistory=[];" style="font-size:10px;">Clear conversation</button>
+      </div>
 
       <!-- Thinking indicator -->
       <div id="sch-thinking" style="display:none;margin-top:12px;padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">
@@ -7008,6 +7012,7 @@ function saveSchedule() {
 }
 
 function initScheduleView() { renderSchedule(); }
+window._scheduleHistory = [];
 
 function renderSchedule() {
   const el = document.getElementById('sch-content');
@@ -7336,19 +7341,22 @@ async function processScheduleInput() {
       messageContent = prompt;
     }
 
+    window._scheduleHistory.push({ role: 'user', content: messageContent });
+
     const response = await fetch(CLAUDE_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
-        system: 'You are a schedule assistant. Follow the [CHAT]/[SCHEDULE] format exactly. First names only.',
-        messages: [{ role: 'user', content: messageContent }]
+        system: 'You are a schedule assistant. Follow the [CHAT]/[SCHEDULE] format exactly. First names only. IMPORTANT: Plaud transcripts mangle names. Apply these corrections automatically: Jeff/Geoff→Geoff, Lea/Leigh→Lee, Deen→Dean, Ron/Rhon→Ron, Tom/Thom→Tom, Adam/Adem→Adam, Chris/Kris→Chris, Mat/Matt→Matt. Also correct job names: Yarlet/Yarlot/Yarlett→Yarlet, Cathy/Kathy→Kathy, Busby/Buzby→Busby, Whitby Samways/Whitby Sam ways→Whitby Samways, Follwell/Folwell→Follwell, Westy/Westie→Westy, Dudson/Dudsen→Dudson.',
+        messages: window._scheduleHistory.slice(-10)
       })
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = (data.content || []).map(c => c.text || '').join('').trim();
+    window._scheduleHistory.push({ role: 'assistant', content: text });
 
     let chatText = '';
     let addedCount = 0;
@@ -7404,11 +7412,14 @@ async function processScheduleInput() {
     if (chatText || addedCount) {
       if (responseEl) {
         let rHtml = '';
-        if (chatText) rHtml += '<div style="white-space:pre-wrap;">' + chatText.replace(/</g,'&lt;') + '</div>';
-        if (addedCount) rHtml += '<div style="margin-top:8px;color:var(--copper);font-weight:600;">\u2713 Added ' + addedCount + ' card' + (addedCount>1?'s':'') + '</div>';
-        rHtml += '<button class="btn btn-sm btn-secondary" onclick="this.parentElement.style.display=\'none\'" style="margin-top:8px;">Dismiss</button>';
-        responseEl.innerHTML = rHtml;
+        rHtml += '<div style="text-align:right;margin-bottom:8px;"><div style="display:inline-block;max-width:80%;padding:6px 10px;background:#B5DD3C;color:#0D0D0D;border-radius:10px 10px 0 10px;font-size:12px;">' + input.replace(/</g,'&lt;').substring(0, 200) + (input.length > 200 ? '...' : '') + '</div></div>';
+        if (chatText) rHtml += '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:8px 12px;background:var(--limestone);border-radius:10px 10px 10px 0;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + chatText.replace(/</g,'&lt;') + '</div></div>';
+        if (addedCount) rHtml += '<div style="margin-bottom:8px;font-size:12px;color:var(--copper);font-weight:600;">\u2713 Added ' + addedCount + ' card' + (addedCount>1?'s':'') + '</div>';
+        responseEl.innerHTML += rHtml;
         responseEl.style.display = 'block';
+        responseEl.scrollTop = responseEl.scrollHeight;
+        const clearBtn = document.getElementById('sch-response-clear');
+        if (clearBtn) clearBtn.style.display = 'block';
       }
     }
     document.getElementById('sch-chat-input').value = '';
