@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.33 -->
+<!-- Livingstone v4.35 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.33</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.35</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7130,15 +7130,19 @@ function renderSchedule() {
     html += '</div>';
 
     // Day entries
-    html += '<div style="padding:4px;min-height:60px;" ondragover="event.preventDefault();this.style.background=\'rgba(181,221,60,0.15)\'" ondragleave="this.style.background=\'transparent\'" ondrop="dropScheduleCard(event,\'' + day + '\')">';
+    html += '<div style="padding:4px;min-height:60px;">';
     if (!dayEntries.length) {
       html += '<div style="color:var(--text-muted);font-size:10px;padding:8px 4px;text-align:center;">—</div>';
     } else {
       dayEntries.forEach(e => {
         const globalIdx = db.scheduleEntries.indexOf(e);
         const col = catColors[e.category] || '#6b7e8e';
-        html += '<div draggable="true" ondragstart="window._dragging=true;dragScheduleCard(event,' + globalIdx + ')" ondragend="setTimeout(()=>window._dragging=false,100)" onmouseup="setTimeout(()=>{if(!window._dragging)editScheduleEntry(' + globalIdx + ')},50)" style="position:relative;padding:4px 6px;padding-right:18px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:grab;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
-        html += '<button onclick="event.stopPropagation();deleteScheduleEntry(' + globalIdx + ')" onmouseup="event.stopPropagation()" style="position:absolute;top:2px;right:2px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;" title="Remove">✕</button>';
+        html += '<div onclick="editScheduleEntry(' + globalIdx + ')" style="position:relative;padding:4px 6px;padding-right:34px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:pointer;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
+        html += '<div style="position:absolute;top:1px;right:14px;display:flex;flex-direction:column;gap:0px;">';
+        html += '<button onclick="event.stopPropagation();reorderScheduleCard(' + globalIdx + ',-1)" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:8px;line-height:1;padding:1px;" title="Move up">▲</button>';
+        html += '<button onclick="event.stopPropagation();reorderScheduleCard(' + globalIdx + ',1)" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:8px;line-height:1;padding:1px;" title="Move down">▼</button>';
+        html += '</div>';
+        html += '<button onclick="event.stopPropagation();deleteScheduleEntry(' + globalIdx + ')" style="position:absolute;top:2px;right:2px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;" title="Remove">✕</button>';
         html += '<div style="font-weight:600;">' + (catIcons[e.category]||'') + ' ' + (e.person||'') + '</div>';
         html += '<div>' + (e.task||'') + '</div>';
         if (e.jobRef) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.jobRef + '</div>';
@@ -7327,7 +7331,13 @@ function editScheduleEntry(idx) {
     + '<div class="form-group"><label>Task</label><input type="text" id="sch-e-task" value="' + (entry.task||'').replace(/"/g,'&quot;') + '"></div>'
     + '<div class="grid-2" style="gap:12px;">'
     + '<div class="form-group"><label>Job</label><select id="sch-e-job" style="width:100%;"><option value="">—</option>' + jobOpts + '</select></div>'
-    + '<div class="form-group"><label>Days</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">' + dayChecks + '</div></div></div>'
+    + '<div class="form-group"><label>Days</label><div style="display:flex;gap:4px;margin-top:4px;">' + dayChecks + '</div>'
+    + '<div style="display:flex;gap:4px;margin-top:6px;">'
+    + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([\'mon\',\'tue\',\'wed\',\'thu\',\'fri\'])" style="font-size:10px;padding:2px 6px;">All week</button>'
+    + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([\'mon\',\'tue\',\'wed\'])" style="font-size:10px;padding:2px 6px;">Mon-Wed</button>'
+    + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([\'thu\',\'fri\'])" style="font-size:10px;padding:2px 6px;">Thu-Fri</button>'
+    + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([])" style="font-size:10px;padding:2px 6px;">Clear</button>'
+    + '</div></div></div>'
     + '<div class="form-group"><label>Notes</label><input type="text" id="sch-e-notes" value="' + (entry.notes||'').replace(/"/g,'&quot;') + '"></div>'
     + '<div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;">'
     + '<label style="font-size:12px;cursor:pointer;"><input type="checkbox" id="sch-e-done"' + (entry.done?' checked':'') + '> Done</label>'
@@ -7336,6 +7346,25 @@ function editScheduleEntry(idx) {
     + '<button class="btn btn-primary" onclick="saveScheduleEdit()">Save</button></div></div>';
 
   modal.style.display = 'flex';
+}
+
+function schSetDays(days) {
+  document.querySelectorAll('.sch-day-check').forEach(cb => {
+    cb.checked = days.includes(cb.value);
+  });
+}
+
+function reorderScheduleCard(idx, dir) {
+  const entry = db.scheduleEntries[idx];
+  if (!entry) return;
+  // Find entries in the same week, swap positions in the array
+  const targetIdx = idx + dir;
+  if (targetIdx < 0 || targetIdx >= db.scheduleEntries.length) return;
+  // Only swap within the same week
+  if (db.scheduleEntries[targetIdx].weekStart !== entry.weekStart) return;
+  [db.scheduleEntries[idx], db.scheduleEntries[targetIdx]] = [db.scheduleEntries[targetIdx], db.scheduleEntries[idx]];
+  saveSchedule();
+  renderSchedule();
 }
 
 function saveScheduleEdit() {
