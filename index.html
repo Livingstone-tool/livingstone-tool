@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.20 -->
+<!-- Livingstone v4.21 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.20</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.21</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1531,7 +1531,7 @@ window.onerror=function(m,s,l,c,e){
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
           <label class="btn btn-sm btn-secondary" style="cursor:pointer;">
             📎 Upload transcript
-            <input type="file" accept=".txt,.md,.pdf" onchange="loadScheduleTranscript(this)" style="display:none;">
+            <input type="file" accept=".txt,.md,.pdf,.doc,.docx" onchange="loadScheduleTranscript(this)" style="display:none;">
           </label>
           <div style="flex:1;"></div>
           <button class="btn btn-sm btn-secondary" onclick="shareSchedule('whatsapp')">📱 WhatsApp</button>
@@ -7187,11 +7187,13 @@ Rules:
     // Build message content — include PDF if uploaded
     let messageContent;
     if (window._schedulePdfData) {
+      const mediaType = window._scheduleFileType || 'application/pdf';
       messageContent = [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: window._schedulePdfData } },
+        { type: 'document', source: { type: 'base64', media_type: mediaType, data: window._schedulePdfData } },
         { type: 'text', text: prompt }
       ];
       window._schedulePdfData = null;
+      window._scheduleFileType = null;
     } else {
       messageContent = prompt;
     }
@@ -7262,11 +7264,12 @@ function loadScheduleTranscript(fileInput) {
   const file = fileInput.files[0];
   if (!file) return;
 
-  if (file.type === 'application/pdf') {
+  if (file.type === 'application/pdf' || file.name.endsWith('.doc') || file.name.endsWith('.docx') || file.type.includes('word') || file.type.includes('openxmlformats')) {
     const reader = new FileReader();
     reader.onload = function(e) {
       window._schedulePdfData = e.target.result.split(',')[1];
-      document.getElementById('sch-chat-input').value = '[PDF uploaded: ' + file.name + ']\nGenerate the schedule from this document.';
+      window._scheduleFileType = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      document.getElementById('sch-chat-input').value = '[File uploaded: ' + file.name + ']\nGenerate the schedule from this document.';
     };
     reader.readAsDataURL(file);
   } else {
