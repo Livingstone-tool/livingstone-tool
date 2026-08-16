@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.21 -->
+<!-- Livingstone v4.23 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.21</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.23</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7181,7 +7181,8 @@ Rules:
 - Match job references to the active jobs list where you can
 - Assign specific days based on context. "Mon to Thu" = ["mon","tue","wed","thu"]. "All week" = ["mon","tue","wed","thu","fri"]. "1 day" = pick the most logical day. "Friday" = ["fri"].
 - Keep existing entries unless the notes clearly change or cancel them
-- Be practical and specific about which days`;
+- Be practical and specific about which days
+- If the input is a Plaud transcript, "Speaker 1" is usually Adam and "Speaker 2" is usually Tom. Map to real names based on context (Adam handles commercial/brand/client comms, Tom handles on-site work/subcontractors).`;
 
   try {
     // Build message content — include PDF if uploaded
@@ -7203,7 +7204,8 @@ Rules:
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
+        max_tokens: 4096,
+        system: 'You are a schedule assistant. You MUST respond with ONLY a valid JSON array. No text before or after. If a transcript uses generic labels like "Speaker 1" or "Speaker 2", map them to the most likely people based on context. The two main speakers are Adam Hemming (commercial/brand) and Tom Dickson (operations/on-site builder). Other known people: Lee, Dean, Chris, Ron, Geoff, Matt.',
         messages: [{ role: 'user', content: messageContent }]
       })
     });
@@ -7264,11 +7266,29 @@ function loadScheduleTranscript(fileInput) {
   const file = fileInput.files[0];
   if (!file) return;
 
-  if (file.type === 'application/pdf' || file.name.endsWith('.doc') || file.name.endsWith('.docx') || file.type.includes('word') || file.type.includes('openxmlformats')) {
+  if (file.name.endsWith('.doc') || file.name.endsWith('.docx') || file.type.includes('word') || file.type.includes('openxmlformats')) {
+    // Word doc — extract text with mammoth
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+      try {
+        if (typeof mammoth === 'undefined') {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+          await new Promise((res, rej) => { s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+        }
+        const result = await mammoth.extractRawText({ arrayBuffer: e.target.result });
+        window._schedulePdfData = null;
+        document.getElementById('sch-chat-input').value = '[Document: ' + file.name + ']\n\n' + result.value;
+      } catch(err) {
+        alert('Could not read Word doc. Try saving as PDF first.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else if (file.type === 'application/pdf') {
     const reader = new FileReader();
     reader.onload = function(e) {
       window._schedulePdfData = e.target.result.split(',')[1];
-      window._scheduleFileType = file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      window._scheduleFileType = 'application/pdf';
       document.getElementById('sch-chat-input').value = '[File uploaded: ' + file.name + ']\nGenerate the schedule from this document.';
     };
     reader.readAsDataURL(file);
