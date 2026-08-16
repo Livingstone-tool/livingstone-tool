@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.27 -->
+<!-- Livingstone v4.28 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.27</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.28</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7326,7 +7326,7 @@ async function processScheduleInput() {
   const week3 = new Date(ws.getTime()+14*86400000).toISOString().split('T')[0];
   const week4 = new Date(ws.getTime()+21*86400000).toISOString().split('T')[0];
 
-  const prompt = 'You are a schedule assistant for Livingstone Projects. Current week starts ' + weekLabel + ' (Monday).\n\nACTIVE JOBS:\n' + (jobContext||'(none)') + '\n\nCURRENT SCHEDULE:\n' + existingContext + '\n\nKnown people: Tom, Adam, Lee, Dean, Chris, Ron, Geoff, Matt. Use first names only.\nPlaud transcripts: Speaker 1 = Adam, Speaker 2 = Tom.\n\nThe user said:\n"' + input.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\n/g,'\\n') + '"\n\nDecide what they want:\n\n1. QUESTION about schedule/people/availability: answer in plain text. Start with [CHAT]\n2. ADDING/UPDATING entries (notes, transcript, quick task): return JSON. Start with [SCHEDULE] then JSON array, end with [/SCHEDULE]. Each entry: {"weekStart":"YYYY-MM-DD","category":"own|sub|delivery|admin","person":"name","task":"description","jobRef":"LP-XXX or empty","days":["mon","tue","wed","thu","fri"],"notes":"detail"}\n3. BOTH: [CHAT] first, then [SCHEDULE]\n\nWeek Mondays: Current=' + wsStr + ', Next=' + nextMonday + ', W3=' + week3 + ', W4=' + week4 + '\nONLY include NEW or CHANGED entries. Do not repeat unchanged ones.';
+  const prompt = 'You are a schedule assistant for Livingstone Projects. Current week starts ' + weekLabel + ' (Monday).\n\nACTIVE JOBS:\n' + (jobContext||'(none)') + '\n\nCURRENT SCHEDULE:\n' + existingContext + '\n\nKnown people: Tom, Adam, Lee, Dean, Chris, Ron, Geoff, Matt. Use first names only.\nPlaud transcripts: Speaker 1 = Adam, Speaker 2 = Tom.\n\nThe user said:\n"' + input.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\n/g,'\\n') + '"\n\nDecide what they want:\n\n1. QUESTION: answer in plain text. Start with [CHAT]\n2. ADD entries: start with [SCHEDULE] then JSON array, end with [/SCHEDULE]. Each: {"weekStart":"YYYY-MM-DD","category":"own|sub|delivery|admin","person":"name","task":"description","jobRef":"LP-XXX or empty","days":["mon","tue","wed","thu","fri"],"notes":"detail"}\n3. DELETE entries: when user says clear/remove/delete, start with [DELETE] then JSON array, end with [/DELETE]. Each: {"person":"name or * for all","task":"keyword or * for all","weekStart":"YYYY-MM-DD or * for all weeks"}. Examples: clear everything=[{"person":"*","task":"*","weekStart":"*"}]. Remove Tom from Monday=[{"person":"Tom","task":"*","weekStart":"' + wsStr + '","removeDay":"mon"}]. Delete the tiles delivery=[{"person":"*","task":"tiles","weekStart":"*"}]\n4. Combine any of [CHAT], [SCHEDULE], [DELETE] as needed.\n\nWeek Mondays: Current=' + wsStr + ', Next=' + nextMonday + ', W3=' + week3 + ', W4=' + week4 + '\nONLY include NEW entries in [SCHEDULE]. Do not repeat unchanged ones.';
 
   try {
     let messageContent;
@@ -7392,7 +7392,50 @@ async function processScheduleInput() {
       }
     }
 
-    if (!chatMatch && !schedMatch) {
+    // Extract and process deletions
+    const deleteMatch = text.match(/\[DELETE\]\s*([\s\S]*?)(?:\[\/DELETE\]|$)/);
+    let deletedCount = 0;
+    if (deleteMatch) {
+      try {
+        const jsonStr = deleteMatch[1].replace(/```json|```/g, '').trim();
+        const arrMatch = jsonStr.match(/\[[\s\S]*\]/);
+        if (arrMatch) {
+          const delCriteria = JSON.parse(arrMatch[0]);
+          if (Array.isArray(delCriteria)) {
+            const before = db.scheduleEntries.length;
+            delCriteria.forEach(d => {
+              const matchWeek = (!d.weekStart || d.weekStart === '*') ? null : d.weekStart;
+              const matchPerson = (!d.person || d.person === '*') ? null : d.person.toLowerCase();
+              const matchTask = (!d.task || d.task === '*') ? null : d.task.toLowerCase();
+              const removeDay = d.removeDay || null;
+              if (removeDay) {
+                db.scheduleEntries.forEach(e => {
+                  const weekOk = !matchWeek || e.weekStart === matchWeek;
+                  const personOk = !matchPerson || (e.person||'').toLowerCase().includes(matchPerson);
+                  const taskOk = !matchTask || (e.task||'').toLowerCase().includes(matchTask);
+                  if (weekOk && personOk && taskOk && Array.isArray(e.days)) {
+                    e.days = e.days.filter(day => day !== removeDay);
+                  }
+                });
+                db.scheduleEntries = db.scheduleEntries.filter(e => !Array.isArray(e.days) || e.days.length > 0);
+              } else {
+                db.scheduleEntries = db.scheduleEntries.filter(e => {
+                  const weekOk = !matchWeek || e.weekStart === matchWeek;
+                  const personOk = !matchPerson || (e.person||'').toLowerCase().includes(matchPerson);
+                  const taskOk = !matchTask || (e.task||'').toLowerCase().includes(matchTask);
+                  return !(weekOk && personOk && taskOk);
+                });
+              }
+            });
+            deletedCount = before - db.scheduleEntries.length;
+            saveSchedule();
+            renderSchedule();
+          }
+        }
+      } catch(e) { console.warn('Delete parse error:', e); }
+    }
+
+    if (!chatMatch && !schedMatch && !deleteMatch) {
       const arrayMatch = text.match(/\[[\s\S]*\]/);
       if (arrayMatch) {
         try {
@@ -7409,12 +7452,13 @@ async function processScheduleInput() {
       } else { chatText = text; }
     }
 
-    if (chatText || addedCount) {
+    if (chatText || addedCount || deletedCount) {
       if (responseEl) {
         let rHtml = '';
         rHtml += '<div style="text-align:right;margin-bottom:8px;"><div style="display:inline-block;max-width:80%;padding:6px 10px;background:#B5DD3C;color:#0D0D0D;border-radius:10px 10px 0 10px;font-size:12px;">' + input.replace(/</g,'&lt;').substring(0, 200) + (input.length > 200 ? '...' : '') + '</div></div>';
         if (chatText) rHtml += '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:8px 12px;background:var(--limestone);border-radius:10px 10px 10px 0;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + chatText.replace(/</g,'&lt;') + '</div></div>';
-        if (addedCount) rHtml += '<div style="margin-bottom:8px;font-size:12px;color:var(--copper);font-weight:600;">\u2713 Added ' + addedCount + ' card' + (addedCount>1?'s':'') + '</div>';
+        if (addedCount) rHtml += '<div style="margin-bottom:4px;font-size:12px;color:var(--copper);font-weight:600;">\u2713 Added ' + addedCount + ' card' + (addedCount>1?'s':'') + '</div>';
+        if (deletedCount) rHtml += '<div style="margin-bottom:4px;font-size:12px;color:var(--danger);font-weight:600;">\u2713 Removed ' + deletedCount + ' card' + (deletedCount>1?'s':'') + '</div>';
         responseEl.innerHTML += rHtml;
         responseEl.style.display = 'block';
         responseEl.scrollTop = responseEl.scrollHeight;
