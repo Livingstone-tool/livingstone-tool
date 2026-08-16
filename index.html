@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.35 -->
+<!-- Livingstone v4.36 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.35</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.36</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7137,16 +7137,18 @@ function renderSchedule() {
       dayEntries.forEach(e => {
         const globalIdx = db.scheduleEntries.indexOf(e);
         const col = catColors[e.category] || '#6b7e8e';
-        html += '<div onclick="editScheduleEntry(' + globalIdx + ')" style="position:relative;padding:4px 6px;padding-right:34px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:pointer;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
-        html += '<div style="position:absolute;top:1px;right:14px;display:flex;flex-direction:column;gap:0px;">';
-        html += '<button onclick="event.stopPropagation();reorderScheduleCard(' + globalIdx + ',-1)" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:8px;line-height:1;padding:1px;" title="Move up">▲</button>';
-        html += '<button onclick="event.stopPropagation();reorderScheduleCard(' + globalIdx + ',1)" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:8px;line-height:1;padding:1px;" title="Move down">▼</button>';
-        html += '</div>';
-        html += '<button onclick="event.stopPropagation();deleteScheduleEntry(' + globalIdx + ')" style="position:absolute;top:2px;right:2px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;" title="Remove">✕</button>';
+        html += '<div onclick="editScheduleEntry(' + globalIdx + ')" style="position:relative;padding:4px 6px;padding-right:16px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:pointer;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
+        html += '<button onclick="event.stopPropagation();deleteScheduleEntry(' + globalIdx + ')" style="position:absolute;top:1px;right:1px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;padding:1px;" title="Remove">✕</button>';
         html += '<div style="font-weight:600;">' + (catIcons[e.category]||'') + ' ' + (e.person||'') + '</div>';
         html += '<div>' + (e.task||'') + '</div>';
         if (e.jobRef) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.jobRef + '</div>';
         if (e.notes) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.notes + '</div>';
+        html += '<div onclick="event.stopPropagation()" style="display:flex;gap:2px;margin-top:3px;">';
+        html += '<button onclick="moveScheduleCard(' + globalIdx + ',-1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move earlier">◀</button>';
+        html += '<button onclick="reorderScheduleCard(' + globalIdx + ',-1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move up">▲</button>';
+        html += '<button onclick="reorderScheduleCard(' + globalIdx + ',1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move down">▼</button>';
+        html += '<button onclick="moveScheduleCard(' + globalIdx + ',1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move later">▶</button>';
+        html += '</div>';
         html += '</div>';
       });
     }
@@ -7352,6 +7354,29 @@ function schSetDays(days) {
   document.querySelectorAll('.sch-day-check').forEach(cb => {
     cb.checked = days.includes(cb.value);
   });
+}
+
+function moveScheduleCard(idx, dir) {
+  const entry = db.scheduleEntries[idx];
+  if (!entry || !Array.isArray(entry.days) || entry.days.length === 0) return;
+  const dayOrder = ['mon','tue','wed','thu','fri'];
+
+  if (entry.days.length === 1) {
+    // Single day — shift left or right
+    const currentPos = dayOrder.indexOf(entry.days[0]);
+    const newPos = currentPos + dir;
+    if (newPos < 0 || newPos >= dayOrder.length) return;
+    entry.days = [dayOrder[newPos]];
+  } else {
+    // Multi-day — shift the whole block
+    const positions = entry.days.map(d => dayOrder.indexOf(d)).sort((a,b) => a-b);
+    if (dir < 0 && positions[0] <= 0) return;
+    if (dir > 0 && positions[positions.length-1] >= dayOrder.length-1) return;
+    entry.days = positions.map(p => dayOrder[p + dir]);
+  }
+  saveSchedule();
+  syncScheduleEntryToSupabase(entry);
+  renderSchedule();
 }
 
 function reorderScheduleCard(idx, dir) {
