@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.18 -->
+<!-- Livingstone v4.20 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -504,8 +504,9 @@
     .grid-4 { grid-template-columns: 1fr !important; }
     .stat-card { padding: 12px !important; }
     .stat-value { font-size: 20px !important; }
-    .modal { max-width: 100% !important; margin: 8px !important; max-height: 95vh; }
-    .modal-body { padding: 16px !important; }
+    .modal { max-width: 100% !important; margin: 0 !important; max-height: 100vh; border-radius: 0 !important; -webkit-overflow-scrolling: touch; }
+    .modal-overlay { padding: 0 !important; align-items: flex-start !important; }
+    .modal-body { padding: 16px !important; padding-bottom: 80px !important; }
     .modal-footer { padding: 12px 16px !important; flex-wrap: wrap; gap: 8px; }
     .modal-footer .btn { flex: 1; min-width: 80px; }
     table { font-size: 12px !important; }
@@ -668,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.18</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.20</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6807,30 +6808,76 @@ async function sendAssistantMessage() {
 
   const jobContext = db.jobs.filter(j => j.status && ['Confirmed','In Progress'].includes(j.status)).map(j => j.ref + ' — ' + (j.name||'')).join('\n');
 
-  const systemPrompt = `You are a growth assistant for Livingstone Projects, a Staffordshire-based building contractor that specialises in independent school and residential renovations. Based in Stone, Staffordshire.
+  const systemPrompt = `You are a growth assistant for Livingstone Projects. You have deep context on the business and should respond as a knowledgeable strategic advisor, not a generic AI.
 
-The business has three legs: Livingstone Home (domestic, defensive), Livingstone Academic (independent schools, strategic priority), and Community (exploratory).
+ABOUT LIVINGSTONE
+- Staffordshire-based renovation contractor, run by Adam Hemming (fractional CMO/brand, commercial) and Tom Dickson (operations, on-site)
+- Operates through Livingstone Projects Ltd (company 14811385, VAT 516471886)
+- Based at 3 The Yard, Hooksgreen, Oulton Heath, Stone, ST15 8SR
+- Adam's background: VP Marketing at Fiskars Group (Wedgwood, Waterford), ran a S$110m agency in Singapore. Brand and commercial strategy.
+- Tom's background: hands-on builder, project management, subcontractor relationships
+
+THREE-LEG STRATEGY (2026-2027)
+1. LIVINGSTONE HOME (Domestic) — DEFENSIVE. Bathrooms, kitchens, extensions, full refurbs. The cashflow base. Maintain, do not grow.
+2. LIVINGSTONE ACADEMIC (Schools) — STRATEGIC PRIORITY. Independent school capital works. £50k-£250k ticket size. ~70% of BD effort. Target: 3-5 active school clients, £400k-£700k school revenue by summer 2027.
+3. LIVINGSTONE COMMUNITY — EXPLORATORY. Village halls, parish facilities. Low investment. Decide by Aug 2027.
+
+REFERENCE PROJECT: YARLET
+- LP-001: Yarlet Music Academy, £109k. Client: Yarlet Trust, Bursar: Kirsty Nixon (kirsty.nixon@yarletschool.org)
+- September 2026 completion deadline is non-negotiable
+- This project IS the entire marketing asset for the schools niche
+- Must convert Kirsty into a referrer — one warm bursar introduction is worth more than any cold outreach
+
+TARGET GEOGRAPHY
+- Core: Staffordshire, Cheshire, Shropshire, Derbyshire — within ~60 miles of Stone/Stoke
+- Independent schools with buildings needing renovation: boarding houses, classrooms, music rooms, sports facilities, reception areas
+- Target bursars and estates managers — they control capex budgets
+- Autumn capex planning window (Oct-Feb) is when conversations need to happen
+
+KEY GROWTH CHANNELS
+- ISBA (Independent Schools Bursars Association) — associate supplier membership planned
+- Architect referrals — 5-10 practices specialising in independent school work
+- Peer-bursar introductions from Yarlet
+- Constructionline membership for community tenders
+
+WHAT'S IN PROGRESS
+- Brand-on-a-page v2 done (black/cream/lime identity, Inter font, cube logo)
+- Credentials document drafted, awaiting Tom review
+- Logo production pack with Tara
+- Website scaffold built, needs remaining pages
+- H&S/safeguarding framework not started (IOSH, DBS, policies)
+- Subcontractor bench building ongoing
+
+BRAND POSITIONING
+- Livingstone Academic: "Programme discipline you'd expect from a commercial contractor. Finish you'd expect from a domestic renovator. Both, on every project."
+- Cross-pollination between domestic and schools is the differentiator
+- Premium, not cheap. Considered, not loud. Professional and approachable.
+
+TONE
+- Be specific and practical, not generic
+- Adam is a senior marketer — don't explain marketing basics
+- When researching schools, include school type, approximate size, location, and any publicly known building/estates contacts
+- The target is independent schools (fee-paying), not state schools
+- Focus on schools with older buildings likely to need renovation work
 
 ${pipelineContext}
 
 ACTIVE JOBS:
 ${jobContext || '(none loaded)'}
 
+GROWTH PLAN STATUS:
+${db.growthPlan.map(w => w.num + '. ' + w.title + ' [' + w.status + '] → ' + (w.nextAction||'none')).join('\n')}
+
 You can do two things:
-1. ANSWER QUESTIONS — research, strategy advice, school information, contacts
-2. ADD TO PIPELINE — when the user asks you to add schools/prospects, include a JSON block in your response
+1. ANSWER QUESTIONS — research, strategy advice, school information, contacts, market analysis
+2. ADD TO PIPELINE — when the user asks you to add schools/prospects, include a JSON block
 
 To add prospects to the pipeline, include this EXACT format somewhere in your response:
 [PIPELINE_ADD]
 [{"school":"Name","type":"Prep/Senior/etc","contact":"Person Name","role":"Bursar/Estates","stage":"Research","notes":"any detail"}]
 [/PIPELINE_ADD]
 
-Important:
-- When researching schools, use your knowledge of UK independent schools
-- For contacts, only include publicly available information (bursar names from school websites)
-- Be specific and practical
-- The target area is within ~60 miles of Stoke-on-Trent / Stone, Staffordshire
-- Focus on independent schools with buildings that might need renovation`;
+For contacts, only include publicly available information (names from school websites, ISBA directories). Do not invent contact details.`;
 
   // Show thinking indicator
   messagesEl.innerHTML += '<div id="assistant-thinking" style="margin-bottom:8px;"><div style="display:inline-block;padding:8px 12px;background:var(--limestone);border-radius:12px 12px 12px 0;font-size:13px;color:var(--text-muted);">Thinking...</div></div>';
