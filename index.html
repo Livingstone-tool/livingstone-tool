@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.24 -->
+<!-- Livingstone v4.25 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.24</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.25</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1525,24 +1525,27 @@ window.onerror=function(m,s,l,c,e){
       <div id="sch-content" style="margin-bottom:16px;"></div>
 
       <!-- Chat input -->
-      <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px;">
-        <div style="font-size:12px;font-weight:600;color:var(--copper);margin-bottom:8px;">💬 Update the schedule</div>
-        <textarea id="sch-chat-input" rows="3" placeholder="Type what you discussed with Tom, or paste a Plaud transcript...&#10;e.g. 'Tom's doing Kathy's bathroom Mon-Thu with Geoff. Lee's boarding at Yarlet all week. Need to order tiles for the cleaners job by Wednesday.'" style="width:100%;font-size:13px;padding:10px;border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+      <div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:12px;">
+        <textarea id="sch-chat-input" rows="2" placeholder="Type anything...&#10;• 'Tom plastering Monday and Tuesday' → adds cards&#10;• 'What about Geoff this week?' → answers&#10;• Paste a Plaud transcript → builds the full schedule&#10;• 'Move Dean to Thursday' → updates cards" style="width:100%;font-size:13px;padding:10px;border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
           <label class="btn btn-sm btn-secondary" style="cursor:pointer;">
-            📎 Upload transcript
+            📎 Upload
             <input type="file" accept=".txt,.md,.pdf,.doc,.docx" onchange="loadScheduleTranscript(this)" style="display:none;">
           </label>
           <div style="flex:1;"></div>
           <button class="btn btn-sm btn-secondary" onclick="shareSchedule('whatsapp')">📱 WhatsApp</button>
           <button class="btn btn-sm btn-secondary" onclick="shareSchedule('copy')">📋 Copy</button>
-          <button class="btn btn-primary" onclick="processScheduleInput()">Generate Schedule →</button>
+          <button class="btn btn-sm btn-secondary" onclick="shareScheduleLink()">🔗 Share View</button>
+          <button class="btn btn-primary" onclick="processScheduleInput()">Send →</button>
         </div>
       </div>
 
-      <!-- Claude thinking indicator -->
+      <!-- Response area -->
+      <div id="sch-response" style="display:none;margin-top:12px;padding:12px 16px;background:var(--white);border:1px solid var(--border);border-radius:8px;border-left:3px solid #B5DD3C;font-size:13px;line-height:1.6;"></div>
+
+      <!-- Thinking indicator -->
       <div id="sch-thinking" style="display:none;margin-top:12px;padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">
-        🤖 Reading your notes and building the schedule...
+        🤖 Working on it...
       </div>
     </div>
     <div id="plan-tab-dailyplan" style="display:none;">
@@ -7057,14 +7060,14 @@ function renderSchedule() {
     html += '</div>';
 
     // Day entries
-    html += '<div style="padding:4px;min-height:60px;">';
+    html += '<div style="padding:4px;min-height:60px;" ondragover="event.preventDefault();this.style.background=\'rgba(181,221,60,0.15)\'" ondragleave="this.style.background=\'transparent\'" ondrop="dropScheduleCard(event,\'' + day + '\')">';
     if (!dayEntries.length) {
       html += '<div style="color:var(--text-muted);font-size:10px;padding:8px 4px;text-align:center;">—</div>';
     } else {
       dayEntries.forEach(e => {
         const globalIdx = db.scheduleEntries.indexOf(e);
         const col = catColors[e.category] || '#6b7e8e';
-        html += '<div style="position:relative;padding:4px 6px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:pointer;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '" onclick="editScheduleEntry(' + globalIdx + ')">';
+        html += '<div draggable="true" ondragstart="dragScheduleCard(event,' + globalIdx + ')" style="position:relative;padding:4px 6px;padding-right:18px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:grab;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '" onclick="editScheduleEntry(' + globalIdx + ')">';
         html += '<button onclick="event.stopPropagation();deleteScheduleEntry(' + globalIdx + ')" style="position:absolute;top:2px;right:2px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;" title="Remove">✕</button>';
         html += '<div style="font-weight:600;">' + (catIcons[e.category]||'') + ' ' + (e.person||'') + '</div>';
         html += '<div>' + (e.task||'') + '</div>';
@@ -7119,6 +7122,93 @@ function toggleScheduleDone(idx) {
   db.scheduleEntries[idx].done = !db.scheduleEntries[idx].done;
   saveSchedule();
   renderSchedule();
+}
+
+// --- Drag and drop ---
+function dragScheduleCard(event, idx) {
+  event.dataTransfer.setData('text/plain', idx.toString());
+  event.dataTransfer.effectAllowed = 'move';
+}
+
+function dropScheduleCard(event, targetDay) {
+  event.preventDefault();
+  event.currentTarget.style.background = 'transparent';
+  const idx = parseInt(event.dataTransfer.getData('text/plain'));
+  const entry = db.scheduleEntries[idx];
+  if (!entry) return;
+
+  const days = Array.isArray(entry.days) ? [...entry.days] : [];
+  // If dragging a single-day card, move it to target day
+  if (days.length <= 1) {
+    entry.days = [targetDay];
+  } else {
+    // Multi-day card: add target day if not present
+    if (!days.includes(targetDay)) {
+      days.push(targetDay);
+      entry.days = days;
+    }
+  }
+  saveSchedule();
+  renderSchedule();
+}
+
+// --- Share calendar link ---
+function shareScheduleLink() {
+  const ws = getScheduleWeek();
+  const wsStr = ws.toISOString().split('T')[0];
+  const entries = db.scheduleEntries.filter(e => e.weekStart === wsStr);
+  if (!entries.length) { alert('No entries for this week.'); return; }
+
+  const weekLabel = ws.toLocaleDateString('en-GB', {day:'numeric',month:'long'}) + ' — ' + new Date(ws.getTime()+6*86400000).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
+
+  const dayNames = ['mon','tue','wed','thu','fri'];
+  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  const dayDates = dayNames.map((d,i) => { const dt = new Date(ws); dt.setDate(dt.getDate()+i); return dt; });
+  const catColors = { own:'#B5DD3C', sub:'#6B8A1F', delivery:'#3498db', admin:'#6b7e8e' };
+  const catIcons = { own:'🔨', sub:'👷', delivery:'📦', admin:'📋' };
+
+  let cal = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+  cal += '<title>Livingstone — ' + weekLabel + '</title>';
+  cal += '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Inter,sans-serif;background:#F4F1EB;padding:16px}';
+  cal += '.header{text-align:center;margin-bottom:16px}.brand{font-size:18px;font-weight:700;letter-spacing:0.1em}.week{font-size:14px;color:#6b7e8e;margin-top:4px}';
+  cal += '.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}';
+  cal += '.day{background:white;border:1px solid rgba(0,0,0,0.1);border-radius:8px;overflow:hidden;min-height:100px}';
+  cal += '.day-head{padding:6px 10px;font-size:11px;font-weight:600;background:#F4F1EB;border-bottom:1px solid rgba(0,0,0,0.1)}';
+  cal += '.day-body{padding:4px}';
+  cal += '.card{padding:4px 6px;margin-bottom:3px;border-radius:4px;font-size:11px;background:rgba(0,0,0,0.02)}';
+  cal += '.card .who{font-weight:600}.card .what{margin-top:1px}.card .meta{color:#6b7e8e;font-size:10px}';
+  cal += '@media(max-width:600px){.grid{grid-template-columns:1fr}.day{min-height:auto}}';
+  cal += '</style></head><body>';
+  cal += '<div class="header"><div class="brand">LIVINGSTONE</div><div class="week">' + weekLabel + '</div></div>';
+  cal += '<div class="grid">';
+
+  dayNames.forEach((day, i) => {
+    const de = entries.filter(e => Array.isArray(e.days) && e.days.includes(day));
+    cal += '<div class="day"><div class="day-head">' + dayLabels[i] + ' <span style="font-weight:400;color:#6b7e8e;">' + dayDates[i].getDate() + '/' + (dayDates[i].getMonth()+1) + '</span></div><div class="day-body">';
+    if (!de.length) {
+      cal += '<div style="color:#6b7e8e;font-size:10px;padding:8px;text-align:center">—</div>';
+    } else {
+      de.forEach(e => {
+        const col = catColors[e.category] || '#6b7e8e';
+        cal += '<div class="card" style="border-left:3px solid ' + col + ';' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
+        cal += '<div class="who">' + (catIcons[e.category]||'') + ' ' + (e.person||'') + '</div>';
+        cal += '<div class="what">' + (e.task||'') + '</div>';
+        if (e.jobRef || e.notes) cal += '<div class="meta">' + (e.jobRef||'') + (e.notes?' · '+e.notes:'') + '</div>';
+        cal += '</div>';
+      });
+    }
+    cal += '</div></div>';
+  });
+
+  cal += '</div></body></html>';
+
+  const blob = new Blob([cal], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Livingstone-Schedule-' + wsStr + '.html';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function deleteScheduleEntry(idx) {
@@ -7197,69 +7287,47 @@ function saveScheduleEdit() {
 // --- Chat-driven schedule generation ---
 async function processScheduleInput() {
   const input = document.getElementById('sch-chat-input')?.value?.trim();
-  if (!input) { alert('Type your meeting notes or paste a transcript first.'); return; }
+  if (!input) { alert('Type something first.'); return; }
 
   const thinking = document.getElementById('sch-thinking');
+  const responseEl = document.getElementById('sch-response');
   if (thinking) thinking.style.display = 'block';
+  if (responseEl) responseEl.style.display = 'none';
 
   const ws = getScheduleWeek();
   const wsStr = ws.toISOString().split('T')[0];
   const weekLabel = ws.toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
-  const weStr = new Date(ws.getTime()+6*86400000).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
 
-  // Existing entries for this week
-  const existing = db.scheduleEntries.filter(e => e.weekStart === wsStr);
+  // Current entries for context (this week + next 3 weeks)
+  const allWeeks = [];
+  for (let w = 0; w < 4; w++) {
+    const wk = new Date(ws);
+    wk.setDate(wk.getDate() + w * 7);
+    const wkStr = wk.toISOString().split('T')[0];
+    const wkEntries = db.scheduleEntries.filter(e => e.weekStart === wkStr);
+    if (wkEntries.length) {
+      allWeeks.push({ week: wkStr, label: wk.toLocaleDateString('en-GB',{day:'numeric',month:'short'}), entries: wkEntries });
+    }
+  }
 
-  // Active jobs context
+  const existingContext = allWeeks.length
+    ? allWeeks.map(w => 'WEEK OF ' + w.label + ':\n' + w.entries.map(e => '- [' + e.category + '] ' + (e.person||'') + ': ' + (e.task||'') + (e.jobRef?' ('+e.jobRef+')':'') + ' [' + (Array.isArray(e.days)?e.days.join(','):'') + ']' + (e.notes?' — '+e.notes:'') + (e.done?' [DONE]':'')).join('\n')).join('\n\n')
+    : '(empty)';
+
   const activeJobs = db.jobs.filter(j => j.status && ['Confirmed','In Progress','Snagging'].includes(j.status));
-  const jobContext = activeJobs.map(j => j.ref + ' — ' + (j.name||'')).join('\n');
+  const jobContext = activeJobs.map(j => j.ref + ' — ' + (j.name||'') + ' [' + j.status + ']').join('\n');
 
-  // Known people
-  const people = new Set(['Tom','Adam','Lee','Dean','Chris','Ron','Geoff','Matt']);
-  (db.subs||[]).forEach(s => { if (s.name) people.add(s.name); });
-  (db.labourers||[]).forEach(l => { if (l.name) people.add(l.name); });
+  const nextMonday = new Date(ws.getTime()+7*86400000).toISOString().split('T')[0];
+  const week3 = new Date(ws.getTime()+14*86400000).toISOString().split('T')[0];
+  const week4 = new Date(ws.getTime()+21*86400000).toISOString().split('T')[0];
 
-  const prompt = `You are a schedule assistant for Livingstone Projects, a building contractor. Parse the following meeting notes or transcript and extract a weekly schedule.
-
-WEEK: ${weekLabel} to ${weStr} (Monday to Sunday)
-
-ACTIVE JOBS:
-${jobContext || '(none loaded)'}
-
-KNOWN PEOPLE: ${[...people].join(', ')}
-
-${existing.length ? 'CURRENT ENTRIES FOR THIS WEEK (keep unless contradicted):\n' + existing.map(e => '- [' + e.category + '] ' + (e.person||'') + ': ' + (e.task||'') + (e.jobRef?' ('+e.jobRef+')':'') + (e.days?' '+e.days+'d':'') + (e.notes?' — '+e.notes:'')).join('\n') + '\n\n' : ''}MEETING NOTES:
-${input}
-
-Return ONLY a JSON array of schedule entries. No preamble, no markdown, no backticks, no explanation before or after. Your ENTIRE response must be a valid JSON array starting with [ and ending with ]. Each entry:
-{
-  "category": "own"|"sub"|"delivery"|"admin",
-  "person": "name or empty string",
-  "task": "what they are doing",
-  "jobRef": "LP-XXX or empty string (match to active jobs above where possible)",
-  "days": ["mon","tue","wed","thu","fri"] (which days of this week — use lowercase three-letter day names),
-  "notes": "any extra detail"
-}
-
-Rules:
-- "own" = Tom or Adam doing hands-on work themselves
-- "sub" = subcontractors or labourers doing work
-- "delivery" = orders, deliveries, skip hire, material pickups
-- "admin" = phone calls, chasing invoices, quoting, booking people, meetings
-- Match job references to the active jobs list where you can
-- Assign specific days based on context. "Mon to Thu" = ["mon","tue","wed","thu"]. "All week" = ["mon","tue","wed","thu","fri"]. "1 day" = pick the most logical day. "Friday" = ["fri"].
-- Keep existing entries unless the notes clearly change or cancel them
-- Be practical and specific about which days
-- If the input is a Plaud transcript, "Speaker 1" is usually Adam and "Speaker 2" is usually Tom. Map to real names based on context (Adam handles commercial/brand/client comms, Tom handles on-site work/subcontractors).
-- ALWAYS use first names only: Tom, Adam, Lee, Dean, Chris, Ron, Geoff, Matt. Never "Tom Dickson" or "Adam Hemming".`;
+  const prompt = 'You are a schedule assistant for Livingstone Projects. Current week starts ' + weekLabel + ' (Monday).\n\nACTIVE JOBS:\n' + (jobContext||'(none)') + '\n\nCURRENT SCHEDULE:\n' + existingContext + '\n\nKnown people: Tom, Adam, Lee, Dean, Chris, Ron, Geoff, Matt. Use first names only.\nPlaud transcripts: Speaker 1 = Adam, Speaker 2 = Tom.\n\nThe user said:\n"' + input.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\n/g,'\\n') + '"\n\nDecide what they want:\n\n1. QUESTION about schedule/people/availability: answer in plain text. Start with [CHAT]\n2. ADDING/UPDATING entries (notes, transcript, quick task): return JSON. Start with [SCHEDULE] then JSON array, end with [/SCHEDULE]. Each entry: {"weekStart":"YYYY-MM-DD","category":"own|sub|delivery|admin","person":"name","task":"description","jobRef":"LP-XXX or empty","days":["mon","tue","wed","thu","fri"],"notes":"detail"}\n3. BOTH: [CHAT] first, then [SCHEDULE]\n\nWeek Mondays: Current=' + wsStr + ', Next=' + nextMonday + ', W3=' + week3 + ', W4=' + week4 + '\nONLY include NEW or CHANGED entries. Do not repeat unchanged ones.';
 
   try {
-    // Build message content — include PDF if uploaded
     let messageContent;
     if (window._schedulePdfData) {
-      const mediaType = window._scheduleFileType || 'application/pdf';
       messageContent = [
-        { type: 'document', source: { type: 'base64', media_type: mediaType, data: window._schedulePdfData } },
+        { type: 'document', source: { type: 'base64', media_type: window._scheduleFileType || 'application/pdf', data: window._schedulePdfData } },
         { type: 'text', text: prompt }
       ];
       window._schedulePdfData = null;
@@ -7274,58 +7342,79 @@ Rules:
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
-        system: 'You are a schedule assistant. You MUST respond with ONLY a valid JSON array. No text before or after. If a transcript uses generic labels like "Speaker 1" or "Speaker 2", map them to the most likely people based on context. The two main speakers are Adam Hemming (commercial/brand) and Tom Dickson (operations/on-site builder). Other known people: Lee, Dean, Chris, Ron, Geoff, Matt.',
+        system: 'You are a schedule assistant. Follow the [CHAT]/[SCHEDULE] format exactly. First names only.',
         messages: [{ role: 'user', content: messageContent }]
       })
     });
     const data = await response.json();
-
-    if (data.error) {
-      console.warn('Claude API error:', data.error);
-      alert('Claude error: ' + (data.error.message || JSON.stringify(data.error)));
-      if (thinking) thinking.style.display = 'none';
-      return;
-    }
-
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = (data.content || []).map(c => c.text || '').join('').trim();
 
-    // Parse the JSON response — extract array even if wrapped in text
-    const clean = text.replace(/```json|```/g, '').trim();
-    let entries;
-    try {
-      entries = JSON.parse(clean);
-    } catch(e1) {
-      // Try to find a JSON array within the text
-      const match = clean.match(/\[[\s\S]*\]/);
-      if (match) {
-        try { entries = JSON.parse(match[0]); } catch(e2) { entries = null; }
+    let chatText = '';
+    let addedCount = 0;
+
+    const chatMatch = text.match(/\[CHAT\]\s*([\s\S]*?)(?=\[SCHEDULE\]|$)/);
+    if (chatMatch) chatText = chatMatch[1].trim();
+
+    const schedMatch = text.match(/\[SCHEDULE\]\s*([\s\S]*?)(?:\[\/SCHEDULE\]|$)/);
+    if (schedMatch) {
+      const jsonStr = schedMatch[1].replace(/```json|```/g, '').trim();
+      const arrayMatch = jsonStr.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        try {
+          const entries = JSON.parse(arrayMatch[0]);
+          if (Array.isArray(entries)) {
+            entries.forEach(e => {
+              db.scheduleEntries.push({
+                weekStart: e.weekStart || wsStr,
+                category: e.category || 'admin',
+                person: e.person || '',
+                task: e.task || '',
+                jobRef: e.jobRef || '',
+                days: Array.isArray(e.days) ? e.days : [],
+                notes: e.notes || '',
+                done: false
+              });
+              addedCount++;
+            });
+            saveSchedule();
+            renderSchedule();
+          }
+        } catch(e) { console.warn('JSON parse error:', e); }
       }
     }
 
-    if (Array.isArray(entries)) {
-      // Replace this week's entries
-      db.scheduleEntries = db.scheduleEntries.filter(e => e.weekStart !== wsStr);
-      entries.forEach(e => {
-        db.scheduleEntries.push({
-          weekStart: wsStr,
-          category: e.category || 'admin',
-          person: e.person || '',
-          task: e.task || '',
-          jobRef: e.jobRef || '',
-          days: Array.isArray(e.days) ? e.days : (typeof e.days === 'number' ? ['mon','tue','wed','thu','fri'].slice(0, e.days) : []),
-          notes: e.notes || '',
-          done: false
-        });
-      });
-      saveSchedule();
-      renderSchedule();
-      document.getElementById('sch-chat-input').value = '';
-    } else {
-      alert('Could not parse schedule. Claude said: ' + text.substring(0, 200));
+    if (!chatMatch && !schedMatch) {
+      const arrayMatch = text.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        try {
+          const entries = JSON.parse(arrayMatch[0]);
+          if (Array.isArray(entries)) {
+            entries.forEach(e => {
+              db.scheduleEntries.push({ weekStart: e.weekStart || wsStr, category: e.category || 'admin', person: e.person || '', task: e.task || '', jobRef: e.jobRef || '', days: Array.isArray(e.days) ? e.days : [], notes: e.notes || '', done: false });
+              addedCount++;
+            });
+            saveSchedule();
+            renderSchedule();
+          }
+        } catch(e) { chatText = text; }
+      } else { chatText = text; }
     }
+
+    if (chatText || addedCount) {
+      if (responseEl) {
+        let rHtml = '';
+        if (chatText) rHtml += '<div style="white-space:pre-wrap;">' + chatText.replace(/</g,'&lt;') + '</div>';
+        if (addedCount) rHtml += '<div style="margin-top:8px;color:var(--copper);font-weight:600;">\u2713 Added ' + addedCount + ' card' + (addedCount>1?'s':'') + '</div>';
+        rHtml += '<button class="btn btn-sm btn-secondary" onclick="this.parentElement.style.display=\'none\'" style="margin-top:8px;">Dismiss</button>';
+        responseEl.innerHTML = rHtml;
+        responseEl.style.display = 'block';
+      }
+    }
+    document.getElementById('sch-chat-input').value = '';
   } catch(e) {
-    console.warn('Schedule generation failed:', e);
-    alert('Schedule error: ' + e.message);
+    console.warn('Schedule error:', e);
+    if (responseEl) { responseEl.innerHTML = '<div style="color:var(--danger);">Error: ' + e.message + '</div>'; responseEl.style.display = 'block'; }
   }
   if (thinking) thinking.style.display = 'none';
 }
