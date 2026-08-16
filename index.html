@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.28 -->
+<!-- Livingstone v4.31 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.28</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.31</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6980,7 +6980,6 @@ document.addEventListener('keydown', function(e) {
 // SCHEDULE — CHAT-DRIVEN WEEKLY PLANNER
 // ============================================================
 if (!db.scheduleEntries) db.scheduleEntries = [];
-try { const se = JSON.parse(localStorage.getItem('livingstoneSchedule')); if (se) db.scheduleEntries = se; } catch(e) {}
 
 let _scheduleWeekStart = null;
 
@@ -7011,7 +7010,63 @@ function saveSchedule() {
   localStorage.setItem('livingstoneSchedule', JSON.stringify(db.scheduleEntries));
 }
 
-function initScheduleView() { renderSchedule(); }
+async function loadScheduleFromSupabase() {
+  try {
+    const data = await supa.get('schedule_entries', 'order=created_at.asc');
+    if (data && data.length) {
+      db.scheduleEntries = data.map(e => ({
+        id: e.id,
+        weekStart: e.week_start,
+        category: e.category || 'admin',
+        person: e.person || '',
+        task: e.task || '',
+        jobRef: e.job_ref || '',
+        days: (() => { try { return JSON.parse(e.days||'[]'); } catch(x) { return []; } })(),
+        notes: e.notes || '',
+        done: e.done || false
+      }));
+      saveSchedule();
+    }
+  } catch(e) { console.warn('Schedule load from Supabase failed:', e); }
+}
+
+async function syncScheduleEntryToSupabase(entry) {
+  const payload = {
+    week_start: entry.weekStart,
+    category: entry.category || 'admin',
+    person: entry.person || '',
+    task: entry.task || '',
+    job_ref: entry.jobRef || '',
+    days: JSON.stringify(entry.days || []),
+    notes: entry.notes || '',
+    done: entry.done || false
+  };
+  try {
+    if (entry.id && !entry.id.startsWith('local_')) {
+      await supa.patch('schedule_entries', entry.id, payload);
+    } else {
+      const res = await supa.post('schedule_entries', payload);
+      if (res && res[0] && res[0].id) entry.id = res[0].id;
+    }
+  } catch(e) { console.warn('Schedule sync failed:', e); }
+}
+
+async function deleteScheduleEntryFromSupabase(entry) {
+  if (entry.id && !entry.id.startsWith('local_')) {
+    try { await supa.delete('schedule_entries', entry.id); } catch(e) { console.warn('Schedule delete failed:', e); }
+  }
+}
+
+async function syncAllScheduleToSupabase() {
+  for (const entry of db.scheduleEntries) {
+    await syncScheduleEntryToSupabase(entry);
+  }
+  saveSchedule();
+}
+
+function initScheduleView() {
+  loadScheduleFromSupabase().then(() => renderSchedule());
+}
 window._scheduleHistory = [];
 
 function renderSchedule() {
@@ -7072,13 +7127,15 @@ function renderSchedule() {
       dayEntries.forEach(e => {
         const globalIdx = db.scheduleEntries.indexOf(e);
         const col = catColors[e.category] || '#6b7e8e';
-        html += '<div draggable="true" ondragstart="dragScheduleCard(event,' + globalIdx + ')" style="position:relative;padding:4px 6px;padding-right:18px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:grab;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '" onclick="editScheduleEntry(' + globalIdx + ')">';
+        html += '<div style="position:relative;padding:4px 6px;padding-right:18px;padding-left:16px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
+        html += '<div draggable="true" ondragstart="dragScheduleCard(event,' + globalIdx + ')" style="position:absolute;left:2px;top:0;bottom:0;width:12px;cursor:grab;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:8px;" title="Drag to move">⋮⋮</div>';
         html += '<button onclick="event.stopPropagation();deleteScheduleEntry(' + globalIdx + ')" style="position:absolute;top:2px;right:2px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;" title="Remove">✕</button>';
+        html += '<div onclick="editScheduleEntry(' + globalIdx + ')" style="cursor:pointer;">';
         html += '<div style="font-weight:600;">' + (catIcons[e.category]||'') + ' ' + (e.person||'') + '</div>';
         html += '<div>' + (e.task||'') + '</div>';
         if (e.jobRef) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.jobRef + '</div>';
         if (e.notes) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.notes + '</div>';
-        html += '</div>';
+        html += '</div></div>';
       });
     }
     html += '</div></div>';
@@ -7126,6 +7183,7 @@ function renderSchedule() {
 function toggleScheduleDone(idx) {
   db.scheduleEntries[idx].done = !db.scheduleEntries[idx].done;
   saveSchedule();
+  syncScheduleEntryToSupabase(db.scheduleEntries[idx]);
   renderSchedule();
 }
 
@@ -7154,6 +7212,7 @@ function dropScheduleCard(event, targetDay) {
     }
   }
   saveSchedule();
+  syncScheduleEntryToSupabase(entry);
   renderSchedule();
 }
 
@@ -7207,18 +7266,16 @@ function shareScheduleLink() {
 
   cal += '</div></body></html>';
 
-  const blob = new Blob([cal], {type:'text/html'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'Livingstone-Schedule-' + wsStr + '.html';
-  a.click();
-  URL.revokeObjectURL(url);
+  const win = window.open('', '_blank');
+  win.document.write(cal);
+  win.document.close();
 }
 
 function deleteScheduleEntry(idx) {
+  const entry = db.scheduleEntries[idx];
   db.scheduleEntries.splice(idx, 1);
   saveSchedule();
+  if (entry) deleteScheduleEntryFromSupabase(entry);
   renderSchedule();
 }
 
@@ -7285,6 +7342,7 @@ function saveScheduleEdit() {
   entry.notes = document.getElementById('sch-e-notes').value;
   entry.done = document.getElementById('sch-e-done').checked;
   saveSchedule();
+  syncScheduleEntryToSupabase(entry);
   closeModal('schedule-edit-modal');
   renderSchedule();
 }
@@ -7373,7 +7431,8 @@ async function processScheduleInput() {
           const entries = JSON.parse(arrayMatch[0]);
           if (Array.isArray(entries)) {
             entries.forEach(e => {
-              db.scheduleEntries.push({
+              const newEntry = {
+                id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2,4),
                 weekStart: e.weekStart || wsStr,
                 category: e.category || 'admin',
                 person: e.person || '',
@@ -7382,7 +7441,9 @@ async function processScheduleInput() {
                 days: Array.isArray(e.days) ? e.days : [],
                 notes: e.notes || '',
                 done: false
-              });
+              };
+              db.scheduleEntries.push(newEntry);
+              syncScheduleEntryToSupabase(newEntry);
               addedCount++;
             });
             saveSchedule();
@@ -7402,7 +7463,7 @@ async function processScheduleInput() {
         if (arrMatch) {
           const delCriteria = JSON.parse(arrMatch[0]);
           if (Array.isArray(delCriteria)) {
-            const before = db.scheduleEntries.length;
+            const before = [...db.scheduleEntries];
             delCriteria.forEach(d => {
               const matchWeek = (!d.weekStart || d.weekStart === '*') ? null : d.weekStart;
               const matchPerson = (!d.person || d.person === '*') ? null : d.person.toLowerCase();
@@ -7415,19 +7476,24 @@ async function processScheduleInput() {
                   const taskOk = !matchTask || (e.task||'').toLowerCase().includes(matchTask);
                   if (weekOk && personOk && taskOk && Array.isArray(e.days)) {
                     e.days = e.days.filter(day => day !== removeDay);
+                    syncScheduleEntryToSupabase(e);
                   }
                 });
+                const emptyOnes = db.scheduleEntries.filter(e => Array.isArray(e.days) && e.days.length === 0);
+                emptyOnes.forEach(e => deleteScheduleEntryFromSupabase(e));
                 db.scheduleEntries = db.scheduleEntries.filter(e => !Array.isArray(e.days) || e.days.length > 0);
               } else {
-                db.scheduleEntries = db.scheduleEntries.filter(e => {
+                const toDelete = db.scheduleEntries.filter(e => {
                   const weekOk = !matchWeek || e.weekStart === matchWeek;
                   const personOk = !matchPerson || (e.person||'').toLowerCase().includes(matchPerson);
                   const taskOk = !matchTask || (e.task||'').toLowerCase().includes(matchTask);
-                  return !(weekOk && personOk && taskOk);
+                  return weekOk && personOk && taskOk;
                 });
+                toDelete.forEach(e => deleteScheduleEntryFromSupabase(e));
+                db.scheduleEntries = db.scheduleEntries.filter(e => !toDelete.includes(e));
               }
             });
-            deletedCount = before - db.scheduleEntries.length;
+            deletedCount = before.length - db.scheduleEntries.length;
             saveSchedule();
             renderSchedule();
           }
@@ -7442,7 +7508,8 @@ async function processScheduleInput() {
           const entries = JSON.parse(arrayMatch[0]);
           if (Array.isArray(entries)) {
             entries.forEach(e => {
-              db.scheduleEntries.push({ weekStart: e.weekStart || wsStr, category: e.category || 'admin', person: e.person || '', task: e.task || '', jobRef: e.jobRef || '', days: Array.isArray(e.days) ? e.days : [], notes: e.notes || '', done: false });
+              db.scheduleEntries.push({ id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2,4), weekStart: e.weekStart || wsStr, category: e.category || 'admin', person: e.person || '', task: e.task || '', jobRef: e.jobRef || '', days: Array.isArray(e.days) ? e.days : [], notes: e.notes || '', done: false });
+              syncScheduleEntryToSupabase(db.scheduleEntries[db.scheduleEntries.length-1]);
               addedCount++;
             });
             saveSchedule();
