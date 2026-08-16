@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.36 -->
+<!-- Livingstone v4.37 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.36</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.37</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7145,8 +7145,8 @@ function renderSchedule() {
         if (e.notes) html += '<div style="color:var(--text-muted);font-size:10px;">' + e.notes + '</div>';
         html += '<div onclick="event.stopPropagation()" style="display:flex;gap:2px;margin-top:3px;">';
         html += '<button onclick="moveScheduleCard(' + globalIdx + ',-1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move earlier">◀</button>';
-        html += '<button onclick="reorderScheduleCard(' + globalIdx + ',-1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move up">▲</button>';
-        html += '<button onclick="reorderScheduleCard(' + globalIdx + ',1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move down">▼</button>';
+        html += '<button onclick="reorderScheduleCard(' + globalIdx + ',-1,\'' + day + '\')" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move up">▲</button>';
+        html += '<button onclick="reorderScheduleCard(' + globalIdx + ',1,\'' + day + '\')" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move down">▼</button>';
         html += '<button onclick="moveScheduleCard(' + globalIdx + ',1)" style="border:none;background:var(--limestone);cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;color:var(--text-muted);" title="Move later">▶</button>';
         html += '</div>';
         html += '</div>';
@@ -7379,14 +7379,19 @@ function moveScheduleCard(idx, dir) {
   renderSchedule();
 }
 
-function reorderScheduleCard(idx, dir) {
+function reorderScheduleCard(idx, dir, day) {
   const entry = db.scheduleEntries[idx];
   if (!entry) return;
-  // Find entries in the same week, swap positions in the array
-  const targetIdx = idx + dir;
-  if (targetIdx < 0 || targetIdx >= db.scheduleEntries.length) return;
-  // Only swap within the same week
-  if (db.scheduleEntries[targetIdx].weekStart !== entry.weekStart) return;
+  // Find all entries in this specific day column, in array order
+  const siblings = db.scheduleEntries
+    .map((e, i) => ({ e, i }))
+    .filter(x => x.e.weekStart === entry.weekStart && Array.isArray(x.e.days) && x.e.days.includes(day));
+  
+  const posInSiblings = siblings.findIndex(x => x.i === idx);
+  const targetPos = posInSiblings + dir;
+  if (targetPos < 0 || targetPos >= siblings.length) return;
+  
+  const targetIdx = siblings[targetPos].i;
   [db.scheduleEntries[idx], db.scheduleEntries[targetIdx]] = [db.scheduleEntries[targetIdx], db.scheduleEntries[idx]];
   saveSchedule();
   renderSchedule();
