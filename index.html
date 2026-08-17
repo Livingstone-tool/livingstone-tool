@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.49 -->
+<!-- Livingstone v4.50 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.49</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.50</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6959,14 +6959,22 @@ ${jobContext || '(none loaded)'}
 GROWTH PLAN STATUS:
 ${db.growthPlan.map(w => w.num + '. ' + w.title + ' [' + w.status + '] → ' + (w.nextAction||'none')).join('\n')}
 
-You can do two things:
+You can do three things:
 1. ANSWER QUESTIONS — research, strategy advice, school information, contacts, market analysis
-2. ADD TO PIPELINE — when the user asks you to add schools/prospects, include a JSON block
+2. ADD TO PIPELINE — when the user asks you to add NEW schools/prospects, include a JSON block
+3. UPDATE PIPELINE — when the user asks you to add contacts, notes, stage changes, or any detail to EXISTING prospects, include an update block
 
-To add prospects to the pipeline, include this EXACT format somewhere in your response:
+To add NEW prospects:
 [PIPELINE_ADD]
 [{"school":"Name","type":"Prep/Senior/etc","contact":"Person Name","role":"Bursar/Estates","stage":"Research","notes":"any detail"}]
 [/PIPELINE_ADD]
+
+To update EXISTING prospects (match by school name, case-insensitive; only fields you include are changed):
+[PIPELINE_UPDATE]
+[{"school":"Name","contact":"Person Name","role":"Bursar","email":"x@y.com","phone":"01234","stage":"Contacted","nextAction":"...","notes":"appended to existing notes"}]
+[/PIPELINE_UPDATE]
+
+Use PIPELINE_UPDATE whenever the school is already in the pipeline list above — PIPELINE_ADD skips duplicates. "notes" in an update is APPENDED, not replaced.
 
 For contacts, only include publicly available information (names from school websites, ISBA directories). Do not invent contact details.`;
 
@@ -7031,8 +7039,30 @@ For contacts, only include publicly available information (names from school web
       } catch(e) { console.warn('Pipeline parse error:', e); }
     }
 
+    // Check for pipeline updates
+    const updateMatch = text.match(/\[PIPELINE_UPDATE\]([\s\S]*?)\[\/PIPELINE_UPDATE\]/);
+    let updatedCount = 0;
+    if (updateMatch) {
+      try {
+        const updates = JSON.parse(updateMatch[1].trim());
+        if (Array.isArray(updates)) {
+          updates.forEach(u => {
+            const p = db.pipeline.find(x => (x.school||'').toLowerCase() === (u.school||'').toLowerCase());
+            if (!p) return;
+            ['type','contact','role','email','phone','stage','estValue','source','nextAction','lastContact'].forEach(f => {
+              if (u[f] !== undefined && u[f] !== '') p[f] = u[f];
+            });
+            if (u.notes) p.notes = p.notes ? (p.notes + ' | ' + u.notes) : u.notes;
+            syncPipelineToSupabase(p);
+            updatedCount++;
+          });
+          if (updatedCount) saveGrowthData();
+        }
+      } catch(e) { console.warn('Pipeline update parse error:', e); }
+    }
+
     // Clean display text (remove pipeline tags)
-    let displayText = text.replace(/\[PIPELINE_ADD\][\s\S]*?\[\/PIPELINE_ADD\]/g, '').trim();
+    let displayText = text.replace(/\[PIPELINE_ADD\][\s\S]*?\[\/PIPELINE_ADD\]/g, '').replace(/\[PIPELINE_UPDATE\][\s\S]*?\[\/PIPELINE_UPDATE\]/g, '').trim();
     displayText = displayText.replace(/</g,'&lt;').replace(/\n/g,'<br>');
 
     // Remove thinking indicator and show response
@@ -7042,6 +7072,9 @@ For contacts, only include publicly available information (names from school web
     let responseHtml = '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:12px 12px 12px 0;font-size:13px;line-height:1.6;">' + displayText + '</div>';
     if (addedCount) {
       responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Added ' + addedCount + ' prospect' + (addedCount>1?'s':'') + ' to pipeline</div>';
+    }
+    if (updatedCount) {
+      responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Updated ' + updatedCount + ' prospect' + (updatedCount>1?'s':'') + '</div>';
     }
     responseHtml += '</div>';
     messagesEl.innerHTML += responseHtml;
