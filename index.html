@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.42 -->
+<!-- Livingstone v4.43 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.42</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.43</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7122,7 +7122,7 @@ function renderSchedule() {
     const isToday = dateStr === today;
     const dayEntries = entries.filter(e => Array.isArray(e.days) && e.days.includes(day));
 
-    html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;' + (isToday ? 'border-color:#B5DD3C;border-width:2px;' : '') + '">';
+    html += '<div class="sch-drop-zone" data-day="' + day + '" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;' + (isToday ? 'border-color:#B5DD3C;border-width:2px;' : '') + '">';
 
     // Day header
     html += '<div style="padding:6px 10px;font-size:11px;font-weight:600;background:' + (isToday ? 'rgba(181,221,60,0.15)' : 'var(--limestone)') + ';border-bottom:1px solid var(--border);">';
@@ -7130,7 +7130,7 @@ function renderSchedule() {
     html += '</div>';
 
     // Day entries
-    html += '<div class="sch-drop-zone" data-day="' + day + '" style="padding:4px;min-height:60px;">';
+    html += '<div style="padding:4px;min-height:60px;">';
     if (!dayEntries.length) {
       html += '<div style="color:var(--text-muted);font-size:10px;padding:8px 4px;text-align:center;">—</div>';
     } else {
@@ -7197,8 +7197,6 @@ function renderSchedule() {
     dbg.style.cssText = 'position:fixed;bottom:10px;left:10px;background:#0D0D0D;color:#B5DD3C;padding:6px 12px;border-radius:6px;font-size:11px;z-index:9999;font-family:monospace;';
     dbg.textContent = 'drag debug: waiting... (cards: ' + el.querySelectorAll('.sch-card').length + ', zones: ' + el.querySelectorAll('.sch-drop-zone').length + ')';
     document.body.appendChild(dbg);
-  } else {
-    document.getElementById('sch-drag-debug').textContent = 'drag debug: rendered (cards: ' + el.querySelectorAll('.sch-card').length + ', zones: ' + el.querySelectorAll('.sch-drop-zone').length + ')';
   }
   const dbgEl = document.getElementById('sch-drag-debug');
   window._dragLog = window._dragLog || [];
@@ -7251,6 +7249,7 @@ function renderSchedule() {
     });
     card.addEventListener('dragend', function(ev) {
       this.style.opacity = '1';
+      dragLog('dragend (dropEffect=' + ev.dataTransfer.dropEffect + ')');
     });
   });
 
