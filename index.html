@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.48 -->
+<!-- Livingstone v4.49 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.48</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.49</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6583,6 +6583,69 @@ function saveGrowthData() {
   localStorage.setItem('livingstonePipeline', JSON.stringify(db.pipeline));
 }
 
+async function loadGrowthFromSupabase() {
+  try {
+    const [plan, pipe] = await Promise.all([
+      supa.get('growth_plan', 'order=id.asc'),
+      supa.get('pipeline', 'order=created_at.asc')
+    ]);
+    if (plan && plan.length) {
+      db.growthPlan = plan.map(w => ({
+        id: w.id, num: w.num || '', phase: w.phase || '', title: w.title || '',
+        status: w.status || 'Not Started', owner: w.owner || '', timing: w.timing || '',
+        updated: w.updated || '', progress: w.progress || '', nextAction: w.next_action || '', notes: w.notes || ''
+      }));
+    } else if (db.growthPlan.length) {
+      // First run: push the local seed up
+      for (const w of db.growthPlan) await syncWorkstreamToSupabase(w);
+    }
+    if (pipe && pipe.length) {
+      db.pipeline = pipe.map(p => ({
+        id: p.id, school: p.school || '', type: p.type || '', contact: p.contact || '',
+        role: p.role || '', email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research',
+        estValue: p.est_value || '', source: p.source || '', nextAction: p.next_action || '',
+        lastContact: p.last_contact || '', notes: p.notes || ''
+      }));
+    } else if (db.pipeline.length) {
+      for (const p of db.pipeline) await syncPipelineToSupabase(p);
+    }
+    saveGrowthData();
+  } catch(e) { console.warn('Growth load from Supabase failed:', e); }
+}
+
+async function syncWorkstreamToSupabase(w) {
+  try {
+    await supa.upsert('growth_plan', {
+      id: w.id, num: w.num || '', phase: w.phase || '', title: w.title || '',
+      status: w.status || 'Not Started', owner: w.owner || '', timing: w.timing || '',
+      updated: w.updated || '', progress: w.progress || '', next_action: w.nextAction || '', notes: w.notes || ''
+    });
+  } catch(e) { console.warn('Workstream sync failed:', e); }
+}
+
+async function syncPipelineToSupabase(p) {
+  const payload = {
+    school: p.school || '', type: p.type || '', contact: p.contact || '', role: p.role || '',
+    email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research',
+    est_value: p.estValue || '', source: p.source || '', next_action: p.nextAction || '',
+    last_contact: p.lastContact || '', notes: p.notes || ''
+  };
+  try {
+    if (p.id && !String(p.id).startsWith('local_')) {
+      await supa.patch('pipeline', p.id, payload);
+    } else {
+      const res = await supa.post('pipeline', payload);
+      if (res && res[0] && res[0].id) p.id = res[0].id;
+    }
+  } catch(e) { console.warn('Pipeline sync failed:', e); }
+}
+
+async function deletePipelineFromSupabase(p) {
+  if (p.id && !String(p.id).startsWith('local_')) {
+    try { await supa.delete('pipeline', p.id); } catch(e) { console.warn('Pipeline delete failed:', e); }
+  }
+}
+
 function switchGrowthTab(tab, el) {
   document.querySelectorAll('#page-growth .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
@@ -6591,13 +6654,19 @@ function switchGrowthTab(tab, el) {
     if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
   if (tab === 'plan') renderGrowthPlan();
-  if (tab === 'pipeline') renderPipeline();
+  if (tab === 'pipeline') renderGrowthPipeline();
   if (tab === 'assistant' && !document.getElementById('assistant-messages').innerHTML) {
     document.getElementById('assistant-messages').innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px;">Ask me anything about growing Livingstone. I can research schools, find contacts, and add prospects directly to your pipeline.</div>';
   }
 }
 
-function renderGrowthPage() { renderGrowthPlan(); }
+function renderGrowthPage() {
+  renderGrowthPlan();
+  loadGrowthFromSupabase().then(() => {
+    renderGrowthPlan();
+    if (document.getElementById('growth-tab-pipeline')?.style.display !== 'none') renderGrowthPipeline();
+  });
+}
 
 // --- GROWTH PLAN ---
 function renderGrowthPlan() {
@@ -6680,6 +6749,7 @@ function saveWorkstream() {
   w.notes = document.getElementById('ws-notes').value;
   w.updated = new Date().toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
   saveGrowthData();
+  syncWorkstreamToSupabase(w);
   closeModal('ws-edit-modal');
   renderGrowthPlan();
 }
@@ -6788,19 +6858,23 @@ function savePipelineEntry() {
     source: document.getElementById('pl-source').value,
     nextAction: document.getElementById('pl-next').value,
     notes: document.getElementById('pl-notes').value,
-    lastContact: idx >= 0 ? db.pipeline[idx].lastContact : ''
+    lastContact: idx >= 0 ? db.pipeline[idx].lastContact : '',
+    id: idx >= 0 ? db.pipeline[idx].id : ('local_' + Date.now())
   };
   if (!entry.school) { alert('Enter a school name.'); return; }
   if (idx >= 0) { db.pipeline[idx] = entry; } else { db.pipeline.push(entry); }
   saveGrowthData();
+  syncPipelineToSupabase(entry);
   closeModal('pipeline-edit-modal');
   renderGrowthPipeline();
 }
 
 function deletePipelineEntry(idx) {
   if (!confirm('Remove ' + (db.pipeline[idx]?.school||'') + ' from pipeline?')) return;
+  const entry = db.pipeline[idx];
   db.pipeline.splice(idx, 1);
   saveGrowthData();
+  if (entry) deletePipelineFromSupabase(entry);
   renderGrowthPipeline();
 }
 
@@ -6932,7 +7006,8 @@ For contacts, only include publicly available information (names from school web
           newEntries.forEach(e => {
             // Don't add duplicates
             if (!db.pipeline.some(p => p.school.toLowerCase() === (e.school||'').toLowerCase())) {
-              db.pipeline.push({
+              const newP = {
+                id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2,4),
                 school: e.school || '',
                 type: e.type || '',
                 contact: e.contact || '',
@@ -6945,7 +7020,9 @@ For contacts, only include publicly available information (names from school web
                 nextAction: e.nextAction || '',
                 notes: e.notes || '',
                 lastContact: ''
-              });
+              };
+              db.pipeline.push(newP);
+              syncPipelineToSupabase(newP);
               addedCount++;
             }
           });
