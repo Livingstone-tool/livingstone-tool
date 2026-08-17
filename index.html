@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.46 -->
+<!-- Livingstone v4.47 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.46</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.47</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7074,8 +7074,19 @@ async function syncAllScheduleToSupabase() {
   saveSchedule();
 }
 
+function ensureScheduleIds() {
+  db.scheduleEntries.forEach(e => {
+    if (!e.id) e.id = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+  });
+}
+
+function schEntryById(id) {
+  return db.scheduleEntries.find(e => e.id === id);
+}
+
 function initScheduleView() {
-  loadScheduleFromSupabase().then(() => renderSchedule());
+  ensureScheduleIds();
+  loadScheduleFromSupabase().then(() => { ensureScheduleIds(); renderSchedule(); });
 }
 window._scheduleHistory = [];
 
@@ -7137,10 +7148,10 @@ function renderSchedule() {
       dayEntries.forEach(e => {
         const globalIdx = db.scheduleEntries.indexOf(e);
         const col = catColors[e.category] || '#6b7e8e';
-        html += '<div class="sch-card" draggable="true" data-idx="' + globalIdx + '" style="position:relative;padding:4px 6px;padding-right:30px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:grab;user-select:none;-webkit-user-select:none;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
+        html += '<div class="sch-card" draggable="true" data-id="' + e.id + '" data-day="' + day + '" style="position:relative;padding:4px 6px;padding-right:30px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + col + ';background:rgba(0,0,0,0.02);font-size:11px;cursor:grab;user-select:none;-webkit-user-select:none;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
         html += '<div style="position:absolute;top:2px;right:2px;display:flex;gap:2px;">';
-        html += '<button class="sch-edit-btn" data-idx="' + globalIdx + '" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;padding:1px;" title="Edit">✏️</button>';
-        html += '<button class="sch-del-btn" data-idx="' + globalIdx + '" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;padding:1px;" title="Remove">✕</button>';
+        html += '<button class="sch-edit-btn" data-id="' + e.id + '" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;padding:1px;" title="Edit">✏️</button>';
+        html += '<button class="sch-del-btn" data-id="' + e.id + '" data-day="' + day + '" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;line-height:1;padding:1px;" title="Remove">✕</button>';
         html += '</div>';
         html += '<div style="font-weight:600;">' + (catIcons[e.category]||'') + ' ' + (e.person||'') + '</div>';
         html += '<div>' + (e.task||'') + '</div>';
@@ -7162,11 +7173,11 @@ function renderSchedule() {
       const globalIdx = db.scheduleEntries.indexOf(e);
       const col = catColors[e.category] || '#6b7e8e';
       html += '<div style="display:flex;gap:6px;align-items:center;padding:3px 0;font-size:12px;' + (e.done?'opacity:0.4;text-decoration:line-through;':'') + '">';
-      html += '<input type="checkbox" ' + (e.done?'checked':'') + ' onchange="toggleScheduleDone(' + globalIdx + ')" style="width:14px;height:14px;">';
+      html += '<input type="checkbox" ' + (e.done?'checked':'') + ' onchange="toggleScheduleDone(\'' + e.id + '\')" style="width:14px;height:14px;">';
       html += '<span style="color:' + col + ';">' + (catIcons[e.category]||'') + '</span> ';
       html += '<span style="font-weight:600;">' + (e.person ? e.person + ': ' : '') + '</span>' + (e.task||'');
       if (e.jobRef) html += ' <span style="color:var(--text-muted);font-size:10px;">[' + e.jobRef + ']</span>';
-      html += ' <button onclick="deleteScheduleEntry(' + globalIdx + ')" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:11px;margin-left:auto;">✕</button>';
+      html += ' <button onclick="deleteScheduleEntry(\'' + e.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:11px;margin-left:auto;">✕</button>';
       html += '</div>';
     });
     html += '</div>';
@@ -7220,37 +7231,32 @@ function renderSchedule() {
     zone.addEventListener('drop', function(ev) {
       ev.preventDefault();
       this.style.background = 'transparent';
-      const idx = parseInt(ev.dataTransfer.getData('text/plain'));
+      const payload = (ev.dataTransfer.getData('text/plain') || '').split('|');
+      const entryId = payload[0];
+      const sourceDay = payload[1] || '';
       const targetDay = this.dataset.day;
-      dragLog('DROP idx=' + idx + ' day=' + targetDay + (isNaN(idx)?' (NaN!)':''));
-      const entry = db.scheduleEntries[idx];
-      if (!entry || isNaN(idx)) return;
+      dragLog('DROP id=' + entryId + ' ' + sourceDay + '→' + targetDay);
+      const entry = schEntryById(entryId);
+      if (!entry) return;
 
-      // Day assignment
-      if (Array.isArray(entry.days) && entry.days.length <= 1) {
-        entry.days = [targetDay];
-      } else if (Array.isArray(entry.days) && !entry.days.includes(targetDay)) {
-        entry.days = [...entry.days, targetDay].sort((a,b) => ['mon','tue','wed','thu','fri','sat','sun'].indexOf(a) - ['mon','tue','wed','thu','fri','sat','sun'].indexOf(b));
+      // Per-day move: this card instance leaves sourceDay and lands on targetDay
+      if (sourceDay !== targetDay) {
+        let days = Array.isArray(entry.days) ? [...entry.days] : [];
+        days = days.filter(d => d !== sourceDay);
+        if (!days.includes(targetDay)) days.push(targetDay);
+        const order = ['mon','tue','wed','thu','fri','sat','sun'];
+        entry.days = days.sort((a,b) => order.indexOf(a) - order.indexOf(b));
       }
 
       // Position: insert relative to the card under the cursor
       const targetCard = ev.target.closest('.sch-card');
       db.scheduleEntries = db.scheduleEntries.filter(e => e !== entry);
-      if (targetCard && parseInt(targetCard.dataset.idx) !== idx) {
-        const targetEntry = (function(){
-          // dataset.idx refers to pre-removal indexing; recover the entry via the original array position
-          const origIdx = parseInt(targetCard.dataset.idx);
-          // origIdx was the index before we removed `entry`; adjust if needed
-          return origIdx > idx ? db.scheduleEntries[origIdx - 1] : db.scheduleEntries[origIdx];
-        })();
-        const insertAt = db.scheduleEntries.indexOf(targetEntry);
-        if (insertAt >= 0) {
-          const rect = targetCard.getBoundingClientRect();
-          const before = ev.clientY < rect.top + rect.height / 2;
-          db.scheduleEntries.splice(before ? insertAt : insertAt + 1, 0, entry);
-        } else {
-          db.scheduleEntries.push(entry);
-        }
+      const targetEntry = targetCard && targetCard.dataset.id !== entryId ? schEntryById(targetCard.dataset.id) : null;
+      const insertAt = targetEntry ? db.scheduleEntries.indexOf(targetEntry) : -1;
+      if (insertAt >= 0) {
+        const rect = targetCard.getBoundingClientRect();
+        const before = ev.clientY < rect.top + rect.height / 2;
+        db.scheduleEntries.splice(before ? insertAt : insertAt + 1, 0, entry);
       } else {
         db.scheduleEntries.push(entry);
       }
@@ -7263,28 +7269,15 @@ function renderSchedule() {
 
   // Attach directly to each card + track mousedown to see what's intercepting
   el.querySelectorAll('.sch-card').forEach(card => {
-    card.addEventListener('mousedown', function(ev) {
-      dragLog('mousedown card ' + this.dataset.idx);
-    });
     card.addEventListener('dragstart', function(ev) {
-      dragLog('dragstart card ' + this.dataset.idx);
-      ev.dataTransfer.setData('text/plain', this.dataset.idx);
+      dragLog('dragstart ' + this.dataset.id + ' from ' + this.dataset.day);
+      ev.dataTransfer.setData('text/plain', this.dataset.id + '|' + this.dataset.day);
       ev.dataTransfer.effectAllowed = 'move';
       this.style.opacity = '0.4';
     });
     card.addEventListener('dragend', function(ev) {
       this.style.opacity = '1';
-      dragLog('dragend (dropEffect=' + ev.dataTransfer.dropEffect + ')');
     });
-  });
-
-  el.addEventListener('dragstart', function(ev) {
-    const card = ev.target.closest('.sch-card');
-    dragLog('dragstart(el) ' + (card ? card.dataset.idx : 'no-card'));
-    if (!card) return;
-    ev.dataTransfer.setData('text/plain', card.dataset.idx);
-    ev.dataTransfer.effectAllowed = 'move';
-    card.style.opacity = '0.4';
   });
 
   el.addEventListener('dragend', function(ev) {
@@ -7295,21 +7288,23 @@ function renderSchedule() {
   el.querySelectorAll('.sch-edit-btn').forEach(btn => {
     btn.addEventListener('click', function(ev) {
       ev.stopPropagation();
-      editScheduleEntry(parseInt(this.dataset.idx));
+      editScheduleEntry(this.dataset.id);
     });
   });
   el.querySelectorAll('.sch-del-btn').forEach(btn => {
     btn.addEventListener('click', function(ev) {
       ev.stopPropagation();
-      deleteScheduleEntry(parseInt(this.dataset.idx));
+      deleteScheduleEntry(this.dataset.id, this.dataset.day);
     });
   });
 }
 
-function toggleScheduleDone(idx) {
-  db.scheduleEntries[idx].done = !db.scheduleEntries[idx].done;
+function toggleScheduleDone(id) {
+  const entry = schEntryById(id);
+  if (!entry) return;
+  entry.done = !entry.done;
   saveSchedule();
-  syncScheduleEntryToSupabase(db.scheduleEntries[idx]);
+  syncScheduleEntryToSupabase(entry);
   renderSchedule();
 }
 
@@ -7397,16 +7392,24 @@ function shareScheduleLink() {
   win.document.close();
 }
 
-function deleteScheduleEntry(idx) {
-  const entry = db.scheduleEntries[idx];
-  db.scheduleEntries.splice(idx, 1);
-  saveSchedule();
-  if (entry) deleteScheduleEntryFromSupabase(entry);
+function deleteScheduleEntry(id, day) {
+  const entry = schEntryById(id);
+  if (!entry) return;
+  if (day && Array.isArray(entry.days) && entry.days.length > 1) {
+    // Remove just this day instance from a multi-day card
+    entry.days = entry.days.filter(d => d !== day);
+    saveSchedule();
+    syncScheduleEntryToSupabase(entry);
+  } else {
+    db.scheduleEntries = db.scheduleEntries.filter(e => e !== entry);
+    saveSchedule();
+    deleteScheduleEntryFromSupabase(entry);
+  }
   renderSchedule();
 }
 
-function editScheduleEntry(idx) {
-  const entry = db.scheduleEntries[idx];
+function editScheduleEntry(id) {
+  const entry = schEntryById(id);
   if (!entry) return;
 
   let modal = document.getElementById('schedule-edit-modal');
@@ -7433,7 +7436,7 @@ function editScheduleEntry(idx) {
   const dayChecks = dayNames.map((d,i) => '<label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="sch-day-check" value="' + d + '"' + (entryDays.includes(d)?' checked':'') + '> ' + dayLabels[i] + '</label>').join(' ');
 
   document.getElementById('sch-edit-body').innerHTML =
-    '<input type="hidden" id="sch-edit-idx" value="' + idx + '">'
+    '<input type="hidden" id="sch-edit-id" value="' + id + '">'
     + '<div class="grid-2" style="gap:12px;">'
     + '<div class="form-group"><label>Category</label><select id="sch-e-cat" style="width:100%;">'
     + '<option value="own"' + (entry.category==='own'?' selected':'') + '>🔨 Our Work</option>'
@@ -7511,8 +7514,7 @@ function reorderScheduleCard(idx, dir, day) {
 }
 
 function saveScheduleEdit() {
-  const idx = parseInt(document.getElementById('sch-edit-idx').value);
-  const entry = db.scheduleEntries[idx];
+  const entry = schEntryById(document.getElementById('sch-edit-id').value);
   if (!entry) return;
   entry.category = document.getElementById('sch-e-cat').value;
   entry.person = document.getElementById('sch-e-person').value;
