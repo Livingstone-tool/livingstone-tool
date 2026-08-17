@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.41 -->
+<!-- Livingstone v4.42 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.41</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.42</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7201,6 +7201,12 @@ function renderSchedule() {
     document.getElementById('sch-drag-debug').textContent = 'drag debug: rendered (cards: ' + el.querySelectorAll('.sch-card').length + ', zones: ' + el.querySelectorAll('.sch-drop-zone').length + ')';
   }
   const dbgEl = document.getElementById('sch-drag-debug');
+  window._dragLog = window._dragLog || [];
+  function dragLog(msg) {
+    window._dragLog.push(msg);
+    if (window._dragLog.length > 4) window._dragLog.shift();
+    if (dbgEl) dbgEl.innerHTML = window._dragLog.join('<br>');
+  }
 
   // Event delegation for drag and drop — matches working test pattern
   el.querySelectorAll('.sch-drop-zone').forEach(zone => {
@@ -7208,7 +7214,7 @@ function renderSchedule() {
       ev.preventDefault();
       ev.dataTransfer.dropEffect = 'move';
       this.style.background = 'rgba(181,221,60,0.2)';
-      if (dbgEl) dbgEl.textContent = 'drag debug: dragover on ' + this.dataset.day;
+      if (!this._loggedOver) { dragLog('dragover ' + this.dataset.day); this._loggedOver = true; }
     });
     zone.addEventListener('dragleave', function() {
       this.style.background = 'transparent';
@@ -7218,7 +7224,7 @@ function renderSchedule() {
       this.style.background = 'transparent';
       const idx = parseInt(ev.dataTransfer.getData('text/plain'));
       const targetDay = this.dataset.day;
-      if (dbgEl) dbgEl.textContent = 'drag debug: DROP idx=' + idx + ' day=' + targetDay;
+      dragLog('DROP idx=' + idx + ' day=' + targetDay + (isNaN(idx)?' (NaN!)':''));
       const entry = db.scheduleEntries[idx];
       if (!entry || isNaN(idx)) return;
       if (Array.isArray(entry.days) && entry.days.length <= 1) {
@@ -7235,10 +7241,10 @@ function renderSchedule() {
   // Attach directly to each card + track mousedown to see what's intercepting
   el.querySelectorAll('.sch-card').forEach(card => {
     card.addEventListener('mousedown', function(ev) {
-      if (dbgEl) dbgEl.textContent = 'drag debug: mousedown on card ' + this.dataset.idx + ' (draggable=' + this.getAttribute('draggable') + ')';
+      dragLog('mousedown card ' + this.dataset.idx);
     });
     card.addEventListener('dragstart', function(ev) {
-      if (dbgEl) dbgEl.textContent = 'drag debug: dragstart CARD ' + this.dataset.idx;
+      dragLog('dragstart card ' + this.dataset.idx);
       ev.dataTransfer.setData('text/plain', this.dataset.idx);
       ev.dataTransfer.effectAllowed = 'move';
       this.style.opacity = '0.4';
@@ -7250,7 +7256,7 @@ function renderSchedule() {
 
   el.addEventListener('dragstart', function(ev) {
     const card = ev.target.closest('.sch-card');
-    if (dbgEl) dbgEl.textContent = 'drag debug: dragstart fired, card=' + (card ? card.dataset.idx : 'NULL target=' + ev.target.tagName);
+    dragLog('dragstart(el) ' + (card ? card.dataset.idx : 'no-card'));
     if (!card) return;
     ev.dataTransfer.setData('text/plain', card.dataset.idx);
     ev.dataTransfer.effectAllowed = 'move';
