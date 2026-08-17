@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.43 -->
+<!-- Livingstone v4.46 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.43</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.46</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7100,8 +7100,8 @@ function renderSchedule() {
     return;
   }
 
-  const dayNames = ['mon','tue','wed','thu','fri'];
-  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  const dayNames = ['mon','tue','wed','thu','fri','sat','sun'];
+  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   const catColors = { own: '#B5DD3C', sub: '#6B8A1F', delivery: '#3498db', admin: '#6b7e8e' };
   const catIcons = { own: '🔨', sub: '👷', delivery: '📦', admin: '📋' };
 
@@ -7115,14 +7115,14 @@ function renderSchedule() {
   const today = new Date().toISOString().split('T')[0];
 
   // Calendar grid
-  let html = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">';
+  let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
 
   dayNames.forEach((day, i) => {
     const dateStr = dayDates[i].toISOString().split('T')[0];
     const isToday = dateStr === today;
     const dayEntries = entries.filter(e => Array.isArray(e.days) && e.days.includes(day));
 
-    html += '<div class="sch-drop-zone" data-day="' + day + '" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;' + (isToday ? 'border-color:#B5DD3C;border-width:2px;' : '') + '">';
+    html += '<div class="sch-drop-zone" data-day="' + day + '" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;min-height:160px;' + (isToday ? 'border-color:#B5DD3C;border-width:2px;' : '') + '">';
 
     // Day header
     html += '<div style="padding:6px 10px;font-size:11px;font-weight:600;background:' + (isToday ? 'rgba(181,221,60,0.15)' : 'var(--limestone)') + ';border-bottom:1px solid var(--border);">';
@@ -7130,7 +7130,7 @@ function renderSchedule() {
     html += '</div>';
 
     // Day entries
-    html += '<div style="padding:4px;min-height:60px;">';
+    html += '<div style="padding:4px;flex:1;">';
     if (!dayEntries.length) {
       html += '<div style="color:var(--text-muted);font-size:10px;padding:8px 4px;text-align:center;">—</div>';
     } else {
@@ -7225,11 +7225,36 @@ function renderSchedule() {
       dragLog('DROP idx=' + idx + ' day=' + targetDay + (isNaN(idx)?' (NaN!)':''));
       const entry = db.scheduleEntries[idx];
       if (!entry || isNaN(idx)) return;
+
+      // Day assignment
       if (Array.isArray(entry.days) && entry.days.length <= 1) {
         entry.days = [targetDay];
       } else if (Array.isArray(entry.days) && !entry.days.includes(targetDay)) {
-        entry.days = [...entry.days, targetDay].sort((a,b) => ['mon','tue','wed','thu','fri'].indexOf(a) - ['mon','tue','wed','thu','fri'].indexOf(b));
+        entry.days = [...entry.days, targetDay].sort((a,b) => ['mon','tue','wed','thu','fri','sat','sun'].indexOf(a) - ['mon','tue','wed','thu','fri','sat','sun'].indexOf(b));
       }
+
+      // Position: insert relative to the card under the cursor
+      const targetCard = ev.target.closest('.sch-card');
+      db.scheduleEntries = db.scheduleEntries.filter(e => e !== entry);
+      if (targetCard && parseInt(targetCard.dataset.idx) !== idx) {
+        const targetEntry = (function(){
+          // dataset.idx refers to pre-removal indexing; recover the entry via the original array position
+          const origIdx = parseInt(targetCard.dataset.idx);
+          // origIdx was the index before we removed `entry`; adjust if needed
+          return origIdx > idx ? db.scheduleEntries[origIdx - 1] : db.scheduleEntries[origIdx];
+        })();
+        const insertAt = db.scheduleEntries.indexOf(targetEntry);
+        if (insertAt >= 0) {
+          const rect = targetCard.getBoundingClientRect();
+          const before = ev.clientY < rect.top + rect.height / 2;
+          db.scheduleEntries.splice(before ? insertAt : insertAt + 1, 0, entry);
+        } else {
+          db.scheduleEntries.push(entry);
+        }
+      } else {
+        db.scheduleEntries.push(entry);
+      }
+
       saveSchedule();
       syncScheduleEntryToSupabase(entry);
       renderSchedule();
@@ -7309,7 +7334,7 @@ function dropScheduleCard(event, targetDay) {
     // Multi-day card — replace the dragged-from day with the target day
     // Since we can't easily know which day it was dragged from, just add the target day
     if (!days.includes(targetDay)) {
-      entry.days = [...days, targetDay].sort((a,b) => ['mon','tue','wed','thu','fri'].indexOf(a) - ['mon','tue','wed','thu','fri'].indexOf(b));
+      entry.days = [...days, targetDay].sort((a,b) => ['mon','tue','wed','thu','fri','sat','sun'].indexOf(a) - ['mon','tue','wed','thu','fri','sat','sun'].indexOf(b));
     }
   }
   saveSchedule();
@@ -7326,8 +7351,8 @@ function shareScheduleLink() {
 
   const weekLabel = ws.toLocaleDateString('en-GB', {day:'numeric',month:'long'}) + ' — ' + new Date(ws.getTime()+6*86400000).toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
 
-  const dayNames = ['mon','tue','wed','thu','fri'];
-  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  const dayNames = ['mon','tue','wed','thu','fri','sat','sun'];
+  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   const dayDates = dayNames.map((d,i) => { const dt = new Date(ws); dt.setDate(dt.getDate()+i); return dt; });
   const catColors = { own:'#B5DD3C', sub:'#6B8A1F', delivery:'#3498db', admin:'#6b7e8e' };
   const catIcons = { own:'🔨', sub:'👷', delivery:'📦', admin:'📋' };
@@ -7336,7 +7361,7 @@ function shareScheduleLink() {
   cal += '<title>Livingstone — ' + weekLabel + '</title>';
   cal += '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Inter,sans-serif;background:#F4F1EB;padding:16px}';
   cal += '.header{text-align:center;margin-bottom:16px}.brand{font-size:18px;font-weight:700;letter-spacing:0.1em}.week{font-size:14px;color:#6b7e8e;margin-top:4px}';
-  cal += '.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}';
+  cal += '.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}';
   cal += '.day{background:white;border:1px solid rgba(0,0,0,0.1);border-radius:8px;overflow:hidden;min-height:100px}';
   cal += '.day-head{padding:6px 10px;font-size:11px;font-weight:600;background:#F4F1EB;border-bottom:1px solid rgba(0,0,0,0.1)}';
   cal += '.day-body{padding:4px}';
@@ -7402,8 +7427,8 @@ function editScheduleEntry(idx) {
   (db.labourers||[]).forEach(l => { if (l.name) people.add(l.name); });
   const personOpts = [...people].sort().map(p => '<option value="' + p + '"' + (p===entry.person?' selected':'') + '>' + p + '</option>').join('');
 
-  const dayNames = ['mon','tue','wed','thu','fri'];
-  const dayLabels = ['Mon','Tue','Wed','Thu','Fri'];
+  const dayNames = ['mon','tue','wed','thu','fri','sat','sun'];
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const entryDays = Array.isArray(entry.days) ? entry.days : [];
   const dayChecks = dayNames.map((d,i) => '<label style="font-size:12px;cursor:pointer;"><input type="checkbox" class="sch-day-check" value="' + d + '"' + (entryDays.includes(d)?' checked':'') + '> ' + dayLabels[i] + '</label>').join(' ');
 
@@ -7425,6 +7450,7 @@ function editScheduleEntry(idx) {
     + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([\'mon\',\'tue\',\'wed\',\'thu\',\'fri\'])" style="font-size:10px;padding:2px 6px;">All week</button>'
     + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([\'mon\',\'tue\',\'wed\'])" style="font-size:10px;padding:2px 6px;">Mon-Wed</button>'
     + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([\'thu\',\'fri\'])" style="font-size:10px;padding:2px 6px;">Thu-Fri</button>'
+    + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([\'sat\',\'sun\'])" style="font-size:10px;padding:2px 6px;">W/end</button>'
     + '<button type="button" class="btn btn-sm btn-secondary" onclick="schSetDays([])" style="font-size:10px;padding:2px 6px;">Clear</button>'
     + '</div></div></div>'
     + '<div class="form-group"><label>Notes</label><input type="text" id="sch-e-notes" value="' + (entry.notes||'').replace(/"/g,'&quot;') + '"></div>'
@@ -7446,7 +7472,7 @@ function schSetDays(days) {
 function moveScheduleCard(idx, dir) {
   const entry = db.scheduleEntries[idx];
   if (!entry || !Array.isArray(entry.days) || entry.days.length === 0) return;
-  const dayOrder = ['mon','tue','wed','thu','fri'];
+  const dayOrder = ['mon','tue','wed','thu','fri','sat','sun'];
 
   if (entry.days.length === 1) {
     // Single day — shift left or right
@@ -7749,8 +7775,8 @@ function shareSchedule(method) {
   let text = '📅 LIVINGSTONE — WEEK OF ' + weekLabel.toUpperCase() + '\n';
   text += '─────────────────────\n\n';
 
-  const dayNames = ['mon','tue','wed','thu','fri'];
-  const dayLabels = { mon:'MONDAY', tue:'TUESDAY', wed:'WEDNESDAY', thu:'THURSDAY', fri:'FRIDAY' };
+  const dayNames = ['mon','tue','wed','thu','fri','sat','sun'];
+  const dayLabels = { mon:'MONDAY', tue:'TUESDAY', wed:'WEDNESDAY', thu:'THURSDAY', fri:'FRIDAY', sat:'SATURDAY', sun:'SUNDAY' };
 
   dayNames.forEach(day => {
     const dayEntries = entries.filter(e => Array.isArray(e.days) && e.days.includes(day));
