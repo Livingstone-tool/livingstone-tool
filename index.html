@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.50 -->
+<!-- Livingstone v4.51 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.50</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.51</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1172,8 +1172,10 @@ window.onerror=function(m,s,l,c,e){
   <div id="page-growth" class="page content">
     <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;">
       <div class="tab active" onclick="switchGrowthTab('plan',this)">📋 Growth Plan</div>
-      <div class="tab" onclick="switchGrowthTab('pipeline',this)">🏫 Pipeline</div>
-      <div class="tab" onclick="switchGrowthTab('assistant',this)">🤖 Assistant</div>
+      <div class="tab" onclick="switchGrowthTab('pipeline',this)">🏫 Schools</div>
+      <div class="tab" onclick="switchGrowthTab('assistant',this)">🤖 Schools Assistant</div>
+      <div class="tab" onclick="switchGrowthTab('councils',this)">🏘 Councils</div>
+      <div class="tab" onclick="switchGrowthTab('cassistant',this)">🏛 Council Assistant</div>
     </div>
 
     <!-- PLAN TRACKER -->
@@ -1188,6 +1190,24 @@ window.onerror=function(m,s,l,c,e){
         <button class="btn btn-sm btn-primary" onclick="addPipelineEntry()">+ Add Prospect</button>
       </div>
       <div id="pipeline-content"></div>
+    </div>
+
+    <!-- COUNCILS -->
+    <div id="growth-tab-councils" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div></div>
+        <button class="btn btn-sm btn-primary" onclick="addCouncilEntry()">+ Add Council</button>
+      </div>
+      <div id="council-pipeline-content"></div>
+    </div>
+
+    <!-- COUNCIL ASSISTANT -->
+    <div id="growth-tab-cassistant" style="display:none;">
+      <div id="cassistant-messages" style="min-height:200px;max-height:500px;overflow-y:auto;margin-bottom:12px;padding:12px;background:var(--white);border:1px solid var(--border);border-radius:8px;"></div>
+      <div style="display:flex;gap:8px;">
+        <textarea id="cassistant-input" rows="2" placeholder="Ask about the council empty homes route — research teams, grant schemes, procurement thresholds, add councils to the pipeline..." style="flex:1;font-size:13px;padding:10px;border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+        <button class="btn btn-primary" onclick="sendCouncilAssistantMessage()" style="align-self:flex-end;">Send →</button>
+      </div>
     </div>
 
     <!-- ASSISTANT -->
@@ -6649,12 +6669,16 @@ async function deletePipelineFromSupabase(p) {
 function switchGrowthTab(tab, el) {
   document.querySelectorAll('#page-growth .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['plan','pipeline','assistant'].forEach(t => {
+  ['plan','pipeline','assistant','councils','cassistant'].forEach(t => {
     const el2 = document.getElementById('growth-tab-' + t);
     if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
   if (tab === 'plan') renderGrowthPlan();
   if (tab === 'pipeline') renderGrowthPipeline();
+  if (tab === 'councils') renderCouncilPipeline();
+  if (tab === 'cassistant' && !document.getElementById('cassistant-messages').innerHTML) {
+    document.getElementById('cassistant-messages').innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px;">Ask me anything about the council empty homes route. I can research empty homes teams, grant funding, procurement routes, and add councils to the pipeline.</div>';
+  }
   if (tab === 'assistant' && !document.getElementById('assistant-messages').innerHTML) {
     document.getElementById('assistant-messages').innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px;">Ask me anything about growing Livingstone. I can research schools, find contacts, and add prospects directly to your pipeline.</div>';
   }
@@ -6877,6 +6901,288 @@ function deletePipelineEntry(idx) {
   if (entry) deletePipelineFromSupabase(entry);
   renderGrowthPipeline();
 }
+
+// --- COUNCIL PIPELINE (empty homes route) ---
+if (!db.councilPipeline) db.councilPipeline = [];
+try { const cp = JSON.parse(localStorage.getItem('livingstoneCouncilPipeline')); if (cp) db.councilPipeline = cp; } catch(e) {}
+
+function saveCouncilData() {
+  localStorage.setItem('livingstoneCouncilPipeline', JSON.stringify(db.councilPipeline));
+}
+
+async function loadCouncilFromSupabase() {
+  try {
+    const rows = await supa.get('council_pipeline', 'order=created_at.asc');
+    if (rows && rows.length) {
+      db.councilPipeline = rows.map(p => ({
+        id: p.id, council: p.council || '', team: p.team || '', contact: p.contact || '',
+        role: p.role || '', email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research',
+        area: p.area || '', estValue: p.est_value || '', source: p.source || '',
+        nextAction: p.next_action || '', lastContact: p.last_contact || '', notes: p.notes || ''
+      }));
+      saveCouncilData();
+    } else if (db.councilPipeline.length) {
+      for (const p of db.councilPipeline) await syncCouncilToSupabase(p);
+    }
+  } catch(e) { console.warn('Council load failed:', e); }
+}
+
+async function syncCouncilToSupabase(p) {
+  const payload = {
+    council: p.council || '', team: p.team || '', contact: p.contact || '', role: p.role || '',
+    email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research', area: p.area || '',
+    est_value: p.estValue || '', source: p.source || '', next_action: p.nextAction || '',
+    last_contact: p.lastContact || '', notes: p.notes || ''
+  };
+  try {
+    if (p.id && !String(p.id).startsWith('local_')) {
+      await supa.patch('council_pipeline', p.id, payload);
+    } else {
+      const res = await supa.post('council_pipeline', payload);
+      if (res && res[0] && res[0].id) p.id = res[0].id;
+    }
+  } catch(e) { console.warn('Council sync failed:', e); }
+}
+
+async function deleteCouncilFromSupabase(p) {
+  if (p.id && !String(p.id).startsWith('local_')) {
+    try { await supa.delete('council_pipeline', p.id); } catch(e) { console.warn('Council delete failed:', e); }
+  }
+}
+
+const COUNCIL_STAGES = ['Research','Contacted','Meeting Booked','Framework/Approved List','Quoting','Quoted','Won','Lost'];
+
+function renderCouncilPipeline() {
+  const el = document.getElementById('council-pipeline-content');
+  if (!el) return;
+  loadCouncilFromSupabase().then(() => renderCouncilPipelineNow());
+  renderCouncilPipelineNow();
+}
+
+function renderCouncilPipelineNow() {
+  const el = document.getElementById('council-pipeline-content');
+  if (!el) return;
+  const stageColors = { Research:'#6b7e8e', Contacted:'#3498db', 'Meeting Booked':'#6B8A1F', 'Framework/Approved List':'#B5DD3C', Quoting:'#c8890a', Quoted:'#9b59b6', Won:'#2d7d4e', Lost:'#c0392b' };
+
+  if (!db.councilPipeline.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:13px;">No councils yet. Add them manually or use the Council Assistant to research and populate.</div>';
+    return;
+  }
+
+  let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+  html += '<thead><tr><th>Council</th><th>Team</th><th>Contact</th><th>Role</th><th>Stage</th><th>Area</th><th>Next Action</th><th>Last Contact</th><th></th></tr></thead><tbody>';
+
+  db.councilPipeline.sort((a,b) => COUNCIL_STAGES.indexOf(a.stage) - COUNCIL_STAGES.indexOf(b.stage)).forEach((p, i) => {
+    const col = stageColors[p.stage] || '#6b7e8e';
+    html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="editCouncilEntry(' + i + ')">';
+    html += '<td style="padding:8px 10px;font-weight:600;">' + (p.council||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;">' + (p.team||'') + '</td>';
+    html += '<td style="padding:8px 6px;">' + (p.contact||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;color:var(--text-muted);">' + (p.role||'') + '</td>';
+    html += '<td style="padding:8px 6px;"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:' + col + ';color:white;">' + (p.stage||'') + '</span></td>';
+    html += '<td style="padding:8px 6px;font-size:11px;">' + (p.area||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;color:var(--copper);">' + (p.nextAction||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;color:var(--text-muted);">' + (p.lastContact||'') + '</td>';
+    html += '<td style="padding:8px 4px;"><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCouncilEntry(' + i + ')" style="font-size:10px;padding:2px 6px;">✕</button></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function addCouncilEntry() {
+  showCouncilModal({ council:'', team:'Empty Homes', contact:'', role:'', email:'', phone:'', stage:'Research', area:'', estValue:'', source:'', nextAction:'', lastContact:'', notes:'' }, -1);
+}
+
+function editCouncilEntry(idx) {
+  showCouncilModal(db.councilPipeline[idx], idx);
+}
+
+function showCouncilModal(entry, idx) {
+  let modal = document.getElementById('council-edit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'council-edit-modal';
+    modal.className = 'modal-overlay';
+    modal.onclick = function(e) { if(e.target===modal) closeModal('council-edit-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:500px;"><div class="modal-header"><div class="modal-title" id="cl-modal-title"></div><button class="modal-close" onclick="closeModal(\'council-edit-modal\')">×</button></div><div class="modal-body" id="cl-modal-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+  document.getElementById('cl-modal-title').textContent = idx < 0 ? 'Add Council' : 'Edit — ' + (entry.council||'');
+  document.getElementById('cl-modal-body').innerHTML =
+    '<input type="hidden" id="cl-idx" value="' + idx + '">'
+    + '<div class="form-group"><label>Council</label><input type="text" id="cl-council" value="' + (entry.council||'').replace(/"/g,'&quot;') + '" placeholder="e.g. Stafford Borough Council"></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Team</label><input type="text" id="cl-team" value="' + (entry.team||'') + '" placeholder="e.g. Empty Homes, Housing"></div>'
+    + '<div class="form-group"><label>Stage</label><select id="cl-stage" style="width:100%;">' + COUNCIL_STAGES.map(s => '<option' + (s===entry.stage?' selected':'') + '>' + s + '</option>').join('') + '</select></div></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Contact</label><input type="text" id="cl-contact" value="' + (entry.contact||'').replace(/"/g,'&quot;') + '"></div>'
+    + '<div class="form-group"><label>Role</label><input type="text" id="cl-role" value="' + (entry.role||'') + '" placeholder="e.g. Empty Homes Officer"></div></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Email</label><input type="email" id="cl-email" value="' + (entry.email||'') + '"></div>'
+    + '<div class="form-group"><label>Phone</label><input type="tel" id="cl-phone" value="' + (entry.phone||'') + '"></div></div>'
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div class="form-group"><label>Area</label><input type="text" id="cl-area" value="' + (entry.area||'') + '" placeholder="e.g. Stafford, Stone"></div>'
+    + '<div class="form-group"><label>Source</label><input type="text" id="cl-source" value="' + (entry.source||'') + '"></div></div>'
+    + '<div class="form-group"><label>Next Action</label><input type="text" id="cl-next" value="' + (entry.nextAction||'').replace(/"/g,'&quot;') + '"></div>'
+    + '<div class="form-group"><label>Notes</label><textarea id="cl-notes" rows="2" style="width:100%;">' + (entry.notes||'') + '</textarea></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">'
+    + '<button class="btn btn-secondary" onclick="closeModal(\'council-edit-modal\')">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="saveCouncilEntry()">Save</button></div>';
+  modal.style.display = 'flex';
+}
+
+function saveCouncilEntry() {
+  const idx = parseInt(document.getElementById('cl-idx').value);
+  const entry = {
+    council: document.getElementById('cl-council').value,
+    team: document.getElementById('cl-team').value,
+    contact: document.getElementById('cl-contact').value,
+    role: document.getElementById('cl-role').value,
+    email: document.getElementById('cl-email').value,
+    phone: document.getElementById('cl-phone').value,
+    stage: document.getElementById('cl-stage').value,
+    area: document.getElementById('cl-area').value,
+    source: document.getElementById('cl-source').value,
+    nextAction: document.getElementById('cl-next').value,
+    notes: document.getElementById('cl-notes').value,
+    lastContact: idx >= 0 ? db.councilPipeline[idx].lastContact : '',
+    estValue: idx >= 0 ? db.councilPipeline[idx].estValue : '',
+    id: idx >= 0 ? db.councilPipeline[idx].id : ('local_' + Date.now())
+  };
+  if (!entry.council) { alert('Enter a council name.'); return; }
+  if (idx >= 0) { db.councilPipeline[idx] = entry; } else { db.councilPipeline.push(entry); }
+  saveCouncilData();
+  syncCouncilToSupabase(entry);
+  closeModal('council-edit-modal');
+  renderCouncilPipelineNow();
+}
+
+function deleteCouncilEntry(idx) {
+  if (!confirm('Remove ' + (db.councilPipeline[idx]?.council||'') + '?')) return;
+  const entry = db.councilPipeline[idx];
+  db.councilPipeline.splice(idx, 1);
+  saveCouncilData();
+  if (entry) deleteCouncilFromSupabase(entry);
+  renderCouncilPipelineNow();
+}
+
+// --- COUNCIL ASSISTANT ---
+window._cassistantHistory = [];
+
+async function sendCouncilAssistantMessage() {
+  const input = document.getElementById('cassistant-input');
+  const messagesEl = document.getElementById('cassistant-messages');
+  const msg = input?.value?.trim();
+  if (!msg) return;
+
+  messagesEl.innerHTML += '<div style="text-align:right;margin-bottom:8px;"><div style="display:inline-block;max-width:80%;padding:8px 12px;background:#B5DD3C;color:#0D0D0D;border-radius:12px 12px 0 12px;font-size:13px;">' + msg.replace(/</g,'&lt;').replace(/\n/g,'<br>') + '</div></div>';
+  input.value = '';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  const cpContext = db.councilPipeline.length
+    ? 'CURRENT COUNCIL PIPELINE (' + db.councilPipeline.length + '):\n' + db.councilPipeline.map(p => '- ' + p.council + ' [' + p.stage + '] Team: ' + (p.team||'?') + ', Contact: ' + (p.contact||'none') + (p.notes?' — '+p.notes:'')).join('\n')
+    : 'COUNCIL PIPELINE: (empty)';
+
+  const systemPrompt = 'You are a growth assistant for Livingstone Projects, a Staffordshire renovation contractor (Adam Hemming: commercial/brand; Tom Dickson: operations). Based in Stone, Staffordshire. This conversation is about the COUNCIL EMPTY HOMES route — approaching local authority empty homes / housing teams to win renovation work bringing empty properties back into use.\n\nCONTEXT:\n- Target: empty homes officers, private sector housing teams, housing strategy officers at councils within ~40 miles of Stone\n- Local councils: Stafford Borough, Stoke-on-Trent City, Newcastle-under-Lyme, Staffordshire Moorlands, East Staffordshire, Cannock Chase, South Staffordshire, Lichfield, Tamworth, Cheshire East, Shropshire\n- Relevant angles: empty homes grants/loans to owners (council-administered), council-owned stock refurbs, compulsory purchase renovations, VAT advantages (5% reduced rate on homes empty 2+ years, 0% possible on 10+ years), approved contractor lists and frameworks, procurement thresholds (work under ~£25k often needs only 3 quotes)\n- Livingstone strengths: full-refurb capability, professional H&S/insurance documentation, quality domestic finish, local, responsive\n\n' + cpContext + '\n\nYou can:\n1. ANSWER QUESTIONS — research councils, empty homes strategies, grant schemes, procurement routes\n2. ADD councils: [COUNCIL_ADD]\n[{"council":"Name","team":"Empty Homes","contact":"","role":"","area":"","stage":"Research","notes":""}]\n[/COUNCIL_ADD]\n3. UPDATE existing councils (match by council name, only included fields change, notes append): [COUNCIL_UPDATE]\n[{"council":"Name","contact":"...","notes":"..."}]\n[/COUNCIL_UPDATE]\n\nOnly use publicly available contact info. Do not invent names or emails. Be specific and practical; Adam is a senior marketer.';
+
+  messagesEl.innerHTML += '<div id="cassistant-thinking" style="margin-bottom:8px;"><div style="display:inline-block;padding:8px 12px;background:var(--limestone);border-radius:12px 12px 12px 0;font-size:13px;color:var(--text-muted);">Thinking...</div></div>';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  window._cassistantHistory.push({ role: 'user', content: msg });
+
+  try {
+    const response = await fetch(CLAUDE_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 3000,
+        system: systemPrompt,
+        messages: window._cassistantHistory.slice(-10)
+      })
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+    const text = (data.content || []).map(c => c.text || '').join('');
+    window._cassistantHistory.push({ role: 'assistant', content: text });
+
+    let addedCount = 0, updatedCount = 0;
+
+    const addMatch = text.match(/\[COUNCIL_ADD\]([\s\S]*?)\[\/COUNCIL_ADD\]/);
+    if (addMatch) {
+      try {
+        const news = JSON.parse(addMatch[1].trim());
+        if (Array.isArray(news)) {
+          news.forEach(e => {
+            if (!db.councilPipeline.some(p => (p.council||'').toLowerCase() === (e.council||'').toLowerCase())) {
+              const newP = {
+                id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2,4),
+                council: e.council || '', team: e.team || 'Empty Homes', contact: e.contact || '',
+                role: e.role || '', email: e.email || '', phone: e.phone || '',
+                stage: e.stage || 'Research', area: e.area || '', estValue: '',
+                source: e.source || 'Claude research', nextAction: e.nextAction || '',
+                notes: e.notes || '', lastContact: ''
+              };
+              db.councilPipeline.push(newP);
+              syncCouncilToSupabase(newP);
+              addedCount++;
+            }
+          });
+          if (addedCount) saveCouncilData();
+        }
+      } catch(e) { console.warn('Council add parse error:', e); }
+    }
+
+    const updMatch = text.match(/\[COUNCIL_UPDATE\]([\s\S]*?)\[\/COUNCIL_UPDATE\]/);
+    if (updMatch) {
+      try {
+        const upds = JSON.parse(updMatch[1].trim());
+        if (Array.isArray(upds)) {
+          upds.forEach(u => {
+            const p = db.councilPipeline.find(x => (x.council||'').toLowerCase() === (u.council||'').toLowerCase());
+            if (!p) return;
+            ['team','contact','role','email','phone','stage','area','estValue','source','nextAction','lastContact'].forEach(f => {
+              if (u[f] !== undefined && u[f] !== '') p[f] = u[f];
+            });
+            if (u.notes) p.notes = p.notes ? (p.notes + ' | ' + u.notes) : u.notes;
+            syncCouncilToSupabase(p);
+            updatedCount++;
+          });
+          if (updatedCount) saveCouncilData();
+        }
+      } catch(e) { console.warn('Council update parse error:', e); }
+    }
+
+    let displayText = text.replace(/\[COUNCIL_ADD\][\s\S]*?\[\/COUNCIL_ADD\]/g, '').replace(/\[COUNCIL_UPDATE\][\s\S]*?\[\/COUNCIL_UPDATE\]/g, '').trim();
+    displayText = displayText.replace(/</g,'&lt;').replace(/\n/g,'<br>');
+
+    const thinkingEl = document.getElementById('cassistant-thinking');
+    if (thinkingEl) thinkingEl.remove();
+
+    let responseHtml = '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:12px 12px 12px 0;font-size:13px;line-height:1.6;">' + displayText + '</div>';
+    if (addedCount) responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Added ' + addedCount + ' council' + (addedCount>1?'s':'') + '</div>';
+    if (updatedCount) responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Updated ' + updatedCount + ' council' + (updatedCount>1?'s':'') + '</div>';
+    responseHtml += '</div>';
+    messagesEl.innerHTML += responseHtml;
+    if (addedCount || updatedCount) renderCouncilPipelineNow();
+
+  } catch(e) {
+    const thinkingEl = document.getElementById('cassistant-thinking');
+    if (thinkingEl) thinkingEl.remove();
+    messagesEl.innerHTML += '<div style="margin-bottom:8px;"><div style="display:inline-block;padding:8px 12px;background:rgba(192,57,43,0.1);border-radius:12px;font-size:12px;color:var(--danger);">Error: ' + e.message + '</div></div>';
+  }
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// Enter to send for council assistant
+document.addEventListener('keydown', function(e) {
+  if (e.target.id === 'cassistant-input' && e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendCouncilAssistantMessage();
+  }
+});
 
 // --- CLAUDE ASSISTANT ---
 window._assistantHistory = [];
