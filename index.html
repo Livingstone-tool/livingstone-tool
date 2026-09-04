@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.51 -->
+<!-- Livingstone v4.54 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -669,7 +669,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.51</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.54</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -905,7 +905,7 @@ window.onerror=function(m,s,l,c,e){
           </div>
           <div class="form-group">
             <label>Project Description / Scope of Work <span style="font-size:11px;color:var(--text-muted);">(from job)</span></label>
-            <textarea id="qb-desc" rows="3" readonly style="background:var(--limestone);cursor:default;" title="Edit this in the Job form"></textarea>
+            <textarea id="qb-desc" rows="3" placeholder="Project description — shown on the quote. Saved back to the job." onchange="syncQuoteDescToJob()"></textarea>
           </div>
 
           <!-- Quote Mode Selector -->
@@ -3790,6 +3790,16 @@ function quoteJobSelected(ref) {
   loadQuoteDocAttachments(ref);
 }
 
+
+function syncQuoteDescToJob() {
+  const ref = window._activeQuoteRef || document.getElementById('qb-number')?.value;
+  if (!ref) return;
+  const job = db.jobs.find(j => j.ref === ref);
+  if (!job) return;
+  job.desc = document.getElementById('qb-desc')?.value || '';
+  saveAll();
+  syncJobToSupabase(ref);
+}
 
 function newQuoteModal() {
   populateQuoteJobDropdown('');
@@ -12605,6 +12615,36 @@ async function exportQuotePDF() {
   const validEl = document.getElementById('qb-valid-days');
   const validDays = validEl?.value || '30';
 
+  // Payment section: terms text always, gates table when the job has gates
+  const quoteGates = (db.paymentGates||[]).filter(g => g.jobRef === jobRef).sort((a,b) => (a.sortOrder||0) - (b.sortOrder||0));
+  const paymentTermsText = document.getElementById('qb-payment')?.value || '';
+  let paymentScheduleHtml = `
+  <div style="margin:28px 0;">
+    <div style="font-size:13px;font-weight:700;color:#0D0D0D;border-bottom:2px solid #B5DD3C;padding-bottom:4px;margin-bottom:8px;">PAYMENT TERMS</div>
+    ${paymentTermsText ? `<div style="font-size:12px;line-height:1.6;color:#0D0D0D;white-space:pre-line;margin-bottom:${quoteGates.length?'12px':'0'};">${paymentTermsText}</div>` : ''}`;
+  if (quoteGates.length) {
+    const gTotal = quoteGates.reduce((s,g) => s + (g.amount||0), 0);
+    paymentScheduleHtml += `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <tr>
+        <th style="text-align:left;padding:6px 10px;color:#6b7e8e;font-size:11px;">Stage</th>
+        <th style="text-align:right;padding:6px 10px;color:#6b7e8e;font-size:11px;">Amount</th>
+      </tr>
+      ${quoteGates.map(g => `<tr>
+        <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;">${g.name||''}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${(g.amount||0).toLocaleString('en-GB',{minimumFractionDigits:2})}</td>
+      </tr>`).join('')}
+      <tr>
+        <td style="padding:7px 10px;text-align:right;font-weight:600;font-size:12px;color:#6b7e8e;">Total:</td>
+        <td style="padding:7px 10px;text-align:right;font-weight:700;color:#6B8A1F;">£${gTotal.toLocaleString('en-GB',{minimumFractionDigits:2})}</td>
+      </tr>
+    </table>
+    <div style="font-size:11px;color:#6b7e8e;margin-top:4px;">Invoices are issued at each stage as set out above.</div>`;
+  }
+  paymentScheduleHtml += `
+  </div>`;
+  if (!paymentTermsText && !quoteGates.length) paymentScheduleHtml = '';
+
   // Build HTML for print - respect quote mode
   const mode = window._quoteMode || 'detailed';
   let lineRows = '';
@@ -12725,7 +12765,7 @@ async function exportQuotePDF() {
   .client-block { margin-bottom:32px; }
   .client-block h3 { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#B5DD3C; margin-bottom:8px; }
   .client-block p { font-size:14px; line-height:1.7; }
-  .desc-block { background:#F4F1EB; border-left:4px solid #B5DD3C; padding:14px 18px; margin-bottom:32px; font-size:13px; line-height:1.6; color:#0D0D0D; }
+  .desc-block { background:#F4F1EB; border-left:4px solid #B5DD3C; padding:14px 18px; margin-bottom:32px; font-size:13px; line-height:1.6; color:#0D0D0D; white-space:pre-line; }
   table { width:100%; border-collapse:collapse; margin-bottom:24px; font-size:13px; }
   thead tr { background:#0D0D0D; color:white; }
   thead th { padding:10px 10px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; }
@@ -12781,6 +12821,8 @@ async function exportQuotePDF() {
     </tbody>
   </table>
 
+  ${paymentScheduleHtml}
+
   <div class="validity">
     ⏱ This quotation is valid for <strong>${validDays} days</strong> from the date above.
   </div>
@@ -12788,7 +12830,7 @@ async function exportQuotePDF() {
   <div class="footer">
     <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#B5DD3C;margin-bottom:10px;">Terms &amp; Conditions</h3>
     <p><strong>1. Quotation Validity:</strong> This quotation is valid for ${validDays} days from the date above. After this period, prices may be subject to change.</p>
-    <p><strong>2. Payment Terms:</strong> ${document.getElementById('qb-payment')?.value || '25% at 4 stages'}. Further stage payments will be agreed prior to the start of works. Final payment is due upon completion.</p>
+    <p><strong>2. Payment Terms:</strong> ${quoteGates.length ? 'As set out in the Payment Schedule above. ' : ''}${document.getElementById('qb-payment')?.value || '25% at 4 stages'}. Further stage payments will be agreed prior to the start of works. Final payment is due upon completion.</p>
     <p><strong>3. Variations:</strong> Any variations or additional works requested by the client that are outside the agreed scope will be charged accordingly and confirmed in writing before proceeding.</p>
     <p><strong>4. Materials:</strong> All materials supplied by Livingstone Projects remain the property of Livingstone Projects until payment is received in full.</p>
     <p><strong>5. Access &amp; Facilities:</strong> The client agrees to provide reasonable access to the property and basic welfare facilities (water, electricity) for the duration of the works.</p>
