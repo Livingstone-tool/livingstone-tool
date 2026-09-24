@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.54 -->
+<!-- Livingstone v4.57 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -661,6 +661,7 @@ window.onerror=function(m,s,l,c,e){
     <div class="nav-section">
       <div class="nav-label">Business</div>
       <div class="nav-item" onclick="showPage('growth')"><span class="icon">🚀</span> Growth</div>
+      <div class="nav-item" onclick="showPage('braindump')"><span class="icon">🧠</span> Brain Dump</div>
       <div class="nav-item" onclick="showPage('actions')"><span class="icon">🎯</span> Business Actions</div>
       <div class="nav-item" onclick="showPage('finance')"><span class="icon">£</span> Finance</div>
     <div class="nav-item" onclick="showPage('costs')"><span class="icon">💰</span> Cost Tracker</div>
@@ -669,7 +670,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.54</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.57</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -917,6 +918,13 @@ window.onerror=function(m,s,l,c,e){
               <button id="qmode-bytype" class="btn btn-sm btn-secondary" onclick="setQuoteMode('bytype')">By Cost Type</button>
               <button id="qmode-byroomtype" class="btn btn-sm btn-secondary" onclick="setQuoteMode('byroomtype')">Room × Type</button>
             </div>
+          </div>
+          <div id="qb-col-toggles" style="margin:-4px 0 10px;display:flex;align-items:center;gap:14px;font-size:12px;color:var(--text-muted);">
+            <span style="font-weight:600;">Detailed columns:</span>
+            <label style="cursor:pointer;"><input type="checkbox" id="qb-col-qty" checked> Qty</label>
+            <label style="cursor:pointer;"><input type="checkbox" id="qb-col-unit" checked> Unit price</label>
+            <label style="cursor:pointer;"><input type="checkbox" id="qb-col-linetotal" checked> Line totals</label>
+            <label style="cursor:pointer;"><input type="checkbox" id="qb-col-sectotal" checked> Section totals</label>
           </div>
 
           <!-- Rooms / Sections -->
@@ -1169,6 +1177,19 @@ window.onerror=function(m,s,l,c,e){
 
   <!-- ACTIONS PAGE -->
   <!-- GROWTH -->
+  <div id="page-braindump" class="page content">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:12px;color:var(--text-muted);">Shared notes and lists — you and Tom see the same cards.</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-primary" onclick="addBrainCard('note')">+ Note</button>
+          <button class="btn btn-sm btn-primary" onclick="addBrainCard('list')">+ List</button>
+        </div>
+      </div>
+      <div id="bd-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;"></div>
+    </div>
+  </div>
+
   <div id="page-growth" class="page content">
     <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;">
       <div class="tab active" onclick="switchGrowthTab('plan',this)">📋 Growth Plan</div>
@@ -3105,7 +3126,7 @@ const SEED = {
 const PAGE_TITLES = {
   dashboard:'Dashboard', pipeline:'Pipeline', jobs:'All Jobs',
   quotes:'Quote Builder', tasks:'Tasks', subs:'Subcontractors',
-  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth'
+  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth', braindump:'Brain Dump'
 };
 
 function toggleMobileNav() {
@@ -3140,6 +3161,7 @@ function showPage(id, subtab) {
 
 function renderPage(id) {
   if(id==='dashboard') renderDashboard();
+  if(id==='braindump') { renderBrainCards(); loadBrainCardsFromSupabase(); }
   else if(id==='pipeline') renderPipeline();
   else if(id==='jobs') renderJobsTable();
   else if(id==='quotes') renderQuotesTable();
@@ -3157,6 +3179,151 @@ function renderPage(id) {
 // ============================================================
 // DASHBOARD
 // ============================================================
+// --- BRAIN DUMP CARDS (shared via Supabase) ---
+if (!db.brainCards) db.brainCards = [];
+try { const bc = JSON.parse(localStorage.getItem('livingstoneBrainCards')); if (bc) db.brainCards = bc; } catch(e) {}
+
+function saveBrainCards() { localStorage.setItem('livingstoneBrainCards', JSON.stringify(db.brainCards)); }
+
+function getLivingstoneUser() {
+  let u = localStorage.getItem('livingstoneUser');
+  if (!u) {
+    u = (prompt('Your name (shown on shared cards):') || '').trim();
+    if (u) localStorage.setItem('livingstoneUser', u);
+  }
+  return u || '';
+}
+
+async function loadBrainCardsFromSupabase() {
+  try {
+    const rows = await supa.get('brain_cards', 'order=created_at.desc');
+    if (rows) {
+      db.brainCards = rows.map(r => {
+        let items = [];
+        if (r.type === 'list') { try { items = JSON.parse(r.content) || []; } catch(e) {} }
+        return { id: r.id, title: r.title||'', type: r.type||'note',
+          text: r.type === 'note' ? (r.content||'') : '', items: items,
+          createdBy: r.created_by||'', createdAt: r.created_at };
+      });
+      saveBrainCards();
+      renderBrainCards();
+    }
+  } catch(e) { console.warn('Brain cards load failed:', e); }
+}
+
+async function syncBrainCardToSupabase(card) {
+  const payload = {
+    title: card.title||'', type: card.type||'note',
+    content: card.type === 'list' ? JSON.stringify(card.items||[]) : (card.text||''),
+    created_by: card.createdBy||''
+  };
+  try {
+    if (card.id && !String(card.id).startsWith('local_')) {
+      await supa.patch('brain_cards', card.id, payload);
+    } else {
+      const res = await supa.post('brain_cards', payload);
+      if (res && res[0] && res[0].id) { card.id = res[0].id; saveBrainCards(); }
+    }
+  } catch(e) { console.warn('Brain card sync failed:', e); }
+}
+
+function bdCardById(id) { return db.brainCards.find(c => String(c.id) === String(id)); }
+
+function addBrainCard(type) {
+  const title = (prompt(type === 'list' ? 'List title:' : 'Note title:') || '').trim();
+  if (!title) return;
+  const card = {
+    id: 'local_' + Date.now(), title: title, type: type,
+    text: '', items: [], createdBy: getLivingstoneUser(),
+    createdAt: new Date().toISOString()
+  };
+  db.brainCards.unshift(card);
+  saveBrainCards();
+  syncBrainCardToSupabase(card);
+  renderBrainCards();
+}
+
+function deleteBrainCard(id) {
+  const card = bdCardById(id);
+  if (!card) return;
+  if (!confirm('Delete "' + card.title + '"?')) return;
+  db.brainCards = db.brainCards.filter(c => c !== card);
+  saveBrainCards();
+  if (card.id && !String(card.id).startsWith('local_')) {
+    supa.delete('brain_cards', card.id).catch(e => console.warn('Brain card delete failed:', e));
+  }
+  renderBrainCards();
+}
+
+function updateBrainNote(id, val) {
+  const card = bdCardById(id);
+  if (!card) return;
+  card.text = val;
+  saveBrainCards();
+  syncBrainCardToSupabase(card);
+}
+
+function addBrainListItem(id, inputEl) {
+  const card = bdCardById(id);
+  const text = (inputEl?.value || '').trim();
+  if (!card || !text) return;
+  card.items.push({ text: text, done: false });
+  inputEl.value = '';
+  saveBrainCards();
+  syncBrainCardToSupabase(card);
+  renderBrainCards();
+  // restore focus to that card's input
+  setTimeout(() => { const el = document.querySelector('[data-bd-input="' + id + '"]'); if (el) el.focus(); }, 50);
+}
+
+function toggleBrainListItem(id, idx) {
+  const card = bdCardById(id);
+  if (!card || !card.items[idx]) return;
+  card.items[idx].done = !card.items[idx].done;
+  saveBrainCards();
+  syncBrainCardToSupabase(card);
+  renderBrainCards();
+}
+
+function deleteBrainListItem(id, idx) {
+  const card = bdCardById(id);
+  if (!card) return;
+  card.items.splice(idx, 1);
+  saveBrainCards();
+  syncBrainCardToSupabase(card);
+  renderBrainCards();
+}
+
+function renderBrainCards() {
+  const el = document.getElementById('bd-cards');
+  if (!el) return;
+  if (!db.brainCards.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:12px;grid-column:1/-1;">No cards yet — add a note or a list.</div>';
+    return;
+  }
+  el.innerHTML = db.brainCards.map(c => {
+    const dateStr = c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+    let head = '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:8px;">'
+      + '<div style="font-weight:700;font-size:13px;">' + (c.type==='list'?'☑️ ':'📝 ') + (c.title||'').replace(/</g,'&lt;') + '</div>'
+      + '<button onclick="deleteBrainCard(\'' + c.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:11px;flex-shrink:0;">✕</button></div>';
+    let body = '';
+    if (c.type === 'note') {
+      body = '<textarea onchange="updateBrainNote(\'' + c.id + '\', this.value)" placeholder="Type away..." style="width:100%;min-height:90px;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;resize:vertical;font-family:inherit;line-height:1.5;">' + (c.text||'').replace(/</g,'&lt;') + '</textarea>';
+    } else {
+      const open = c.items.map((it,i)=>({it,i})).filter(x=>!x.it.done);
+      const done = c.items.map((it,i)=>({it,i})).filter(x=>x.it.done);
+      const row = x => '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;' + (x.it.done?'opacity:0.45;':'') + '">'
+        + '<input type="checkbox" ' + (x.it.done?'checked':'') + ' onchange="toggleBrainListItem(\'' + c.id + '\',' + x.i + ')" style="width:14px;height:14px;cursor:pointer;flex-shrink:0;">'
+        + '<span style="flex:1;font-size:12px;' + (x.it.done?'text-decoration:line-through;':'') + '">' + (x.it.text||'').replace(/</g,'&lt;') + '</span>'
+        + '<button onclick="deleteBrainListItem(\'' + c.id + '\',' + x.i + ')" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:10px;">✕</button></div>';
+      body = open.map(row).join('') + (done.length ? done.map(row).join('') : '');
+      body += '<input type="text" data-bd-input="' + c.id + '" placeholder="+ add item, hit Enter" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addBrainListItem(\'' + c.id + '\',this);}" style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-top:6px;">';
+    }
+    let foot = '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;">' + [c.createdBy, dateStr].filter(Boolean).join(' · ') + '</div>';
+    return '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--limestone);">' + head + body + foot + '</div>';
+  }).join('');
+}
+
 function renderDashboard() {
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
   const activeStatuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold','Snagging','Completed - Not Paid'];
@@ -12709,42 +12876,45 @@ async function exportQuotePDF() {
     if (bonusVal4) lineRows += `<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">On-Time Bonus</td><td colspan="3"></td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${bonusVal4.toFixed(2)}</td></tr>`;
 
   } else {
-    // Detailed — client-facing: no input costs, no supplier names
-    tableHeaders = `<tr>
-        <th style="width:50%;text-align:left;">Description</th>
-        <th style="width:15%;text-align:center;">Qty</th>
-        <th style="width:15%;text-align:right;">Unit Price £</th>
-        <th style="width:20%;text-align:right;">Total £</th>
-      </tr>`;
-    tableColspan = 4;
+    // Detailed — client-facing: no input costs, no supplier names; columns per toggles
+    const showQty = document.getElementById('qb-col-qty')?.checked !== false;
+    const showUnit = document.getElementById('qb-col-unit')?.checked !== false;
+    const showLine = document.getElementById('qb-col-linetotal')?.checked !== false;
+    const showSec = document.getElementById('qb-col-sectotal')?.checked !== false;
+    const cols = 1 + (showQty?1:0) + (showUnit?1:0) + (showLine?1:0);
+    tableColspan = cols;
+
+    tableHeaders = '<tr><th style="text-align:left;">Description</th>'
+      + (showQty ? '<th style="width:12%;text-align:center;">Qty</th>' : '')
+      + (showUnit ? '<th style="width:16%;text-align:right;">Unit Price £</th>' : '')
+      + (showLine ? '<th style="width:18%;text-align:right;">Total £</th>' : '')
+      + '</tr>';
+
     lineRows = rooms.map(room => {
       const roomLines = room.lines.map(l => {
         const unitPrice = (l.qty && l.qty > 0) ? (l.withMargin||0) / l.qty : (l.withMargin||0);
-        return `
-        <tr>
-          <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;">${l.desc || ''}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:center;">${l.qty || ''}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;">£${unitPrice.toFixed(2)}</td>
-          <td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${(l.withMargin||0).toFixed(2)}</td>
-        </tr>`;
+        return '<tr>'
+          + '<td style="padding:7px 10px;border-bottom:1px solid #e8e4db;">' + (l.desc || '') + '</td>'
+          + (showQty ? '<td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:center;">' + (l.qty || '') + '</td>' : '')
+          + (showUnit ? '<td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;">£' + unitPrice.toFixed(2) + '</td>' : '')
+          + (showLine ? '<td style="padding:7px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£' + (l.withMargin||0).toFixed(2) + '</td>' : '')
+          + '</tr>';
       }).join('');
       const roomTotal = room.lines.reduce((s,l)=>s+(l.withMargin||0),0);
-      return `
-        <tr>
-          <td colspan="4" style="padding:10px 10px 6px;background:#F4F1EB;font-weight:700;font-size:13px;color:#0D0D0D;border-top:2px solid #B5DD3C;">
-            ${room.name}
-          </td>
-        </tr>
-        ${roomLines}
-        <tr>
-          <td colspan="3" style="padding:7px 10px;text-align:right;font-weight:600;font-size:12px;color:#6b7e8e;">Section Total:</td>
-          <td style="padding:7px 10px;text-align:right;font-weight:700;color:#6B8A1F;">£${roomTotal.toFixed(2)}</td>
-        </tr>`;
+      let block = '<tr><td colspan="' + cols + '" style="padding:10px 10px 6px;background:#F4F1EB;font-weight:700;font-size:13px;color:#0D0D0D;border-top:2px solid #B5DD3C;">' + room.name + '</td></tr>' + roomLines;
+      if (showSec) {
+        block += '<tr><td colspan="' + (cols-1) + '" style="padding:7px 10px;text-align:right;font-weight:600;font-size:12px;color:#6b7e8e;">Section Total:</td>'
+          + '<td style="padding:7px 10px;text-align:right;font-weight:700;color:#6B8A1F;">£' + roomTotal.toFixed(2) + '</td></tr>';
+      }
+      return block;
     }).join('');
     const pmFeeVal3 = parseFloat(document.getElementById('qb-pm-fee')?.value)||0;
     const bonusVal3 = parseFloat(document.getElementById('qb-bonus')?.value)||0;
-    if (pmFeeVal3) lineRows += `<tr><td colspan="3" style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">Project Management</td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${pmFeeVal3.toFixed(2)}</td></tr>`;
-    if (bonusVal3) lineRows += `<tr><td colspan="3" style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">On-Time Bonus</td><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£${bonusVal3.toFixed(2)}</td></tr>`;
+    const feeAmountCell = (v) => showLine || showUnit
+      ? '<td' + (cols>2 ? ' colspan="' + (cols-1) + '"' : '') + ' style="padding:9px 10px;border-bottom:1px solid #e8e4db;text-align:right;font-weight:600;">£' + v.toFixed(2) + '</td>'
+      : '';
+    if (pmFeeVal3) lineRows += '<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">Project Management</td>' + feeAmountCell(pmFeeVal3) + '</tr>';
+    if (bonusVal3) lineRows += '<tr><td style="padding:9px 10px;border-bottom:1px solid #e8e4db;font-weight:600;">On-Time Bonus</td>' + feeAmountCell(bonusVal3) + '</tr>';
   }
 
   const html = `<!DOCTYPE html>
