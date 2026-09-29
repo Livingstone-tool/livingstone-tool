@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.57 -->
+<!-- Livingstone v4.58 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -660,6 +660,7 @@ window.onerror=function(m,s,l,c,e){
     </div>
     <div class="nav-section">
       <div class="nav-label">Business</div>
+      <div class="nav-item" onclick="showPage('meeting')"><span class="icon">🤝</span> Weekly Meeting</div>
       <div class="nav-item" onclick="showPage('growth')"><span class="icon">🚀</span> Growth</div>
       <div class="nav-item" onclick="showPage('braindump')"><span class="icon">🧠</span> Brain Dump</div>
       <div class="nav-item" onclick="showPage('actions')"><span class="icon">🎯</span> Business Actions</div>
@@ -670,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.57</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.58</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1269,6 +1270,12 @@ window.onerror=function(m,s,l,c,e){
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- WEEKLY MEETING PAGE -->
+  <div id="page-meeting" class="page content">
+    <style>#meeting-root a{color:var(--copper-dark);text-decoration:none;}#meeting-root a:hover{text-decoration:underline;}</style>
+    <div id="meeting-root" style="max-width:1200px;"></div>
   </div>
 
   <!-- FINANCE PAGE -->
@@ -3126,7 +3133,7 @@ const SEED = {
 const PAGE_TITLES = {
   dashboard:'Dashboard', pipeline:'Pipeline', jobs:'All Jobs',
   quotes:'Quote Builder', tasks:'Tasks', subs:'Subcontractors',
-  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth', braindump:'Brain Dump'
+  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth', braindump:'Brain Dump', meeting:'Weekly Meeting'
 };
 
 function toggleMobileNav() {
@@ -3172,7 +3179,8 @@ function renderPage(id) {
   else if(id==='actions') renderActions();
   else if(id==='planning') renderPlanning();
   else if(id==='costs') renderCostTracker();
-  else if(id==='invoices') renderInvoicesPage();
+  else if(id==='invoices') { renderInvoicesPage(); loadInvoicesFromSupabase().then(renderInvoicesPage); }
+  else if(id==='meeting') renderMeetingPage();
   else if(id==='growth') renderGrowthPage();
 }
 
@@ -8838,6 +8846,7 @@ try { const li = JSON.parse(localStorage.getItem('livingstoneInvoices')); if (li
 
 function saveInvoices() {
   localStorage.setItem('livingstoneInvoices', JSON.stringify(db.invoices));
+  (db.invoices || []).forEach(inv => syncInvoiceToSupabase(inv));
 }
 
 function nextInvoiceNum(jobRef) {
@@ -9007,6 +9016,7 @@ function editInvoice(idx) {
 
 function deleteInvoice(idx) {
   if (!confirm('Delete invoice ' + (db.invoices[idx]?.number||'') + '?')) return;
+  deleteInvoiceFromSupabase(db.invoices[idx]?.number);
   db.invoices.splice(idx, 1);
   saveInvoices();
   renderInvoicesPage();
@@ -13126,5 +13136,385 @@ async function loadQuoteDocAttachments(ref) {
 
   el.innerHTML = html;
 }
+
+// ============================================================
+// WEEKLY MEETING (v4.58) — a live view over the rest of the app.
+// Reads from actions, job to-dos, invoices, payment gates, costs,
+// schedule and pipelines; every change writes back to its home.
+// Only the meeting record (date, bank balance, decisions, snapshot)
+// is stored in the `meetings` table.
+// ============================================================
+let _mtg = { date: null, bank: '', decisions: '', todos: [], history: [], added: [], showLater: false, tablesMissing: {} };
+
+function mtgISO(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); }
+function mtgParse(s) { if (!s) return null; const p = String(s).slice(0,10).split('-'); if (p.length < 3) return null; return new Date(+p[0], +p[1]-1, +p[2]); }
+function mtgAddDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function mtgGBP(n) { return '£' + Math.round(n || 0).toLocaleString('en-GB'); }
+function mtgEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function mtgShort(d) { return d ? d.toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '—'; }
+function mtgThisFriday() { const d = new Date(); d.setHours(0,0,0,0); const mon = mtgAddDays(d, -((d.getDay() + 6) % 7)); return mtgAddDays(mon, 4); }
+function mtgDate() { return mtgParse(_mtg.date) || mtgThisFriday(); }
+function mtgToday() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function mtgOwnerName(o) { return o === 'A' ? 'Adam' : o === 'T' ? 'Tom' : (o || '—'); }
+
+const MTG_LIVE = ['Confirmed','In Progress','Snagging','Completed - Not Paid'];
+const MTG_PIPE = ['Initial Enquiry','Preparing Quote','Quoted'];
+
+// ── Invoices: due date + state ─────────────────────────────
+function mtgInvoiceDue(inv) {
+  const d = mtgParse(inv.date); if (!d) return null;
+  const m = String(inv.terms || '').match(/(\d+)/);
+  return mtgAddDays(d, m ? parseInt(m[1]) : 14);
+}
+
+// ── Data loading ───────────────────────────────────────────
+async function mtgLoadOpenTodos() {
+  try {
+    const rows = await supa.get('job_todos', 'done=eq.false&order=added.asc');
+    _mtg.todos = (rows || []).map(t => ({ id: t.id, jobRef: t.job_ref, text: t.text, who: t.assigned_to || '', due: t.due_date || '' }));
+  } catch(e) { console.warn('Meeting: job to-dos load failed', e); }
+}
+
+async function mtgLoadHistory() {
+  try {
+    _mtg.history = await supa.get('meetings', 'order=meeting_date.desc&limit=12');
+    _mtg.tablesMissing.meetings = false;
+    const cur = _mtg.history.find(h => h.meeting_date === _mtg.date);
+    if (cur) {
+      if (_mtg.bank === '' && cur.bank_balance != null) _mtg.bank = String(cur.bank_balance);
+      if (!_mtg.decisions && cur.decisions) _mtg.decisions = cur.decisions;
+    }
+  } catch(e) { _mtg.tablesMissing.meetings = true; _mtg.history = []; }
+}
+
+function renderMeetingPage() {
+  if (!_mtg.date) _mtg.date = mtgISO(mtgThisFriday());
+  renderMeetingNow();
+  Promise.all([
+    (typeof loadGrowthFromSupabase === 'function' ? loadGrowthFromSupabase() : Promise.resolve()).catch(()=>{}),
+    (typeof loadCouncilFromSupabase === 'function' ? loadCouncilFromSupabase() : Promise.resolve()).catch(()=>{}),
+    (typeof loadScheduleFromSupabase === 'function' ? loadScheduleFromSupabase() : Promise.resolve()).catch(()=>{}),
+    loadInvoicesFromSupabase().catch(()=>{}),
+    mtgLoadOpenTodos(),
+    mtgLoadHistory()
+  ]).then(() => renderMeetingNow());
+}
+
+// ── Computations shared by render + snapshot ───────────────
+function mtgCompute() {
+  const md = mtgDate(), today = mtgToday(), horizon = mtgAddDays(md, 7);
+  const invs = (db.invoices || []).map((inv, i) => ({ inv, i, due: mtgInvoiceDue(inv) }));
+  const overdue = invs.filter(x => x.inv.status === 'Sent' && x.due && x.due < today);
+  const awaiting = invs.filter(x => x.inv.status === 'Sent' && !(x.due && x.due < today));
+  const drafts = invs.filter(x => (x.inv.status || 'Draft') === 'Draft');
+  const jobByRef = r => db.jobs.find(j => j.ref === r);
+  const gatesToInvoice = (db.paymentGates || []).filter(g => {
+    if (g.status !== 'Pending' && g.status !== 'Overdue') return false;
+    const d = mtgParse(g.due);
+    if (d) return d <= horizon;
+    const j = jobByRef(g.jobRef);
+    return j && (j.status === 'Snagging' || j.status === 'Completed - Not Paid');
+  });
+  const sum = (arr, f) => arr.reduce((s, x) => s + (f(x) || 0), 0);
+  const liveJobs = db.jobs.filter(j => MTG_LIVE.includes(j.status));
+  const pipeJobs = db.jobs.filter(j => MTG_PIPE.includes(j.status));
+  const openBiz = [...(db.actionsQ1||[]).map((a,i)=>({a,i,type:'q1'})), ...(db.actionsLT||[]).map((a,i)=>({a,i,type:'lt'}))].filter(x => x.a.status !== 'Completed');
+  return {
+    md, today, horizon, overdue, awaiting, drafts, gatesToInvoice, liveJobs, pipeJobs, openBiz,
+    overdueTotal: sum(overdue, x => x.inv.total),
+    awaitingTotal: sum(awaiting, x => x.inv.total),
+    draftTotal: sum(drafts, x => x.inv.total),
+    toInvoiceTotal: sum(gatesToInvoice, g => g.amount),
+    pipelineValue: sum(pipeJobs, j => j.quoteValue || j.estimate)
+  };
+}
+
+function mtgJobCostToDate(ref) {
+  let t = 0;
+  (db.costs || []).forEach(c => (c.allocations || []).forEach(a => { if (a.jobRef === ref) t += parseFloat(a.amount) || 0; }));
+  return t;
+}
+
+function mtgNextWeekCrew(ref) {
+  const nextMon = mtgAddDays(mtgDate(), 3);
+  const people = new Set();
+  (db.scheduleEntries || []).forEach(e => {
+    if (e.jobRef !== ref || e.done) return;
+    const ws = mtgParse(e.weekStart);
+    if (ws && Math.abs(ws - nextMon) < 3 * 86400000 && e.person) people.add(e.person);
+  });
+  return [...people];
+}
+
+// ── Render ─────────────────────────────────────────────────
+function renderMeetingNow() {
+  const root = document.getElementById('meeting-root');
+  if (!root) return;
+  const c = mtgCompute();
+  const md = c.md;
+  const firstFriday = md.getDate() <= 7;
+  const last = (_mtg.history || []).find(h => h.meeting_date < _mtg.date);
+  let h = '';
+
+  // Header
+  h += '<div class="card" style="margin-bottom:20px;"><div class="card-body" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">';
+  h += '<div><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Meeting date</label><input type="date" value="' + _mtg.date + '" onchange="mtgSetDate(this.value)" style="width:auto;"></div>';
+  h += '<div style="flex:1;min-width:200px;font-size:13px;color:var(--text-muted);">Adam &amp; Tom · 45 minutes. Everything below is live — changes save to the Actions, Invoices, Jobs and Growth pages.</div>';
+  h += '<button class="btn btn-primary" onclick="mtgSave()">Save meeting</button>';
+  h += '</div>';
+  if (firstFriday) h += '<div style="margin:0 20px 16px;padding:10px 14px;background:var(--copper-light);border-radius:6px;font-size:13px;"><strong>Monthly session:</strong> add 45 minutes for the P&amp;L review and pay / director\'s loan reconciliation.</div>';
+  if (_mtg.tablesMissing.meetings) h += '<div style="margin:0 20px 16px;padding:10px 14px;background:#fdf1e6;border-radius:6px;font-size:13px;color:var(--warning);">The <code>meetings</code> table isn\'t set up yet, so meetings can\'t be saved. Run the one-off SQL setup in Supabase.</div>';
+  if (_mtg.tablesMissing.invoices) h += '<div style="margin:0 20px 16px;padding:10px 14px;background:#fdf1e6;border-radius:6px;font-size:13px;color:var(--warning);">Invoices are only on this device until the <code>invoices</code> table is set up in Supabase, so Tom won\'t see them.</div>';
+  h += '</div>';
+
+  // 1. Last week's actions
+  const due = x => mtgParse(x);
+  const actRows = [];
+  c.openBiz.forEach(x => actRows.push({ kind:'biz', text:x.a.desc, who:mtgOwnerName(x.a.owner), due:due(x.a.due), status:x.a.status, type:x.type, idx:x.i, job:'' }));
+  _mtg.todos.forEach(t => actRows.push({ kind:'todo', text:t.text, who:t.who || '—', due:due(t.due), id:t.id, job:t.jobRef }));
+  actRows.sort((a,b) => (a.due ? a.due.getTime() : 9e15) - (b.due ? b.due.getTime() : 9e15));
+  const soon = actRows.filter(r => !r.due || r.due <= c.horizon);
+  const later = actRows.filter(r => r.due && r.due > c.horizon);
+  const shown = _mtg.showLater ? actRows : soon;
+  h += mtgSectionStart('Last week\'s actions', '5 min', soon.filter(r => r.due && r.due < c.today).length + ' overdue · ' + soon.length + ' due by next Friday');
+  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Job</th><th>Who</th><th>Due</th><th>Status</th></tr></thead><tbody>';
+  if (!shown.length) h += '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">No open actions.</td></tr>';
+  shown.forEach(r => {
+    const od = r.due && r.due < c.today;
+    const dueCell = '<span style="color:' + (od ? 'var(--danger)' : 'inherit') + ';font-weight:' + (od ? 600 : 400) + ';">' + mtgShort(r.due) + '</span>';
+    const jobCell = r.job ? '<a href="#" onclick="openJob(\'' + mtgEsc(r.job) + '\');return false;">' + mtgEsc(r.job) + '</a>' : '<span style="color:var(--text-muted);font-size:12px;">Business</span>';
+    let statusCell;
+    if (r.kind === 'biz') {
+      statusCell = '<select style="width:auto;padding:4px 8px;font-size:12px;" onchange="mtgSetActionStatus(\'' + r.type + '\',' + r.idx + ',this.value)">' +
+        ['To Do','In Progress','Completed','Blocked'].map(s => '<option' + (s === r.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>';
+    } else {
+      statusCell = '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;" onchange="mtgTodoDone(\'' + r.id + '\')"> Done</label>';
+    }
+    h += '<tr><td>' + mtgEsc(r.text) + '</td><td>' + jobCell + '</td><td>' + mtgEsc(r.who) + '</td><td>' + dueCell + '</td><td>' + statusCell + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (later.length) h += '<div style="padding:10px 20px;"><button class="btn btn-sm btn-secondary" onclick="_mtg.showLater=!_mtg.showLater;renderMeetingNow();">' + (_mtg.showLater ? 'Hide' : 'Show') + ' ' + later.length + ' due later</button></div>';
+  h += '</div></div>';
+
+  // 2. Cash
+  const bankNum = parseFloat(_mtg.bank);
+  const lastBank = last && last.bank_balance != null ? parseFloat(last.bank_balance) : null;
+  const bankDelta = (!isNaN(bankNum) && lastBank != null) ? bankNum - lastBank : null;
+  h += mtgSectionStart('Cash', '10 min', '');
+  h += '<div class="grid-4" style="padding:16px 20px;gap:12px;">';
+  h += '<div class="stat-card"><div class="stat-label">Bank balance (from Xero)</div><input type="number" step="1" placeholder="£ today" value="' + mtgEsc(_mtg.bank) + '" oninput="_mtg.bank=this.value" onchange="renderMeetingNow()" style="font-size:18px;font-weight:700;margin-top:4px;"><div class="stat-sub">' + (bankDelta != null ? (bankDelta >= 0 ? '▲ ' : '▼ ') + mtgGBP(Math.abs(bankDelta)) + ' since ' + mtgShort(mtgParse(last.meeting_date)) : (lastBank != null ? 'Last: ' + mtgGBP(lastBank) : '')) + '</div></div>';
+  h += mtgStat('Overdue', mtgGBP(c.overdueTotal), c.overdue.length + ' invoice' + (c.overdue.length === 1 ? '' : 's'), c.overdueTotal > 0 ? 'var(--danger)' : '');
+  h += mtgStat('Sent, not yet due', mtgGBP(c.awaitingTotal), c.awaiting.length + ' invoice' + (c.awaiting.length === 1 ? '' : 's'), '');
+  h += mtgStat('Ready to invoice', mtgGBP(c.toInvoiceTotal + c.draftTotal), c.gatesToInvoice.length + ' gate' + (c.gatesToInvoice.length === 1 ? '' : 's') + ' · ' + c.drafts.length + ' draft' + (c.drafts.length === 1 ? '' : 's'), c.toInvoiceTotal + c.draftTotal > 0 ? 'var(--warning)' : '');
+  h += '</div>';
+  const invRows = [...c.overdue.map(x => ({...x, tag:'Overdue'})), ...c.drafts.map(x => ({...x, tag:'Draft'})), ...c.awaiting.map(x => ({...x, tag:'Sent'}))];
+  const gateRows = c.gatesToInvoice;
+  if (invRows.length || gateRows.length) {
+    h += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Client / job</th><th style="text-align:right;">Amount</th><th>Due</th><th></th></tr></thead><tbody>';
+    invRows.forEach(x => {
+      const days = x.due ? Math.round((c.today - x.due) / 86400000) : 0;
+      const dueTxt = x.tag === 'Draft' ? '<span style="color:var(--text-muted);">Not sent</span>' : (x.tag === 'Overdue' ? '<span style="color:var(--danger);font-weight:600;">' + days + ' day' + (days === 1 ? '' : 's') + ' late</span>' : mtgShort(x.due));
+      const btn = x.tag === 'Draft' ? '<button class="btn btn-sm btn-secondary" onclick="mtgSetInvoiceStatus(' + x.i + ',\'Sent\')">Mark sent</button>' : '<button class="btn btn-sm btn-secondary" onclick="mtgSetInvoiceStatus(' + x.i + ',\'Paid\')">Mark paid</button>';
+      h += '<tr><td><strong>' + mtgEsc(x.inv.number) + '</strong> <span class="badge ' + (x.tag === 'Overdue' ? 'badge-hold' : x.tag === 'Draft' ? 'badge-preparing' : 'badge-quoted') + '">' + x.tag + '</span></td><td>' + mtgEsc(x.inv.client) + '</td><td style="text-align:right;">' + mtgGBP(x.inv.total) + '</td><td>' + dueTxt + '</td><td>' + btn + '</td></tr>';
+    });
+    gateRows.forEach(g => {
+      const j = db.jobs.find(x => x.ref === g.jobRef);
+      h += '<tr><td>' + mtgEsc(g.name || 'Payment gate') + ' <span class="badge badge-enquiry">To invoice</span></td><td><a href="#" onclick="openJob(\'' + mtgEsc(g.jobRef) + '\');return false;">' + mtgEsc(g.jobRef) + '</a> ' + mtgEsc(j ? j.name : '') + '</td><td style="text-align:right;">' + mtgGBP(g.amount) + '</td><td>' + mtgShort(mtgParse(g.due)) + '</td><td><button class="btn btn-sm btn-primary" onclick="openInvoiceModal(\'' + mtgEsc(g.jobRef) + '\')">Invoice</button></td></tr>';
+    });
+    h += '</tbody></table></div>';
+  } else {
+    h += '<div style="padding:0 20px 16px;color:var(--text-muted);font-size:13px;">Nothing overdue, nothing waiting to be invoiced.</div>';
+  }
+  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Supplier and subbie bills live in Xero — check what\'s due next week there.</div>';
+  h += '</div></div>';
+
+  // 3. Live jobs
+  h += mtgSectionStart('Live jobs', '15 min', c.liveJobs.length + ' job' + (c.liveJobs.length === 1 ? '' : 's'));
+  h += '<div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th style="text-align:right;">Quote</th><th style="text-align:right;">Cost to date</th><th>Of est. cost</th><th>Open to-dos</th><th>Next week</th><th></th></tr></thead><tbody>';
+  if (!c.liveJobs.length) h += '<tr><td colspan="8" style="color:var(--text-muted);text-align:center;padding:16px;">No live jobs.</td></tr>';
+  c.liveJobs.forEach(j => {
+    const cost = mtgJobCostToDate(j.ref);
+    const est = j.estCost || 0;
+    const pct = est ? Math.round(cost / est * 100) : null;
+    const pctCol = pct == null ? 'var(--text-muted)' : pct > 100 ? 'var(--danger)' : pct > 85 ? 'var(--warning)' : 'var(--success)';
+    const todos = _mtg.todos.filter(t => t.jobRef === j.ref);
+    const odTodos = todos.filter(t => t.due && mtgParse(t.due) < c.today).length;
+    const crew = mtgNextWeekCrew(j.ref);
+    h += '<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td>' +
+      '<td>' + statusBadge(j.status) + '</td>' +
+      '<td style="text-align:right;">' + (j.quoteValue ? mtgGBP(j.quoteValue) : '—') + '</td>' +
+      '<td style="text-align:right;">' + mtgGBP(cost) + '</td>' +
+      '<td style="color:' + pctCol + ';font-weight:600;">' + (pct == null ? 'No quote' : pct + '%') + '</td>' +
+      '<td>' + todos.length + (odTodos ? ' <span style="color:var(--danger);font-size:12px;">(' + odTodos + ' late)</span>' : '') + '</td>' +
+      '<td style="font-size:12px;">' + (crew.length ? mtgEsc(crew.join(', ')) : '<span style="color:var(--warning);">Nothing scheduled</span>') + '</td>' +
+      '<td><button class="btn btn-sm btn-secondary" onclick="mtgPrefillAction(\'' + mtgEsc(j.ref) + '\')">+ Action</button></td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Extras to quote go in the Quote Builder; schedule changes in Planning → Schedule.</div>';
+  h += '</div></div>';
+
+  // 4. Pipeline
+  const stale = d => { const x = mtgParse(d); return !x || (c.today - x) > 14 * 86400000; };
+  const schools = (db.pipeline || []).filter(p => p.stage !== 'Won' && p.stage !== 'Lost');
+  const councils = (db.councilPipeline || []).filter(p => p.stage !== 'Won' && p.stage !== 'Lost');
+  h += mtgSectionStart('Pipeline', '10 min', mtgGBP(c.pipelineValue) + ' in enquiries and quotes');
+  h += '<div class="table-wrap"><table><thead><tr><th>Lead</th><th>Stage</th><th style="text-align:right;">Value</th><th>Next action</th><th>Last contact</th></tr></thead><tbody>';
+  const pipeRows = [];
+  c.pipeJobs.forEach(j => pipeRows.push('<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td><td>' + statusBadge(j.status) + '</td><td style="text-align:right;">' + ((j.quoteValue || j.estimate) ? mtgGBP(j.quoteValue || j.estimate) : '—') + '</td><td style="font-size:12px;">' + (j.status === 'Quoted' ? 'Follow up on quote' : '') + '</td><td>—</td></tr>'));
+  schools.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.school) + ' <span style="font-size:11px;color:var(--text-muted);">School</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(p.lastContact) : 'Never') + '</td></tr>'));
+  councils.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.council) + ' <span style="font-size:11px;color:var(--text-muted);">Council</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(p.lastContact) : 'Never') + '</td></tr>'));
+  h += pipeRows.length ? pipeRows.join('') : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">Pipeline is empty.</td></tr>';
+  h += '</tbody></table></div>';
+  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Change stages on the Pipeline and Growth pages. Amber = no contact in 14+ days.</div>';
+  h += '</div></div>';
+
+  // 5. New actions + decisions
+  const jobOpts = db.jobs.filter(j => MTG_LIVE.includes(j.status) || MTG_PIPE.includes(j.status)).map(j => '<option value="' + mtgEsc(j.ref) + '">' + mtgEsc(j.ref) + ' ' + mtgEsc(j.name) + '</option>').join('');
+  h += mtgSectionStart('New actions', '5 min', 'Job actions go to that job\'s to-do list; the rest to Business Actions');
+  h += '<div style="padding:16px 20px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">';
+  h += '<input id="mtg-new-text" placeholder="What needs doing?" style="flex:2;min-width:220px;" onkeydown="if(event.key===\'Enter\')mtgAddAction()">';
+  h += '<select id="mtg-new-job" style="width:auto;"><option value="">Business (no job)</option>' + jobOpts + '</select>';
+  h += '<select id="mtg-new-who" style="width:auto;"><option>Adam</option><option>Tom</option><option>Both</option></select>';
+  h += '<input id="mtg-new-due" type="date" value="' + mtgISO(mtgAddDays(md, 7)) + '" style="width:auto;">';
+  h += '<button class="btn btn-primary" onclick="mtgAddAction()">Add action</button></div>';
+  if (_mtg.added.length) {
+    h += '<div style="padding:0 20px 12px;font-size:13px;">' + _mtg.added.map(a => '<div style="padding:4px 0;">✓ ' + mtgEsc(a.text) + ' <span style="color:var(--text-muted);font-size:12px;">· ' + mtgEsc(a.who) + ' · ' + mtgShort(mtgParse(a.due)) + ' · ' + (a.job ? mtgEsc(a.job) : 'Business') + '</span></div>').join('') + '</div>';
+  }
+  h += '<div style="padding:0 20px 20px;"><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Decisions (only what isn\'t already an action)</label><textarea rows="3" oninput="_mtg.decisions=this.value" style="width:100%;">' + mtgEsc(_mtg.decisions) + '</textarea></div>';
+  h += '</div></div>';
+
+  // History
+  if (_mtg.history.length) {
+    h += '<div class="card" style="margin-top:20px;"><div class="card-header"><div class="card-title">Previous meetings</div></div><div class="table-wrap"><table><thead><tr><th>Date</th><th style="text-align:right;">Bank</th><th style="text-align:right;">Overdue</th><th style="text-align:right;">Ready to invoice</th><th style="text-align:right;">Pipeline</th><th>Decisions</th></tr></thead><tbody>';
+    _mtg.history.forEach(m => {
+      const s = m.snapshot || {};
+      h += '<tr style="cursor:pointer;" onclick="mtgSetDate(\'' + m.meeting_date + '\')"><td>' + mtgShort(mtgParse(m.meeting_date)) + '</td><td style="text-align:right;">' + (m.bank_balance != null ? mtgGBP(m.bank_balance) : '—') + '</td><td style="text-align:right;">' + mtgGBP(s.overdue) + '</td><td style="text-align:right;">' + mtgGBP(s.toInvoice) + '</td><td style="text-align:right;">' + mtgGBP(s.pipeline) + '</td><td style="font-size:12px;color:var(--text-muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(m.decisions || '') + '</td></tr>';
+    });
+    h += '</tbody></table></div></div>';
+  }
+
+  root.innerHTML = h;
+}
+
+function mtgSectionStart(title, mins, sub) {
+  return '<div class="card" style="margin-bottom:20px;"><div class="card-header"><div><div class="card-title">' + title + '</div>' + (sub ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + sub + '</div>' : '') + '</div><span style="font-size:12px;color:var(--text-muted);">' + mins + '</span></div><div class="card-body" style="padding:0;">';
+}
+function mtgStat(label, value, sub, col) {
+  return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="' + (col ? 'color:' + col : '') + '">' + value + '</div><div class="stat-sub">' + sub + '</div></div>';
+}
+
+// ── Write-backs ────────────────────────────────────────────
+function mtgSetDate(v) {
+  if (!v) return;
+  _mtg.date = v; _mtg.bank = ''; _mtg.decisions = ''; _mtg.added = [];
+  mtgLoadHistory().then(renderMeetingNow);
+  window.scrollTo(0, 0);
+}
+
+function mtgSetActionStatus(type, idx, val) {
+  updateActionStatus(type, idx, val);
+  renderMeetingNow();
+}
+
+async function mtgTodoDone(id) {
+  _mtg.todos = _mtg.todos.filter(t => t.id !== id);
+  renderMeetingNow();
+  try { await supa.patch('job_todos', id, { done: true }); } catch(e) { alert('Couldn\'t mark that to-do done — check your connection.'); mtgLoadOpenTodos().then(renderMeetingNow); }
+}
+
+function mtgSetInvoiceStatus(i, status) {
+  const inv = db.invoices[i];
+  if (!inv) return;
+  inv.status = status;
+  saveInvoices();
+  renderMeetingNow();
+}
+
+function mtgPrefillAction(ref) {
+  const sel = document.getElementById('mtg-new-job');
+  if (sel) sel.value = ref;
+  const t = document.getElementById('mtg-new-text');
+  if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.focus(); }
+}
+
+async function mtgAddAction() {
+  const text = (document.getElementById('mtg-new-text').value || '').trim();
+  if (!text) return;
+  const job = document.getElementById('mtg-new-job').value;
+  const who = document.getElementById('mtg-new-who').value;
+  const dueVal = document.getElementById('mtg-new-due').value;
+  const note = 'From weekly meeting ' + mtgShort(mtgDate());
+  try {
+    if (job) {
+      const res = await supa.post('job_todos', { job_ref: job, text: text, done: false, assigned_to: who, due_date: dueVal || null });
+      if (res && res[0]) _mtg.todos.push({ id: res[0].id, jobRef: job, text: text, who: who, due: dueVal });
+    } else {
+      const owner = who === 'Adam' ? 'A' : who === 'Tom' ? 'T' : 'Both';
+      const action = { desc: text, owner: owner, due: dueVal, priority: 'Medium', status: 'To Do', notes: note };
+      const res = await supa.post('actions', { list_type: 'q1', description: text, owner: owner, due: dueVal || null, priority: 'Medium', status: 'To Do', notes: note, sort_order: db.actionsQ1.length });
+      if (res && res[0]) action.id = res[0].id;
+      db.actionsQ1.push(action);
+      saveData();
+    }
+    _mtg.added.push({ text, who, due: dueVal, job });
+    document.getElementById('mtg-new-text').value = '';
+    renderMeetingNow();
+    const t = document.getElementById('mtg-new-text'); if (t) t.focus();
+  } catch(e) { alert('Couldn\'t save that action — check your connection and try again.'); }
+}
+
+async function mtgSave() {
+  const c = mtgCompute();
+  const bank = parseFloat(_mtg.bank);
+  const payload = {
+    meeting_date: _mtg.date,
+    attendees: 'Adam, Tom',
+    bank_balance: isNaN(bank) ? null : bank,
+    decisions: _mtg.decisions || '',
+    snapshot: {
+      overdue: Math.round(c.overdueTotal), awaiting: Math.round(c.awaitingTotal),
+      toInvoice: Math.round(c.toInvoiceTotal + c.draftTotal), pipeline: Math.round(c.pipelineValue),
+      liveJobs: c.liveJobs.length, openActions: c.openBiz.length + _mtg.todos.length,
+      actionsAdded: _mtg.added.length
+    }
+  };
+  try {
+    await supa.upsert('meetings?on_conflict=meeting_date', payload);
+    await mtgLoadHistory();
+    renderMeetingNow();
+    alert('Meeting saved.');
+  } catch(e) {
+    alert('Meeting not saved. If this is the first time, run the SQL setup for the meetings table in Supabase.');
+  }
+}
+
+// ============================================================
+// INVOICE SYNC (v4.58) — invoices were device-only; now shared via
+// the `invoices` table so Adam and Tom see the same list.
+// ============================================================
+async function loadInvoicesFromSupabase() {
+  let rows;
+  try { rows = await supa.get('invoices', 'order=updated_at.asc'); _mtg.tablesMissing.invoices = false; }
+  catch(e) { _mtg.tablesMissing.invoices = true; return; }
+  const remote = (rows || []).map(r => { const d = typeof r.data === 'string' ? JSON.parse(r.data) : (r.data || {}); d.number = r.number; return d; });
+  const remoteNums = new Set(remote.map(r => r.number));
+  const localOnly = (db.invoices || []).filter(i => i.number && !remoteNums.has(i.number));
+  db.invoices = remote.concat(localOnly);
+  localStorage.setItem('livingstoneInvoices', JSON.stringify(db.invoices));
+  for (const inv of localOnly) await syncInvoiceToSupabase(inv);
+}
+
+async function syncInvoiceToSupabase(inv) {
+  if (!inv || !inv.number || _mtg.tablesMissing.invoices) return;
+  try {
+    await supa.upsert('invoices?on_conflict=number', { number: inv.number, data: inv, status: inv.status || 'Draft', updated_at: new Date().toISOString() });
+  } catch(e) { console.warn('Invoice sync failed:', inv.number, e); }
+}
+
+async function deleteInvoiceFromSupabase(number) {
+  if (!number || _mtg.tablesMissing.invoices) return;
+  try { await supa.deleteWhere('invoices', 'number=eq.' + encodeURIComponent(number)); } catch(e) { console.warn('Invoice delete failed:', e); }
+}
+
 </script>
 </html>
