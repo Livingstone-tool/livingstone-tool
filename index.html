@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.58 -->
+<!-- Livingstone v4.59 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -670,7 +670,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.58</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.59</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1180,7 +1180,7 @@ window.onerror=function(m,s,l,c,e){
   <div id="page-braindump" class="page content">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-        <div style="font-size:12px;color:var(--text-muted);">Shared notes and lists — you and Tom see the same cards.</div>
+        <div style="font-size:12px;color:var(--text-muted);">Shared notes and lists — you and Tom see the same cards. <span id="bd-signed" onclick="changeBrainDumpName()" style="cursor:pointer;color:var(--copper);font-weight:600;"></span></div>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sm btn-primary" onclick="addBrainCard('note')">+ Note</button>
           <button class="btn btn-sm btn-primary" onclick="addBrainCard('list')">+ List</button>
@@ -3161,7 +3161,7 @@ function showPage(id, subtab) {
 
 function renderPage(id) {
   if(id==='dashboard') renderDashboard();
-  if(id==='braindump') { renderBrainCards(); loadBrainCardsFromSupabase(); }
+  if(id==='braindump') { renderBrainCards(); loadBrainCardsFromSupabase(); updateBrainDumpSigned(); }
   else if(id==='pipeline') renderPipeline();
   else if(id==='jobs') renderJobsTable();
   else if(id==='quotes') renderQuotesTable();
@@ -3292,6 +3292,25 @@ function deleteBrainListItem(id, idx) {
   saveBrainCards();
   syncBrainCardToSupabase(card);
   renderBrainCards();
+}
+
+function changeBrainDumpName() {
+  const oldName = localStorage.getItem('livingstoneUser') || '';
+  const newName = (prompt('Your name (shown on cards you create):', oldName) || '').trim();
+  if (!newName || newName === oldName) return;
+  localStorage.setItem('livingstoneUser', newName);
+  // Re-sign this person's existing cards
+  db.brainCards.forEach(c => {
+    if (c.createdBy === oldName) { c.createdBy = newName; syncBrainCardToSupabase(c); }
+  });
+  saveBrainCards();
+  renderBrainCards();
+  updateBrainDumpSigned();
+}
+
+function updateBrainDumpSigned() {
+  const el = document.getElementById('bd-signed');
+  if (el) el.textContent = 'Signing as: ' + (localStorage.getItem('livingstoneUser') || 'not set') + ' ✏️';
 }
 
 function brainCardText(id) {
