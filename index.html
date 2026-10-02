@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.60 -->
+<!-- Livingstone v4.61 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.60</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.61</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -13334,7 +13334,7 @@ function renderMeetingNow() {
       statusCell = '<select style="width:auto;padding:4px 8px;font-size:12px;" onchange="mtgSetActionStatus(\'' + r.type + '\',' + r.idx + ',this.value)">' +
         ['To Do','In Progress','Completed','Blocked'].map(s => '<option' + (s === r.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>';
     } else {
-      statusCell = '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;" onchange="mtgTodoDone(\'' + r.id + '\')"> Done</label>';
+      statusCell = '<select style="width:auto;padding:4px 8px;font-size:12px;" onchange="if(this.value===\'Completed\')mtgTodoDone(\'' + r.id + '\')"><option selected>To Do</option><option>Completed</option></select>';
     }
     h += '<tr><td>' + mtgEsc(r.text) + '</td><td>' + jobCell + '</td><td>' + mtgEsc(r.who) + '</td><td>' + dueCell + '</td><td>' + statusCell + '</td></tr>';
   });
