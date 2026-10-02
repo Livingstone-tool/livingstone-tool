@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.66 -->
+<!-- Livingstone v4.67 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.66</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.67</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -13190,7 +13190,7 @@ async function loadQuoteDocAttachments(ref) {
 // Only the meeting record (date, bank balance, decisions, snapshot)
 // is stored in the `meetings` table.
 // ============================================================
-let _mtg = { date: null, bank: '', decisions: '', todos: [], history: [], added: [], showLaterBiz: false, showLaterJob: false, tablesMissing: {} };
+let _mtg = { date: null, bank: '', cotBal: '', cotPay: '', cotDue: '', decisions: '', todos: [], history: [], added: [], showLaterBiz: false, showLaterJob: false, tablesMissing: {} };
 
 function mtgISO(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); }
 function mtgParse(s) { if (!s) return null; const p = String(s).slice(0,10).split('-'); if (p.length < 3) return null; return new Date(+p[0], +p[1]-1, +p[2]); }
@@ -13228,6 +13228,10 @@ async function mtgLoadHistory() {
     const cur = _mtg.history.find(h => h.meeting_date === _mtg.date);
     if (cur) {
       if (_mtg.bank === '' && cur.bank_balance != null) _mtg.bank = String(cur.bank_balance);
+      const sn = cur.snapshot || {};
+      if (_mtg.cotBal === '' && sn.cotBalance != null) _mtg.cotBal = String(sn.cotBalance);
+      if (_mtg.cotPay === '' && sn.cotPayment != null) _mtg.cotPay = String(sn.cotPayment);
+      if (_mtg.cotDue === '' && sn.cotDue) _mtg.cotDue = sn.cotDue;
       if (!_mtg.decisions && cur.decisions) _mtg.decisions = cur.decisions;
     }
   } catch(e) { _mtg.tablesMissing.meetings = true; _mtg.history = []; }
@@ -13385,10 +13389,23 @@ function renderMeetingNow() {
   const lastBank = last && last.bank_balance != null ? parseFloat(last.bank_balance) : null;
   const bankDelta = (!isNaN(bankNum) && lastBank != null) ? bankNum - lastBank : null;
   h += mtgSectionStart('Cash', '10 min', '');
-  h += '<div class="grid-4" style="padding:16px 20px;gap:12px;">';
-  h += '<div class="stat-card"><div class="stat-label">Bank balance (from Xero)</div><input type="number" step="1" placeholder="£ today" value="' + mtgEsc(_mtg.bank) + '" oninput="_mtg.bank=this.value" onchange="renderMeetingNow()" style="font-size:18px;font-weight:700;margin-top:4px;"><div class="stat-sub">' + (bankDelta != null ? (bankDelta >= 0 ? '▲ ' : '▼ ') + mtgGBP(Math.abs(bankDelta)) + ' since ' + mtgShort(mtgParse(last.meeting_date)) : (lastBank != null ? 'Last: ' + mtgGBP(lastBank) : '')) + '</div></div>';
-  h += mtgStat('Overdue', mtgGBP(c.overdueTotal), c.overdue.length + ' invoice' + (c.overdue.length === 1 ? '' : 's'), c.overdueTotal > 0 ? 'var(--danger)' : '');
-  h += mtgStat('Sent, not yet due', mtgGBP(c.awaitingTotal), c.awaiting.length + ' invoice' + (c.awaiting.length === 1 ? '' : 's'), '');
+  const lastSn = (last && last.snapshot) || {};
+  const cotNum = parseFloat(_mtg.cotBal), cotPayNum = parseFloat(_mtg.cotPay);
+  const cotDueD = mtgParse(_mtg.cotDue);
+  const cotDueCol = !cotDueD ? '' : cotDueD < c.today ? 'var(--danger)' : (cotDueD - c.today) <= 7 * 86400000 ? 'var(--warning)' : '';
+  const netNum = (isNaN(bankNum) ? 0 : bankNum) - (isNaN(cotNum) ? 0 : cotNum);
+  const lastNet = (lastBank != null || lastSn.cotBalance != null) ? (lastBank || 0) - (parseFloat(lastSn.cotBalance) || 0) : null;
+  const inp = (key, ph, extra) => '<input type="' + (key === 'cotDue' ? 'date' : 'number') + '" step="1" placeholder="' + ph + '" value="' + mtgEsc(_mtg[key]) + '" oninput="_mtg.' + key + '=this.value" onchange="renderMeetingNow()" style="' + (extra || 'font-size:18px;font-weight:700;margin-top:4px;') + '">';
+  const g3 = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:16px 20px 0;">';
+  h += g3;
+  h += '<div class="stat-card"><div class="stat-label">Bank balance (Virgin Money)</div>' + inp('bank', '£ today') + '<div class="stat-sub">' + (bankDelta != null ? (bankDelta >= 0 ? '▲ ' : '▼ ') + mtgGBP(Math.abs(bankDelta)) + ' since ' + mtgShort(mtgParse(last.meeting_date)) : (lastBank != null ? 'Last: ' + mtgGBP(lastBank) : 'Check the Virgin app')) + '</div></div>';
+  h += '<div class="stat-card"><div class="stat-label">Capital on Tap (owed)</div>' + inp('cotBal', '£ owed') +
+    '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;font-size:12px;color:var(--text-muted);flex-wrap:wrap;"><span style="white-space:nowrap;">Next payment</span> ' + inp('cotPay', '£', 'width:80px;padding:4px 6px;font-size:12px;') + ' due ' + inp('cotDue', '', 'width:auto;padding:4px 6px;font-size:12px;' + (cotDueCol ? 'color:' + cotDueCol + ';border-color:' + cotDueCol + ';font-weight:600;' : '')) + '</div>' +
+    '<div class="stat-sub">' + (lastSn.cotBalance != null ? 'Last: ' + mtgGBP(lastSn.cotBalance) : '') + '</div></div>';
+  h += '<div class="stat-card"><div class="stat-label">Net cash (bank − card)</div><div class="stat-value" style="color:' + (netNum < 0 ? 'var(--danger)' : 'inherit') + '">' + ((isNaN(bankNum) && isNaN(cotNum)) ? '—' : mtgGBP(netNum)) + '</div><div class="stat-sub">' + (lastNet != null && !(isNaN(bankNum) && isNaN(cotNum)) ? ((netNum - lastNet) >= 0 ? '▲ ' : '▼ ') + mtgGBP(Math.abs(netNum - lastNet)) + ' since last meeting' : '') + '</div></div>';
+  h += '</div>' + g3.replace('padding:16px 20px 0;', 'padding:12px 20px 16px;');
+  h += mtgStat('Overdue', mtgGBP(c.overdueTotal), c.overdue.length + ' invoice' + (c.overdue.length === 1 ? '' : 's') + ' · from Invoices', c.overdueTotal > 0 ? 'var(--danger)' : '');
+  h += mtgStat('Sent, not yet due', mtgGBP(c.awaitingTotal), c.awaiting.length + ' invoice' + (c.awaiting.length === 1 ? '' : 's') + ' · from Invoices', '');
   h += mtgStat('Ready to invoice', mtgGBP(c.toInvoiceTotal + c.draftTotal), c.gatesToInvoice.length + ' gate' + (c.gatesToInvoice.length === 1 ? '' : 's') + ' · ' + c.drafts.length + ' draft' + (c.drafts.length === 1 ? '' : 's'), c.toInvoiceTotal + c.draftTotal > 0 ? 'var(--warning)' : '');
   h += '</div>';
   const invRows = [...c.overdue.map(x => ({...x, tag:'Overdue'})), ...c.drafts.map(x => ({...x, tag:'Draft'})), ...c.awaiting.map(x => ({...x, tag:'Sent'}))];
@@ -13409,7 +13426,7 @@ function renderMeetingNow() {
   } else {
     h += '<div style="padding:0 20px 16px;color:var(--text-muted);font-size:13px;">Nothing overdue, nothing waiting to be invoiced.</div>';
   }
-  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Supplier and subbie bills live in Xero — check what\'s due next week there.</div>';
+  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Supplier and subbie bills aren\'t in the app — check what\'s due next week in Xero.</div>';
   h += '</div></div>';
 
   // 3. Live jobs
@@ -13459,10 +13476,10 @@ function renderMeetingNow() {
 
   // History
   if (_mtg.history.length) {
-    h += '<div class="card" style="margin-top:20px;"><div class="card-header"><div class="card-title">Previous meetings</div></div><div class="table-wrap"><table><thead><tr><th>Date</th><th style="text-align:right;">Bank</th><th style="text-align:right;">Overdue</th><th style="text-align:right;">Ready to invoice</th><th style="text-align:right;">Pipeline</th><th>Decisions</th></tr></thead><tbody>';
+    h += '<div class="card" style="margin-top:20px;"><div class="card-header"><div class="card-title">Previous meetings</div></div><div class="table-wrap"><table><thead><tr><th>Date</th><th style="text-align:right;">Bank</th><th style="text-align:right;">Card owed</th><th style="text-align:right;">Overdue</th><th style="text-align:right;">Ready to invoice</th><th style="text-align:right;">Pipeline</th><th>Decisions</th></tr></thead><tbody>';
     _mtg.history.forEach(m => {
       const s = m.snapshot || {};
-      h += '<tr style="cursor:pointer;" onclick="mtgSetDate(\'' + m.meeting_date + '\')"><td>' + mtgShort(mtgParse(m.meeting_date)) + '</td><td style="text-align:right;">' + (m.bank_balance != null ? mtgGBP(m.bank_balance) : '—') + '</td><td style="text-align:right;">' + mtgGBP(s.overdue) + '</td><td style="text-align:right;">' + mtgGBP(s.toInvoice) + '</td><td style="text-align:right;">' + mtgGBP(s.pipeline) + '</td><td style="font-size:12px;color:var(--text-muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(m.decisions || '') + '</td></tr>';
+      h += '<tr style="cursor:pointer;" onclick="mtgSetDate(\'' + m.meeting_date + '\')"><td>' + mtgShort(mtgParse(m.meeting_date)) + '</td><td style="text-align:right;">' + (m.bank_balance != null ? mtgGBP(m.bank_balance) : '—') + '</td><td style="text-align:right;">' + (s.cotBalance != null ? mtgGBP(s.cotBalance) : '—') + '</td><td style="text-align:right;">' + mtgGBP(s.overdue) + '</td><td style="text-align:right;">' + mtgGBP(s.toInvoice) + '</td><td style="text-align:right;">' + mtgGBP(s.pipeline) + '</td><td style="font-size:12px;color:var(--text-muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(m.decisions || '') + '</td></tr>';
     });
     h += '</tbody></table></div></div>';
   }
@@ -13480,7 +13497,7 @@ function mtgStat(label, value, sub, col) {
 // ── Write-backs ────────────────────────────────────────────
 function mtgSetDate(v) {
   if (!v) return;
-  _mtg.date = v; _mtg.bank = ''; _mtg.decisions = ''; _mtg.added = [];
+  _mtg.date = v; _mtg.bank = ''; _mtg.cotBal = ''; _mtg.cotPay = ''; _mtg.cotDue = ''; _mtg.decisions = ''; _mtg.added = [];
   mtgLoadHistory().then(renderMeetingNow);
   window.scrollTo(0, 0);
 }
@@ -13618,7 +13635,10 @@ async function mtgSave() {
       overdue: Math.round(c.overdueTotal), awaiting: Math.round(c.awaitingTotal),
       toInvoice: Math.round(c.toInvoiceTotal + c.draftTotal), pipeline: Math.round(c.pipelineValue),
       liveJobs: c.liveJobs.length, openActions: c.openBiz.length + _mtg.todos.length,
-      actionsAdded: _mtg.added.length
+      actionsAdded: _mtg.added.length,
+      cotBalance: isNaN(parseFloat(_mtg.cotBal)) ? null : parseFloat(_mtg.cotBal),
+      cotPayment: isNaN(parseFloat(_mtg.cotPay)) ? null : parseFloat(_mtg.cotPay),
+      cotDue: _mtg.cotDue || null
     }
   };
   try {
