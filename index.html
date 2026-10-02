@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.63 -->
+<!-- Livingstone v4.65 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.63</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.65</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -13317,18 +13317,21 @@ function renderMeetingNow() {
   const due = x => mtgParse(x);
   const statusSel = (type, idx, cur) => '<select style="width:auto;padding:4px 8px;font-size:12px;" onchange="mtgSetActionStatus(\'' + type + '\',' + idx + ',this.value)">' +
     ['To Do','In Progress','Completed','Blocked'].map(s => '<option' + (s === cur ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>';
-  const dueCell = d => { const od = d && d < c.today; return '<span style="color:' + (od ? 'var(--danger)' : 'inherit') + ';font-weight:' + (od ? 600 : 400) + ';">' + mtgShort(d) + '</span>'; };
+  const dueCell = (d, onchange) => { const od = d && d < c.today; return '<input type="date" value="' + (d ? mtgISO(d) : '') + '" onchange="' + onchange + '" style="width:auto;padding:4px 8px;font-size:12px;' + (od ? 'color:var(--danger);font-weight:600;border-color:var(--danger);' : '') + '">'; };
   const byDue = (a, b) => (a.due ? a.due.getTime() : 9e15) - (b.due ? b.due.getTime() : 9e15);
   const splitSoon = rows => [rows.filter(r => !r.due || r.due <= c.horizon), rows.filter(r => r.due && r.due > c.horizon)];
   const subSummary = soon => soon.filter(r => r.due && r.due < c.today).length + ' overdue · ' + soon.length + ' due by next Friday';
   const laterBtn = (key, n) => n ? '<div style="padding:10px 20px;"><button class="btn btn-sm btn-secondary" onclick="_mtg.' + key + '=!_mtg.' + key + ';renderMeetingNow();">' + (_mtg[key] ? 'Hide' : 'Show') + ' ' + n + ' due later</button></div>' : '';
 
+  const whoNames = ['Adam','Tom','Both'].concat((db.subs || []).map(x => x.name).filter(Boolean));
+  h += '<datalist id="mtg-who-list">' + [...new Set(whoNames)].map(n => '<option value="' + mtgEsc(n) + '">').join('') + '</datalist>';
+  const whoCell = (val, onchange) => '<input list="mtg-who-list" value="' + mtgEsc(val) + '" placeholder="Who?" onchange="' + onchange + '" onfocus="this.select()" style="width:120px;padding:4px 8px;font-size:12px;">';
   const jobOpts = db.jobs.filter(j => MTG_LIVE.includes(j.status) || MTG_PIPE.includes(j.status)).map(j => '<option value="' + mtgEsc(j.ref) + '">' + mtgEsc(j.ref) + ' ' + mtgEsc(j.name) + '</option>').join('');
   const addForm = (kind) => {
     let f = '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">';
     f += '<input id="mtg-' + kind + '-text" placeholder="New ' + (kind === 'job' ? 'job' : 'business') + ' action" style="flex:2;min-width:220px;" onkeydown="if(event.key===\'Enter\')mtgAddAction(\'' + kind + '\')">';
     if (kind === 'job') f += '<select id="mtg-job-job" style="width:auto;max-width:220px;"><option value="">Choose job…</option>' + jobOpts + '</select>';
-    f += '<select id="mtg-' + kind + '-who" style="width:auto;"><option>Adam</option><option>Tom</option><option>Both</option></select>';
+    f += '<input id="mtg-' + kind + '-who" list="mtg-who-list" value="Adam" placeholder="Who?" onfocus="this.select()" style="width:120px;">';
     f += '<input id="mtg-' + kind + '-due" type="date" value="' + mtgISO(mtgAddDays(md, 7)) + '" style="width:auto;">';
     f += '<button class="btn btn-primary" onclick="mtgAddAction(\'' + kind + '\')">Add action</button></div>';
     return f;
@@ -13341,7 +13344,7 @@ function renderMeetingNow() {
   h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Who</th><th>Due</th><th>Status</th></tr></thead><tbody>';
   const bizShown = _mtg.showLaterBiz ? bizRows : bizSoon;
   if (!bizShown.length) h += '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:16px;">No open business actions.</td></tr>';
-  bizShown.forEach(x => { h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + mtgEsc(mtgOwnerName(x.a.owner)) + '</td><td>' + dueCell(x.due) + '</td><td>' + statusSel('q1', x.i, x.a.status) + '</td></tr>'; });
+  bizShown.forEach(x => { h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'q1\',' + x.i + ',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetBizDue(' + x.i + ',this.value)') + '</td><td>' + statusSel('q1', x.i, x.a.status) + '</td></tr>'; });
   h += '</tbody></table></div>' + laterBtn('showLaterBiz', bizLater.length) + addForm('biz') + '</div></div>';
 
   // 1b. Job actions
@@ -13353,7 +13356,7 @@ function renderMeetingNow() {
   if (!jobShown.length) h += '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">No open job actions.</td></tr>';
   jobShown.forEach(x => {
     const t = x.t;
-    h += '<tr><td>' + mtgEsc(t.text) + '</td><td><a href="#" onclick="openJob(\'' + mtgEsc(t.jobRef) + '\');return false;">' + mtgEsc(t.jobRef) + '</a></td><td>' + mtgEsc(t.who || '—') + '</td><td>' + dueCell(x.due) + '</td>' +
+    h += '<tr><td>' + mtgEsc(t.text) + '</td><td><a href="#" onclick="openJob(\'' + mtgEsc(t.jobRef) + '\');return false;">' + mtgEsc(t.jobRef) + '</a></td><td>' + whoCell(t.who || '', 'mtgSetTodoWho(\'' + t.id + '\',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetTodoDue(\'' + t.id + '\',this.value)') + '</td>' +
       '<td><select style="width:auto;padding:4px 8px;font-size:12px;" onchange="if(this.value===\'Completed\')mtgTodoDone(\'' + t.id + '\')"><option selected>To Do</option><option>Completed</option></select></td></tr>';
   });
   h += '</tbody></table></div>' + laterBtn('showLaterJob', jobLater.length) + addForm('job') + '</div></div>';
@@ -13366,12 +13369,12 @@ function renderMeetingNow() {
   if (!goals.length) h += '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:16px;">No open goals.</td></tr>';
   goals.forEach(x => {
     const pb = x.a.priority === 'High' ? 'badge-hold' : x.a.priority === 'Low' ? 'badge-enquiry' : 'badge-preparing';
-    h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + mtgEsc(mtgOwnerName(x.a.owner)) + '</td><td><span class="badge ' + pb + '">' + mtgEsc(x.a.priority || 'Medium') + '</span></td><td>' + statusSel('lt', x.i, x.a.status) + '</td></tr>';
+    h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'lt\',' + x.i + ',this.value)') + '</td><td><span class="badge ' + pb + '">' + mtgEsc(x.a.priority || 'Medium') + '</span></td><td>' + statusSel('lt', x.i, x.a.status) + '</td></tr>';
   });
   h += '</tbody></table></div>';
   h += '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">';
   h += '<input id="mtg-goal-text" placeholder="New goal" style="flex:2;min-width:220px;" onkeydown="if(event.key===\'Enter\')mtgAddGoal()">';
-  h += '<select id="mtg-goal-who" style="width:auto;"><option>Both</option><option>Adam</option><option>Tom</option></select>';
+  h += '<input id="mtg-goal-who" list="mtg-who-list" value="Both" placeholder="Who?" onfocus="this.select()" style="width:120px;">';
   h += '<select id="mtg-goal-priority" style="width:auto;"><option>High</option><option selected>Medium</option><option>Low</option></select>';
   h += '<button class="btn btn-primary" onclick="mtgAddGoal()">Add goal</button></div>';
   h += '</div></div>';
@@ -13481,6 +13484,39 @@ function mtgSetDate(v) {
   window.scrollTo(0, 0);
 }
 
+function mtgOwnerCode(who) { const w = (who || '').trim(); return w === 'Adam' ? 'A' : w === 'Tom' ? 'T' : w; }
+
+function mtgSetActionWho(type, idx, val) {
+  const list = type === 'q1' ? db.actionsQ1 : db.actionsLT;
+  const a = list[idx];
+  if (!a) return;
+  a.owner = mtgOwnerCode(val);
+  saveData();
+  if (a.id) supa.patch('actions', a.id, { owner: a.owner }).catch(() => alert('Couldn\'t save that — check your connection.'));
+}
+
+async function mtgSetTodoWho(id, val) {
+  const t = _mtg.todos.find(x => x.id === id);
+  if (t) t.who = (val || '').trim();
+  try { await supa.patch('job_todos', id, { assigned_to: (val || '').trim() }); } catch(e) { alert('Couldn\'t save that — check your connection.'); }
+}
+
+function mtgSetBizDue(idx, val) {
+  const a = db.actionsQ1[idx];
+  if (!a) return;
+  a.due = val;
+  saveData();
+  if (a.id) supa.patch('actions', a.id, { due: val || null }).catch(() => alert('Couldn\'t save that date — check your connection.'));
+  renderMeetingNow();
+}
+
+async function mtgSetTodoDue(id, val) {
+  const t = _mtg.todos.find(x => x.id === id);
+  if (t) t.due = val;
+  renderMeetingNow();
+  try { await supa.patch('job_todos', id, { due_date: val || null }); } catch(e) { alert('Couldn\'t save that date — check your connection.'); }
+}
+
 function mtgSetActionStatus(type, idx, val) {
   updateActionStatus(type, idx, val);
   renderMeetingNow();
@@ -13521,7 +13557,7 @@ async function mtgAddAction(kind) {
       const res = await supa.post('job_todos', { job_ref: job, text: text, done: false, assigned_to: who, due_date: dueVal || null });
       if (res && res[0]) _mtg.todos.push({ id: res[0].id, jobRef: job, text: text, who: who, due: dueVal });
     } else {
-      const owner = who === 'Adam' ? 'A' : who === 'Tom' ? 'T' : 'Both';
+      const owner = mtgOwnerCode(who);
       const action = { desc: text, owner: owner, due: dueVal, priority: 'Medium', status: 'To Do', notes: note };
       const res = await supa.post('actions', { list_type: 'q1', description: text, owner: owner, due: dueVal || null, priority: 'Medium', status: 'To Do', notes: note, sort_order: db.actionsQ1.length });
       if (res && res[0]) action.id = res[0].id;
@@ -13540,7 +13576,7 @@ async function mtgAddGoal() {
   if (!text) return;
   const who = document.getElementById('mtg-goal-who').value;
   const priority = document.getElementById('mtg-goal-priority').value;
-  const owner = who === 'Adam' ? 'A' : who === 'Tom' ? 'T' : 'Both';
+  const owner = mtgOwnerCode(who);
   const note = 'Added in weekly meeting ' + mtgShort(mtgDate());
   const goal = { desc: text, owner: owner, due: '', priority: priority, status: 'To Do', notes: note };
   try {
