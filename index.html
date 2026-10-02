@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.65 -->
+<!-- Livingstone v4.66 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.65</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.66</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -13217,7 +13217,7 @@ function mtgInvoiceDue(inv) {
 async function mtgLoadOpenTodos() {
   try {
     const rows = await supa.get('job_todos', 'done=eq.false&order=added.asc');
-    _mtg.todos = (rows || []).map(t => ({ id: t.id, jobRef: t.job_ref, text: t.text, who: t.assigned_to || '', due: t.due_date || '' }));
+    _mtg.todos = (rows || []).map(t => ({ id: t.id, jobRef: t.job_ref, text: t.text, who: t.assigned_to || '', due: t.due_date || '', notes: t.notes || '' }));
   } catch(e) { console.warn('Meeting: job to-dos load failed', e); }
 }
 
@@ -13326,6 +13326,7 @@ function renderMeetingNow() {
   const whoNames = ['Adam','Tom','Both'].concat((db.subs || []).map(x => x.name).filter(Boolean));
   h += '<datalist id="mtg-who-list">' + [...new Set(whoNames)].map(n => '<option value="' + mtgEsc(n) + '">').join('') + '</datalist>';
   const whoCell = (val, onchange) => '<input list="mtg-who-list" value="' + mtgEsc(val) + '" placeholder="Who?" onchange="' + onchange + '" onfocus="this.select()" style="width:120px;padding:4px 8px;font-size:12px;">';
+  const notesCell = (val, onchange) => '<textarea rows="1" placeholder="Notes" onchange="' + onchange + '" style="width:100%;min-width:180px;min-height:0;height:32px;padding:6px 8px;font-size:12px;resize:vertical;font-family:inherit;">' + mtgEsc(val) + '</textarea>';
   const jobOpts = db.jobs.filter(j => MTG_LIVE.includes(j.status) || MTG_PIPE.includes(j.status)).map(j => '<option value="' + mtgEsc(j.ref) + '">' + mtgEsc(j.ref) + ' ' + mtgEsc(j.name) + '</option>').join('');
   const addForm = (kind) => {
     let f = '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">';
@@ -13341,23 +13342,23 @@ function renderMeetingNow() {
   const bizRows = (db.actionsQ1 || []).map((a, i) => ({ a, i, due: due(a.due) })).filter(x => x.a.status !== 'Completed').sort(byDue);
   const [bizSoon, bizLater] = splitSoon(bizRows);
   h += mtgSectionStart('Business actions', '', subSummary(bizSoon));
-  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Who</th><th>Due</th><th>Status</th></tr></thead><tbody>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Who</th><th>Due</th><th>Status</th><th style="width:30%;">Notes</th></tr></thead><tbody>';
   const bizShown = _mtg.showLaterBiz ? bizRows : bizSoon;
-  if (!bizShown.length) h += '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:16px;">No open business actions.</td></tr>';
-  bizShown.forEach(x => { h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'q1\',' + x.i + ',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetBizDue(' + x.i + ',this.value)') + '</td><td>' + statusSel('q1', x.i, x.a.status) + '</td></tr>'; });
+  if (!bizShown.length) h += '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">No open business actions.</td></tr>';
+  bizShown.forEach(x => { h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'q1\',' + x.i + ',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetBizDue(' + x.i + ',this.value)') + '</td><td>' + statusSel('q1', x.i, x.a.status) + '</td><td>' + notesCell(x.a.notes, 'mtgSetActionNotes(\'q1\',' + x.i + ',this.value)') + '</td></tr>'; });
   h += '</tbody></table></div>' + laterBtn('showLaterBiz', bizLater.length) + addForm('biz') + '</div></div>';
 
   // 1b. Job actions
   const jobRows = _mtg.todos.map(t => ({ t, due: due(t.due) })).sort(byDue);
   const [jobSoon, jobLater] = splitSoon(jobRows);
   h += mtgSectionStart('Job actions', '', subSummary(jobSoon));
-  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Job</th><th>Who</th><th>Due</th><th>Status</th></tr></thead><tbody>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Job</th><th>Who</th><th>Due</th><th>Status</th><th style="width:28%;">Notes</th></tr></thead><tbody>';
   const jobShown = _mtg.showLaterJob ? jobRows : jobSoon;
-  if (!jobShown.length) h += '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">No open job actions.</td></tr>';
+  if (!jobShown.length) h += '<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:16px;">No open job actions.</td></tr>';
   jobShown.forEach(x => {
     const t = x.t;
     h += '<tr><td>' + mtgEsc(t.text) + '</td><td><a href="#" onclick="openJob(\'' + mtgEsc(t.jobRef) + '\');return false;">' + mtgEsc(t.jobRef) + '</a></td><td>' + whoCell(t.who || '', 'mtgSetTodoWho(\'' + t.id + '\',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetTodoDue(\'' + t.id + '\',this.value)') + '</td>' +
-      '<td><select style="width:auto;padding:4px 8px;font-size:12px;" onchange="if(this.value===\'Completed\')mtgTodoDone(\'' + t.id + '\')"><option selected>To Do</option><option>Completed</option></select></td></tr>';
+      '<td><select style="width:auto;padding:4px 8px;font-size:12px;" onchange="if(this.value===\'Completed\')mtgTodoDone(\'' + t.id + '\')"><option selected>To Do</option><option>Completed</option></select></td><td>' + notesCell(t.notes, 'mtgSetTodoNotes(\'' + t.id + '\',this.value)') + '</td></tr>';
   });
   h += '</tbody></table></div>' + laterBtn('showLaterJob', jobLater.length) + addForm('job') + '</div></div>';
 
@@ -13365,11 +13366,11 @@ function renderMeetingNow() {
   const pRank = { High: 0, Medium: 1, Low: 2 };
   const goals = (db.actionsLT || []).map((a, i) => ({ a, i })).filter(x => x.a.status !== 'Completed').sort((x, y) => (pRank[x.a.priority] ?? 1) - (pRank[y.a.priority] ?? 1));
   h += mtgSectionStart('Long-term goals', '', goals.length + ' open');
-  h += '<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Who</th><th>Priority</th><th>Status</th></tr></thead><tbody>';
-  if (!goals.length) h += '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:16px;">No open goals.</td></tr>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Who</th><th>Priority</th><th>Status</th><th style="width:30%;">Notes</th></tr></thead><tbody>';
+  if (!goals.length) h += '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">No open goals.</td></tr>';
   goals.forEach(x => {
     const pb = x.a.priority === 'High' ? 'badge-hold' : x.a.priority === 'Low' ? 'badge-enquiry' : 'badge-preparing';
-    h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'lt\',' + x.i + ',this.value)') + '</td><td><span class="badge ' + pb + '">' + mtgEsc(x.a.priority || 'Medium') + '</span></td><td>' + statusSel('lt', x.i, x.a.status) + '</td></tr>';
+    h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'lt\',' + x.i + ',this.value)') + '</td><td><span class="badge ' + pb + '">' + mtgEsc(x.a.priority || 'Medium') + '</span></td><td>' + statusSel('lt', x.i, x.a.status) + '</td><td>' + notesCell(x.a.notes, 'mtgSetActionNotes(\'lt\',' + x.i + ',this.value)') + '</td></tr>';
   });
   h += '</tbody></table></div>';
   h += '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">';
@@ -13499,6 +13500,22 @@ async function mtgSetTodoWho(id, val) {
   const t = _mtg.todos.find(x => x.id === id);
   if (t) t.who = (val || '').trim();
   try { await supa.patch('job_todos', id, { assigned_to: (val || '').trim() }); } catch(e) { alert('Couldn\'t save that — check your connection.'); }
+}
+
+function mtgSetActionNotes(type, idx, val) {
+  const list = type === 'q1' ? db.actionsQ1 : db.actionsLT;
+  const a = list[idx];
+  if (!a) return;
+  a.notes = val;
+  saveData();
+  if (a.id) supa.patch('actions', a.id, { notes: val }).catch(() => alert('Couldn\'t save that note — check your connection.'));
+}
+
+async function mtgSetTodoNotes(id, val) {
+  const t = _mtg.todos.find(x => x.id === id);
+  if (t) t.notes = val;
+  try { await supa.patch('job_todos', id, { notes: val }); }
+  catch(e) { alert('Couldn\'t save that note. If this is the first time, run the v4.66 SQL in Supabase to add a notes column to job to-dos.'); }
 }
 
 function mtgSetBizDue(idx, val) {
