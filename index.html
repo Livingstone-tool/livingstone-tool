@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.62 -->
+<!-- Livingstone v4.63 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.62</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.63</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -13323,6 +13323,17 @@ function renderMeetingNow() {
   const subSummary = soon => soon.filter(r => r.due && r.due < c.today).length + ' overdue · ' + soon.length + ' due by next Friday';
   const laterBtn = (key, n) => n ? '<div style="padding:10px 20px;"><button class="btn btn-sm btn-secondary" onclick="_mtg.' + key + '=!_mtg.' + key + ';renderMeetingNow();">' + (_mtg[key] ? 'Hide' : 'Show') + ' ' + n + ' due later</button></div>' : '';
 
+  const jobOpts = db.jobs.filter(j => MTG_LIVE.includes(j.status) || MTG_PIPE.includes(j.status)).map(j => '<option value="' + mtgEsc(j.ref) + '">' + mtgEsc(j.ref) + ' ' + mtgEsc(j.name) + '</option>').join('');
+  const addForm = (kind) => {
+    let f = '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">';
+    f += '<input id="mtg-' + kind + '-text" placeholder="New ' + (kind === 'job' ? 'job' : 'business') + ' action" style="flex:2;min-width:220px;" onkeydown="if(event.key===\'Enter\')mtgAddAction(\'' + kind + '\')">';
+    if (kind === 'job') f += '<select id="mtg-job-job" style="width:auto;max-width:220px;"><option value="">Choose job…</option>' + jobOpts + '</select>';
+    f += '<select id="mtg-' + kind + '-who" style="width:auto;"><option>Adam</option><option>Tom</option><option>Both</option></select>';
+    f += '<input id="mtg-' + kind + '-due" type="date" value="' + mtgISO(mtgAddDays(md, 7)) + '" style="width:auto;">';
+    f += '<button class="btn btn-primary" onclick="mtgAddAction(\'' + kind + '\')">Add action</button></div>';
+    return f;
+  };
+
   // 1a. Business actions
   const bizRows = (db.actionsQ1 || []).map((a, i) => ({ a, i, due: due(a.due) })).filter(x => x.a.status !== 'Completed').sort(byDue);
   const [bizSoon, bizLater] = splitSoon(bizRows);
@@ -13331,7 +13342,7 @@ function renderMeetingNow() {
   const bizShown = _mtg.showLaterBiz ? bizRows : bizSoon;
   if (!bizShown.length) h += '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:16px;">No open business actions.</td></tr>';
   bizShown.forEach(x => { h += '<tr><td>' + mtgEsc(x.a.desc) + '</td><td>' + mtgEsc(mtgOwnerName(x.a.owner)) + '</td><td>' + dueCell(x.due) + '</td><td>' + statusSel('q1', x.i, x.a.status) + '</td></tr>'; });
-  h += '</tbody></table></div>' + laterBtn('showLaterBiz', bizLater.length) + '</div></div>';
+  h += '</tbody></table></div>' + laterBtn('showLaterBiz', bizLater.length) + addForm('biz') + '</div></div>';
 
   // 1b. Job actions
   const jobRows = _mtg.todos.map(t => ({ t, due: due(t.due) })).sort(byDue);
@@ -13345,7 +13356,7 @@ function renderMeetingNow() {
     h += '<tr><td>' + mtgEsc(t.text) + '</td><td><a href="#" onclick="openJob(\'' + mtgEsc(t.jobRef) + '\');return false;">' + mtgEsc(t.jobRef) + '</a></td><td>' + mtgEsc(t.who || '—') + '</td><td>' + dueCell(x.due) + '</td>' +
       '<td><select style="width:auto;padding:4px 8px;font-size:12px;" onchange="if(this.value===\'Completed\')mtgTodoDone(\'' + t.id + '\')"><option selected>To Do</option><option>Completed</option></select></td></tr>';
   });
-  h += '</tbody></table></div>' + laterBtn('showLaterJob', jobLater.length) + '</div></div>';
+  h += '</tbody></table></div>' + laterBtn('showLaterJob', jobLater.length) + addForm('job') + '</div></div>';
 
   // 1c. Long-term goals
   const pRank = { High: 0, Medium: 1, Low: 2 };
@@ -13437,19 +13448,9 @@ function renderMeetingNow() {
   h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Change stages on the Pipeline and Growth pages. Amber = no contact in 14+ days.</div>';
   h += '</div></div>';
 
-  // 5. New actions + decisions
-  const jobOpts = db.jobs.filter(j => MTG_LIVE.includes(j.status) || MTG_PIPE.includes(j.status)).map(j => '<option value="' + mtgEsc(j.ref) + '">' + mtgEsc(j.ref) + ' ' + mtgEsc(j.name) + '</option>').join('');
-  h += mtgSectionStart('New actions', '5 min', 'Job actions go to that job\'s to-do list; the rest to Business Actions');
-  h += '<div style="padding:16px 20px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">';
-  h += '<input id="mtg-new-text" placeholder="What needs doing?" style="flex:2;min-width:220px;" onkeydown="if(event.key===\'Enter\')mtgAddAction()">';
-  h += '<select id="mtg-new-job" style="width:auto;"><option value="">Business (no job)</option>' + jobOpts + '</select>';
-  h += '<select id="mtg-new-who" style="width:auto;"><option>Adam</option><option>Tom</option><option>Both</option></select>';
-  h += '<input id="mtg-new-due" type="date" value="' + mtgISO(mtgAddDays(md, 7)) + '" style="width:auto;">';
-  h += '<button class="btn btn-primary" onclick="mtgAddAction()">Add action</button></div>';
-  if (_mtg.added.length) {
-    h += '<div style="padding:0 20px 12px;font-size:13px;">' + _mtg.added.map(a => '<div style="padding:4px 0;">✓ ' + mtgEsc(a.text) + ' <span style="color:var(--text-muted);font-size:12px;">· ' + mtgEsc(a.who) + ' · ' + mtgShort(mtgParse(a.due)) + ' · ' + (a.job ? mtgEsc(a.job) : 'Business') + '</span></div>').join('') + '</div>';
-  }
-  h += '<div style="padding:0 20px 20px;"><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Decisions (only what isn\'t already an action)</label><textarea rows="3" oninput="_mtg.decisions=this.value" style="width:100%;">' + mtgEsc(_mtg.decisions) + '</textarea></div>';
+  // 5. Decisions
+  h += mtgSectionStart('Decisions', '5 min', 'Only what isn\'t already an action');
+  h += '<div style="padding:16px 20px 20px;"><textarea rows="3" oninput="_mtg.decisions=this.value" style="width:100%;">' + mtgEsc(_mtg.decisions) + '</textarea></div>';
   h += '</div></div>';
 
   // History
@@ -13500,18 +13501,20 @@ function mtgSetInvoiceStatus(i, status) {
 }
 
 function mtgPrefillAction(ref) {
-  const sel = document.getElementById('mtg-new-job');
+  const sel = document.getElementById('mtg-job-job');
   if (sel) sel.value = ref;
-  const t = document.getElementById('mtg-new-text');
+  const t = document.getElementById('mtg-job-text');
   if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.focus(); }
 }
 
-async function mtgAddAction() {
-  const text = (document.getElementById('mtg-new-text').value || '').trim();
+async function mtgAddAction(kind) {
+  const g = id => document.getElementById('mtg-' + kind + '-' + id);
+  const text = (g('text').value || '').trim();
   if (!text) return;
-  const job = document.getElementById('mtg-new-job').value;
-  const who = document.getElementById('mtg-new-who').value;
-  const dueVal = document.getElementById('mtg-new-due').value;
+  const job = kind === 'job' ? document.getElementById('mtg-job-job').value : '';
+  if (kind === 'job' && !job) { alert('Choose which job this action is for.'); return; }
+  const who = g('who').value;
+  const dueVal = g('due').value;
   const note = 'From weekly meeting ' + mtgShort(mtgDate());
   try {
     if (job) {
@@ -13526,9 +13529,9 @@ async function mtgAddAction() {
       saveData();
     }
     _mtg.added.push({ text, who, due: dueVal, job });
-    document.getElementById('mtg-new-text').value = '';
     renderMeetingNow();
-    const t = document.getElementById('mtg-new-text'); if (t) t.focus();
+    const t = document.getElementById('mtg-' + kind + '-text'); if (t) t.focus();
+    if (kind === 'job') { const sel = document.getElementById('mtg-job-job'); if (sel) sel.value = job; }
   } catch(e) { alert('Couldn\'t save that action — check your connection and try again.'); }
 }
 
