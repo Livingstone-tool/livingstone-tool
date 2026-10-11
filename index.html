@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.69 -->
+<!-- Livingstone v4.70 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.69</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.70</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1181,7 +1181,7 @@ window.onerror=function(m,s,l,c,e){
   <div id="page-braindump" class="page content">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-        <div style="font-size:12px;color:var(--text-muted);">Shared notes and lists — you and Tom see the same cards. <span id="bd-signed" onclick="changeBrainDumpName()" style="cursor:pointer;color:var(--copper);font-weight:600;"></span></div>
+        <div style="font-size:12px;color:var(--text-muted);">Shared notes and lists — you and Tom see the same cards. <span id="bd-sync" style="margin-right:8px;"></span><span id="bd-signed" onclick="changeBrainDumpName()" style="cursor:pointer;color:var(--copper);font-weight:600;"></span></div>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sm btn-primary" onclick="addBrainCard('note')">+ Note</button>
           <button class="btn btn-sm btn-primary" onclick="addBrainCard('list')">+ List</button>
@@ -3168,7 +3168,7 @@ function showPage(id, subtab) {
 
 function renderPage(id) {
   if(id==='dashboard') renderDashboard();
-  if(id==='braindump') { renderBrainCards(); loadBrainCardsFromSupabase(); updateBrainDumpSigned(); }
+  if(id==='braindump') { renderBrainCards(); loadBrainCardsFromSupabase(); updateBrainDumpSigned(); bdSetSync(_bdSyncState.ok, _bdSyncState.msg); }
   else if(id==='pipeline') renderPipeline();
   else if(id==='jobs') renderJobsTable();
   else if(id==='quotes') renderQuotesTable();
@@ -3202,24 +3202,57 @@ function getLivingstoneUser() {
   return u || '';
 }
 
-async function loadBrainCardsFromSupabase() {
-  try {
-    const rows = await supa.get('brain_cards', 'order=created_at.desc');
-    if (rows) {
-      db.brainCards = rows.map(r => {
-        let items = [];
-        if (r.type === 'list') { try { items = JSON.parse(r.content) || []; } catch(e) {} }
-        return { id: r.id, title: r.title||'', type: r.type||'note',
-          text: r.type === 'note' ? (r.content||'') : '', items: items,
-          createdBy: r.created_by||'', createdAt: r.created_at };
-      });
-      saveBrainCards();
-      renderBrainCards();
-    }
-  } catch(e) { console.warn('Brain cards load failed:', e); }
+// Sync status shown on the Brain Dump page, so failures are never silent
+let _bdSyncState = { ok: null, msg: '' };
+function bdSetSync(ok, msg) {
+  _bdSyncState = { ok, msg };
+  const el = document.getElementById('bd-sync');
+  if (!el) return;
+  const pending = (db.brainCards || []).filter(c => c.unsynced || String(c.id).startsWith('local_')).length;
+  if (ok === false) el.innerHTML = '<span style="color:var(--danger);font-weight:600;">⚠ Not shared — ' + (pending || 'some') + ' card' + (pending === 1 ? '' : 's') + ' only on this device (' + String(msg || 'connection error').replace(/</g,'&lt;').slice(0,80) + ')</span> <a href="#" onclick="bdRetryAll();return false;">Retry</a>';
+  else if (pending) el.innerHTML = '<span style="color:var(--warning);">Saving ' + pending + '…</span>';
+  else if (ok) el.innerHTML = '<span style="color:var(--success);">✓ Shared</span>';
+  else el.innerHTML = '';
 }
 
-async function syncBrainCardToSupabase(card) {
+async function loadBrainCardsFromSupabase() {
+  let rows;
+  try { rows = await supa.get('brain_cards', 'order=created_at.desc'); }
+  catch(e) { console.warn('Brain cards load failed:', e); bdSetSync(false, e && e.message); return; }
+  if (!rows) return;
+  const remote = rows.map(r => {
+    let items = [];
+    if (r.type === 'list') { try { items = JSON.parse(r.content) || []; } catch(e) {} }
+    return { id: r.id, title: r.title||'', type: r.type||'note',
+      text: r.type === 'note' ? (r.content||'') : '', items: items,
+      createdBy: r.created_by||'', createdAt: r.created_at };
+  });
+  // Keep anything on this device that never reached Supabase (new cards, or edits whose save failed)
+  const local = db.brainCards || [];
+  const unsentNew = local.filter(c => String(c.id).startsWith('local_'));
+  const merged = remote.map(r => { const l = local.find(c => String(c.id) === String(r.id) && c.unsynced); return l || r; });
+  db.brainCards = unsentNew.concat(merged);
+  saveBrainCards();
+  renderBrainCards();
+  bdSetSync(true);
+  const toPush = db.brainCards.filter(c => c.unsynced || String(c.id).startsWith('local_'));
+  for (const c of toPush) await syncBrainCardToSupabase(c);
+}
+
+// One save at a time per card, so quick edits on a new card can't create duplicates
+const _bdQueue = new Map();
+function syncBrainCardToSupabase(card) {
+  card.unsynced = true;
+  saveBrainCards();
+  bdSetSync(_bdSyncState.ok);
+  const prev = _bdQueue.get(card) || Promise.resolve();
+  const next = prev.then(() => bdSyncOnce(card));
+  _bdQueue.set(card, next);
+  return next;
+}
+
+async function bdSyncOnce(card) {
+  if (!db.brainCards.includes(card)) return;
   const payload = {
     title: card.title||'', type: card.type||'note',
     content: card.type === 'list' ? JSON.stringify(card.items||[]) : (card.text||''),
@@ -3230,9 +3263,26 @@ async function syncBrainCardToSupabase(card) {
       await supa.patch('brain_cards', card.id, payload);
     } else {
       const res = await supa.post('brain_cards', payload);
-      if (res && res[0] && res[0].id) { card.id = res[0].id; saveBrainCards(); }
+      if (!(res && res[0] && res[0].id)) throw new Error('no id returned');
+      card.id = res[0].id;
     }
-  } catch(e) { console.warn('Brain card sync failed:', e); }
+    delete card.unsynced;
+    saveBrainCards();
+    bdSetSync(true);
+  } catch(e) {
+    console.warn('Brain card sync failed:', e);
+    bdSetSync(false, e && e.message);
+  }
+}
+
+function bdRetryAll() {
+  (db.brainCards || []).filter(c => c.unsynced || String(c.id).startsWith('local_')).forEach(c => syncBrainCardToSupabase(c));
+}
+
+let _bdNoteTimers = {};
+function bdNoteInput(id, val) {
+  clearTimeout(_bdNoteTimers[id]);
+  _bdNoteTimers[id] = setTimeout(() => updateBrainNote(id, val), 1200);
 }
 
 function bdCardById(id) { return db.brainCards.find(c => String(c.id) === String(id)); }
@@ -3362,7 +3412,7 @@ function renderBrainCards() {
       + '<button onclick="deleteBrainCard(\'' + c.id + '\')" style="border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:11px;">✕</button></div></div>';
     let body = '';
     if (c.type === 'note') {
-      body = '<textarea onchange="updateBrainNote(\'' + c.id + '\', this.value)" placeholder="Type away..." style="width:100%;min-height:90px;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;resize:vertical;font-family:inherit;line-height:1.5;">' + (c.text||'').replace(/</g,'&lt;') + '</textarea>';
+      body = '<textarea oninput="bdNoteInput(\'' + c.id + '\', this.value)" onchange="clearTimeout(_bdNoteTimers[\'' + c.id + '\']);updateBrainNote(\'' + c.id + '\', this.value)" placeholder="Type away..." style="width:100%;min-height:90px;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;resize:vertical;font-family:inherit;line-height:1.5;">' + (c.text||'').replace(/</g,'&lt;') + '</textarea>';
     } else {
       const open = c.items.map((it,i)=>({it,i})).filter(x=>!x.it.done);
       const done = c.items.map((it,i)=>({it,i})).filter(x=>x.it.done);
