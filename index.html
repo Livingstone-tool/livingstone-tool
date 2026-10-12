@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.70 -->
+<!-- Livingstone v4.71 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.70</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.71</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6905,7 +6905,7 @@ async function loadGrowthFromSupabase() {
         id: p.id, school: p.school || '', type: p.type || '', contact: p.contact || '',
         role: p.role || '', email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research',
         estValue: p.est_value || '', source: p.source || '', nextAction: p.next_action || '',
-        lastContact: p.last_contact || '', notes: p.notes || ''
+        lastContact: p.last_contact || '', notes: p.notes || '', activity: plParseActivity(p.activity)
       }));
     } else if (db.pipeline.length) {
       for (const p of db.pipeline) await syncPipelineToSupabase(p);
@@ -6929,16 +6929,9 @@ async function syncPipelineToSupabase(p) {
     school: p.school || '', type: p.type || '', contact: p.contact || '', role: p.role || '',
     email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research',
     est_value: p.estValue || '', source: p.source || '', next_action: p.nextAction || '',
-    last_contact: p.lastContact || '', notes: p.notes || ''
+    last_contact: p.lastContact || '', notes: p.notes || '', activity: JSON.stringify(p.activity || [])
   };
-  try {
-    if (p.id && !String(p.id).startsWith('local_')) {
-      await supa.patch('pipeline', p.id, payload);
-    } else {
-      const res = await supa.post('pipeline', payload);
-      if (res && res[0] && res[0].id) p.id = res[0].id;
-    }
-  } catch(e) { console.warn('Pipeline sync failed:', e); }
+  try { await plWrite('pipeline', p, payload); } catch(e) { console.warn('Pipeline sync failed:', e); }
 }
 
 async function deletePipelineFromSupabase(p) {
@@ -7060,6 +7053,93 @@ function saveWorkstream() {
 }
 
 // --- PIPELINE ---
+// ── Pipeline activity log (v4.71): dated record of what's been done ──
+function plEsc(x) { return String(x == null ? '' : x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function plParseActivity(v) { if (Array.isArray(v)) return v; try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch(e) { return []; } }
+function plSorted(list) { return (list || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.ts || 0) - (a.ts || 0)); }
+function plLastContact(list) { const l = plSorted(list)[0]; return l ? l.date : ''; }
+function plFmt(d) { if (!d) return ''; const p = d.split('-'); return p.length === 3 ? new Date(+p[0], +p[1]-1, +p[2]).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : d; }
+function plLatestCell(p) {
+  const l = plSorted(p.activity)[0];
+  if (!l) return p.lastContact ? '<span style="color:var(--text-muted);">' + plEsc(p.lastContact) + '</span>' : '<span style="color:var(--text-muted);">Nothing logged</span>';
+  const n = (p.activity || []).length;
+  return '<div style="color:var(--text-muted);font-size:10px;">' + plFmt(l.date) + (l.who ? ' · ' + plEsc(l.who) : '') + (n > 1 ? ' · ' + n + ' entries' : '') + '</div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + plEsc(l.text) + '</div>';
+}
+
+let _plColumnWarned = false;
+async function plWrite(table, p, payload) {
+  const send = async body => {
+    if (p.id && !String(p.id).startsWith('local_')) return supa.patch(table, p.id, body);
+    const res = await supa.post(table, body);
+    if (res && res[0] && res[0].id) p.id = res[0].id;
+  };
+  try { await send(payload); }
+  catch(e) {
+    if (!/activity/i.test(String(e && e.message))) throw e;
+    const { activity, ...rest } = payload;   // column not created yet — save everything else
+    await send(rest);
+    if (!_plColumnWarned) { _plColumnWarned = true; alert('Saved, but the activity log isn\'t shared yet. Run the v4.71 SQL in Supabase to add the activity column.'); }
+  }
+}
+
+function plActivityBlock(kind, entry, idx) {
+  window._plActivity = (entry.activity || []).slice();
+  window._plKind = kind; window._plIdx = idx;
+  const me = (localStorage.getItem('livingstoneUser') || '').trim();
+  const today = new Date(); const iso = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+  return '<div class="form-group"><label>Activity log — what\'s been done</label>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'
+    + '<input type="date" id="pla-date" value="' + iso + '" style="width:auto;">'
+    + '<input type="text" id="pla-who" list="pla-who-list" value="' + plEsc(me) + '" placeholder="Who" style="width:90px;"><datalist id="pla-who-list"><option value="Adam"><option value="Tom"></datalist>'
+    + '<input type="text" id="pla-text" placeholder="e.g. Called the bursar, sent credentials pack" style="flex:1;min-width:200px;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();plAddActivity();}">'
+    + '<button class="btn btn-primary btn-sm" type="button" onclick="plAddActivity()">Log it</button></div>'
+    + '<div id="pla-list"></div></div>';
+}
+
+function plRenderActivity() {
+  const el = document.getElementById('pla-list');
+  if (!el) return;
+  const list = plSorted(window._plActivity);
+  if (!list.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">Nothing logged yet.</div>'; return; }
+  el.innerHTML = '<div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;">' + list.map(a =>
+    '<div style="display:flex;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;align-items:flex-start;">'
+    + '<div style="flex-shrink:0;width:70px;color:var(--text-muted);">' + plFmt(a.date) + (a.who ? '<div style="font-size:11px;">' + plEsc(a.who) + '</div>' : '') + '</div>'
+    + '<div style="flex:1;white-space:pre-wrap;">' + plEsc(a.text) + '</div>'
+    + '<button type="button" onclick="plDeleteActivity(' + a.ts + ')" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button></div>'
+  ).join('') + '</div>';
+}
+
+// Logged entries save straight away on an existing prospect, so closing the box doesn't lose them
+function plPersistActivity() {
+  const list = window._plKind === 'council' ? db.councilPipeline : db.pipeline;
+  const rec = window._plIdx >= 0 ? list[window._plIdx] : null;
+  if (!rec) return;
+  rec.activity = window._plActivity.slice();
+  rec.lastContact = plLastContact(rec.activity);
+  if (window._plKind === 'council') { saveCouncilData(); syncCouncilToSupabase(rec); renderCouncilPipelineNow(); }
+  else { saveGrowthData(); syncPipelineToSupabase(rec); renderGrowthPipeline(); }
+}
+
+function plAddActivity() {
+  const text = (document.getElementById('pla-text').value || '').trim();
+  if (!text) return;
+  const who = (document.getElementById('pla-who').value || '').trim();
+  if (who) localStorage.setItem('livingstoneUser', who);
+  window._plActivity.push({ date: document.getElementById('pla-date').value, who, text, ts: Date.now() });
+  document.getElementById('pla-text').value = '';
+  const t = new Date(); document.getElementById('pla-date').value = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0');
+  plRenderActivity();
+  plPersistActivity();
+  document.getElementById('pla-text').focus();
+}
+
+function plDeleteActivity(ts) {
+  if (!confirm('Remove this entry?')) return;
+  window._plActivity = window._plActivity.filter(a => a.ts !== ts);
+  plRenderActivity();
+  plPersistActivity();
+}
+
 function renderGrowthPipeline() {
   const el = document.getElementById('pipeline-content');
   if (!el) return;
@@ -7073,7 +7153,7 @@ function renderGrowthPipeline() {
   }
 
   let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
-  html += '<thead><tr><th>School</th><th>Type</th><th>Contact</th><th>Role</th><th>Stage</th><th>Est. Value</th><th>Next Action</th><th>Last Contact</th><th></th></tr></thead><tbody>';
+  html += '<thead><tr><th>School</th><th>Type</th><th>Contact</th><th>Role</th><th>Stage</th><th>Est. Value</th><th>Next Action</th><th>Latest activity</th><th></th></tr></thead><tbody>';
 
   db.pipeline.sort((a,b) => stages.indexOf(a.stage) - stages.indexOf(b.stage)).forEach((p, i) => {
     const col = stageColors[p.stage] || '#6b7e8e';
@@ -7085,7 +7165,7 @@ function renderGrowthPipeline() {
     html += '<td style="padding:8px 6px;"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:' + col + ';color:white;">' + (p.stage||'') + '</span></td>';
     html += '<td style="padding:8px 6px;font-size:11px;">' + (p.estValue ? '£' + parseInt(p.estValue).toLocaleString() : '') + '</td>';
     html += '<td style="padding:8px 6px;font-size:11px;color:var(--copper);">' + (p.nextAction||'') + '</td>';
-    html += '<td style="padding:8px 6px;font-size:11px;color:var(--text-muted);">' + (p.lastContact||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;max-width:260px;">' + plLatestCell(p) + '</td>';
     html += '<td style="padding:8px 4px;"><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deletePipelineEntry(' + i + ')" style="font-size:10px;padding:2px 6px;">✕</button></td>';
     html += '</tr>';
   });
@@ -7119,7 +7199,7 @@ function showPipelineModal(entry, idx) {
     modal.id = 'pipeline-edit-modal';
     modal.className = 'modal-overlay';
     modal.onclick = function(e) { if(e.target===modal) closeModal('pipeline-edit-modal'); };
-    modal.innerHTML = '<div class="modal" style="max-width:500px;"><div class="modal-header"><div class="modal-title" id="pl-modal-title"></div><button class="modal-close" onclick="closeModal(\'pipeline-edit-modal\')">×</button></div><div class="modal-body" id="pl-modal-body"></div></div>';
+    modal.innerHTML = '<div class="modal" style="max-width:620px;"><div class="modal-header"><div class="modal-title" id="pl-modal-title"></div><button class="modal-close" onclick="closeModal(\'pipeline-edit-modal\')">×</button></div><div class="modal-body" id="pl-modal-body"></div></div>';
     document.body.appendChild(modal);
   }
 
@@ -7141,11 +7221,13 @@ function showPipelineModal(entry, idx) {
     + '<div class="form-group"><label>Est. Value (£)</label><input type="number" id="pl-value" value="' + (entry.estValue||'') + '"></div>'
     + '<div class="form-group"><label>Source</label><input type="text" id="pl-source" value="' + (entry.source||'') + '" placeholder="e.g. ISBA, Yarlet referral"></div></div>'
     + '<div class="form-group"><label>Next Action</label><input type="text" id="pl-next" value="' + (entry.nextAction||'').replace(/"/g,'&quot;') + '"></div>'
-    + '<div class="form-group"><label>Notes</label><textarea id="pl-notes" rows="2" style="width:100%;">' + (entry.notes||'') + '</textarea></div>'
+    + plActivityBlock('school', entry, idx)
+    + '<div class="form-group"><label>Background notes</label><textarea id="pl-notes" rows="2" style="width:100%;" placeholder="Context that doesn\'t change much: decision makers, budgets, history">' + (entry.notes||'').replace(/</g,'&lt;') + '</textarea></div>'
     + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">'
     + '<button class="btn btn-secondary" onclick="closeModal(\'pipeline-edit-modal\')">Cancel</button>'
     + '<button class="btn btn-primary" onclick="savePipelineEntry()">Save</button></div>';
 
+  plRenderActivity();
   modal.style.display = 'flex';
 }
 
@@ -7163,7 +7245,8 @@ function savePipelineEntry() {
     source: document.getElementById('pl-source').value,
     nextAction: document.getElementById('pl-next').value,
     notes: document.getElementById('pl-notes').value,
-    lastContact: idx >= 0 ? db.pipeline[idx].lastContact : '',
+    lastContact: plLastContact(window._plActivity || []),
+    activity: (window._plActivity || []).slice(),
     id: idx >= 0 ? db.pipeline[idx].id : ('local_' + Date.now())
   };
   if (!entry.school) { alert('Enter a school name.'); return; }
@@ -7199,7 +7282,7 @@ async function loadCouncilFromSupabase() {
         id: p.id, council: p.council || '', team: p.team || '', contact: p.contact || '',
         role: p.role || '', email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research',
         area: p.area || '', estValue: p.est_value || '', source: p.source || '',
-        nextAction: p.next_action || '', lastContact: p.last_contact || '', notes: p.notes || ''
+        nextAction: p.next_action || '', lastContact: p.last_contact || '', notes: p.notes || '', activity: plParseActivity(p.activity)
       }));
       saveCouncilData();
     } else if (db.councilPipeline.length) {
@@ -7213,16 +7296,9 @@ async function syncCouncilToSupabase(p) {
     council: p.council || '', team: p.team || '', contact: p.contact || '', role: p.role || '',
     email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research', area: p.area || '',
     est_value: p.estValue || '', source: p.source || '', next_action: p.nextAction || '',
-    last_contact: p.lastContact || '', notes: p.notes || ''
+    last_contact: p.lastContact || '', notes: p.notes || '', activity: JSON.stringify(p.activity || [])
   };
-  try {
-    if (p.id && !String(p.id).startsWith('local_')) {
-      await supa.patch('council_pipeline', p.id, payload);
-    } else {
-      const res = await supa.post('council_pipeline', payload);
-      if (res && res[0] && res[0].id) p.id = res[0].id;
-    }
-  } catch(e) { console.warn('Council sync failed:', e); }
+  try { await plWrite('council_pipeline', p, payload); } catch(e) { console.warn('Council sync failed:', e); }
 }
 
 async function deleteCouncilFromSupabase(p) {
@@ -7251,7 +7327,7 @@ function renderCouncilPipelineNow() {
   }
 
   let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
-  html += '<thead><tr><th>Council</th><th>Team</th><th>Contact</th><th>Role</th><th>Stage</th><th>Area</th><th>Next Action</th><th>Last Contact</th><th></th></tr></thead><tbody>';
+  html += '<thead><tr><th>Council</th><th>Team</th><th>Contact</th><th>Role</th><th>Stage</th><th>Area</th><th>Next Action</th><th>Latest activity</th><th></th></tr></thead><tbody>';
 
   db.councilPipeline.sort((a,b) => COUNCIL_STAGES.indexOf(a.stage) - COUNCIL_STAGES.indexOf(b.stage)).forEach((p, i) => {
     const col = stageColors[p.stage] || '#6b7e8e';
@@ -7263,7 +7339,7 @@ function renderCouncilPipelineNow() {
     html += '<td style="padding:8px 6px;"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:' + col + ';color:white;">' + (p.stage||'') + '</span></td>';
     html += '<td style="padding:8px 6px;font-size:11px;">' + (p.area||'') + '</td>';
     html += '<td style="padding:8px 6px;font-size:11px;color:var(--copper);">' + (p.nextAction||'') + '</td>';
-    html += '<td style="padding:8px 6px;font-size:11px;color:var(--text-muted);">' + (p.lastContact||'') + '</td>';
+    html += '<td style="padding:8px 6px;font-size:11px;max-width:260px;">' + plLatestCell(p) + '</td>';
     html += '<td style="padding:8px 4px;"><button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCouncilEntry(' + i + ')" style="font-size:10px;padding:2px 6px;">✕</button></td>';
     html += '</tr>';
   });
@@ -7286,7 +7362,7 @@ function showCouncilModal(entry, idx) {
     modal.id = 'council-edit-modal';
     modal.className = 'modal-overlay';
     modal.onclick = function(e) { if(e.target===modal) closeModal('council-edit-modal'); };
-    modal.innerHTML = '<div class="modal" style="max-width:500px;"><div class="modal-header"><div class="modal-title" id="cl-modal-title"></div><button class="modal-close" onclick="closeModal(\'council-edit-modal\')">×</button></div><div class="modal-body" id="cl-modal-body"></div></div>';
+    modal.innerHTML = '<div class="modal" style="max-width:620px;"><div class="modal-header"><div class="modal-title" id="cl-modal-title"></div><button class="modal-close" onclick="closeModal(\'council-edit-modal\')">×</button></div><div class="modal-body" id="cl-modal-body"></div></div>';
     document.body.appendChild(modal);
   }
   document.getElementById('cl-modal-title').textContent = idx < 0 ? 'Add Council' : 'Edit — ' + (entry.council||'');
@@ -7306,10 +7382,12 @@ function showCouncilModal(entry, idx) {
     + '<div class="form-group"><label>Area</label><input type="text" id="cl-area" value="' + (entry.area||'') + '" placeholder="e.g. Stafford, Stone"></div>'
     + '<div class="form-group"><label>Source</label><input type="text" id="cl-source" value="' + (entry.source||'') + '"></div></div>'
     + '<div class="form-group"><label>Next Action</label><input type="text" id="cl-next" value="' + (entry.nextAction||'').replace(/"/g,'&quot;') + '"></div>'
-    + '<div class="form-group"><label>Notes</label><textarea id="cl-notes" rows="2" style="width:100%;">' + (entry.notes||'') + '</textarea></div>'
+    + plActivityBlock('council', entry, idx)
+    + '<div class="form-group"><label>Background notes</label><textarea id="cl-notes" rows="2" style="width:100%;" placeholder="Context that doesn\'t change much">' + (entry.notes||'').replace(/</g,'&lt;') + '</textarea></div>'
     + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">'
     + '<button class="btn btn-secondary" onclick="closeModal(\'council-edit-modal\')">Cancel</button>'
     + '<button class="btn btn-primary" onclick="saveCouncilEntry()">Save</button></div>';
+  plRenderActivity();
   modal.style.display = 'flex';
 }
 
@@ -7327,7 +7405,8 @@ function saveCouncilEntry() {
     source: document.getElementById('cl-source').value,
     nextAction: document.getElementById('cl-next').value,
     notes: document.getElementById('cl-notes').value,
-    lastContact: idx >= 0 ? db.councilPipeline[idx].lastContact : '',
+    lastContact: plLastContact(window._plActivity || []),
+    activity: (window._plActivity || []).slice(),
     estValue: idx >= 0 ? db.councilPipeline[idx].estValue : '',
     id: idx >= 0 ? db.councilPipeline[idx].id : ('local_' + Date.now())
   };
@@ -13541,11 +13620,11 @@ function renderMeetingNow() {
   const schools = (db.pipeline || []).filter(p => p.stage !== 'Won' && p.stage !== 'Lost');
   const councils = (db.councilPipeline || []).filter(p => p.stage !== 'Won' && p.stage !== 'Lost');
   h += mtgSectionStart('Pipeline', '10 min', mtgGBP(c.pipelineValue) + ' in enquiries and quotes');
-  h += '<div class="table-wrap"><table><thead><tr><th>Lead</th><th>Stage</th><th style="text-align:right;">Value</th><th>Next action</th><th>Last contact</th></tr></thead><tbody>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Lead</th><th>Stage</th><th style="text-align:right;">Value</th><th>Next action</th><th>Last activity</th></tr></thead><tbody>';
   const pipeRows = [];
   c.pipeJobs.forEach(j => pipeRows.push('<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td><td>' + statusBadge(j.status) + '</td><td style="text-align:right;">' + ((j.quoteValue || j.estimate) ? mtgGBP(j.quoteValue || j.estimate) : '—') + '</td><td style="font-size:12px;">' + (j.status === 'Quoted' ? 'Follow up on quote' : '') + '</td><td>—</td></tr>'));
-  schools.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.school) + ' <span style="font-size:11px;color:var(--text-muted);">School</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(p.lastContact) : 'Never') + '</td></tr>'));
-  councils.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.council) + ' <span style="font-size:11px;color:var(--text-muted);">Council</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(p.lastContact) : 'Never') + '</td></tr>'));
+  schools.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.school) + ' <span style="font-size:11px;color:var(--text-muted);">School</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
+  councils.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.council) + ' <span style="font-size:11px;color:var(--text-muted);">Council</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
   h += pipeRows.length ? pipeRows.join('') : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">Pipeline is empty.</td></tr>';
   h += '</tbody></table></div>';
   h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Change stages on the Pipeline and Growth pages. Amber = no contact in 14+ days.</div>';
