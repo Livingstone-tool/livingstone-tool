@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.71 -->
+<!-- Livingstone v4.72 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.71</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.72</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6950,12 +6950,8 @@ function switchGrowthTab(tab, el) {
   if (tab === 'plan') renderGrowthPlan();
   if (tab === 'pipeline') renderGrowthPipeline();
   if (tab === 'councils') renderCouncilPipeline();
-  if (tab === 'cassistant' && !document.getElementById('cassistant-messages').innerHTML) {
-    document.getElementById('cassistant-messages').innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px;">Ask me anything about the council empty homes route. I can research empty homes teams, grant funding, procurement routes, and add councils to the pipeline.</div>';
-  }
-  if (tab === 'assistant' && !document.getElementById('assistant-messages').innerHTML) {
-    document.getElementById('assistant-messages').innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px;">Ask me anything about growing Livingstone. I can research schools, find contacts, and add prospects directly to your pipeline.</div>';
-  }
+  if (tab === 'cassistant') { loadCouncilFromSupabase().catch(()=>{}); asstRender('councils'); asstLoad('councils'); }
+  if (tab === 'assistant') { asstRender('schools'); asstLoad('schools'); }
 }
 
 function renderGrowthPage() {
@@ -7427,6 +7423,110 @@ function deleteCouncilEntry(idx) {
   renderCouncilPipelineNow();
 }
 
+// ============================================================
+// ASSISTANT MEMORY (v4.72): conversations saved to Supabase, shared by Adam and Tom
+// ============================================================
+const ASST_KEEP = 30;              // messages sent to Claude each turn
+const _asst = { missing: false };
+const ASST_CFG = {
+  schools:  { el: 'assistant-messages',  hist: '_assistantHistory',  intro: 'Ask me anything about growing Livingstone. I can research schools, find contacts, add prospects, and log what you\'ve done ("log that I called the bursar at Brooklands today").' },
+  councils: { el: 'cassistant-messages', hist: '_cassistantHistory', intro: 'Ask me anything about the council empty homes route. I can research teams, grants and procurement routes, add councils, and log what you\'ve done.' }
+};
+function asstEsc(t) { return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>'); }
+function asstMe() { return (localStorage.getItem('livingstoneUser') || '').trim(); }
+function asstToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function asstStrip(t) { return String(t || '').replace(/\[(PIPELINE|COUNCIL)_(ADD|UPDATE)\][\s\S]*?\[\/\1_\2\]/g, '').trim(); }
+
+function asstBubble(m) {
+  const when = m.at ? new Date(m.at).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
+  if (m.role === 'user') {
+    return '<div style="text-align:right;margin-bottom:8px;"><div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">' + asstEsc(m.author || '') + (when ? ' · ' + when : '') + '</div><div style="display:inline-block;max-width:80%;padding:8px 12px;background:#B5DD3C;color:#0D0D0D;border-radius:12px 12px 0 12px;font-size:13px;text-align:left;">' + asstEsc(m.content) + '</div></div>';
+  }
+  return '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:12px 12px 12px 0;font-size:13px;line-height:1.6;">' + asstEsc(asstStrip(m.content)) + '</div>' + (m.extra || '') + '</div>';
+}
+
+function asstRender(thread) {
+  const cfg = ASST_CFG[thread]; const el = document.getElementById(cfg.el);
+  if (!el) return;
+  const hist = window[cfg.hist] || [];
+  let h = '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);margin-bottom:10px;gap:8px;flex-wrap:wrap;">'
+    + '<span>' + (_asst.missing ? '<span style="color:var(--warning);">⚠ History only on this device until the assistant_messages table is set up</span>' : (hist.length ? '✓ Saved and shared with Tom · ' + hist.length + ' message' + (hist.length === 1 ? '' : 's') : '✓ Conversations are saved and shared')) + '</span>'
+    + (hist.length ? '<button class="btn btn-sm btn-secondary" style="font-size:10px;" onclick="asstClear(\'' + thread + '\')">Clear conversation</button>' : '') + '</div>';
+  if (!hist.length) h += '<div style="color:var(--text-muted);font-size:13px;padding:8px 4px 16px;">' + cfg.intro + '</div>';
+  h += hist.map(asstBubble).join('');
+  el.innerHTML = h;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function asstLoad(thread) {
+  const cfg = ASST_CFG[thread];
+  try {
+    const rows = await supa.get('assistant_messages', 'thread=eq.' + thread + '&order=created_at.asc&limit=500');
+    _asst.missing = false;
+    window[cfg.hist] = (rows || []).map(r => ({ role: r.role, content: r.content || '', author: r.author || '', at: r.created_at }));
+  } catch(e) {
+    _asst.missing = true;
+    try { window[cfg.hist] = JSON.parse(localStorage.getItem('livingstoneAsst_' + thread) || '[]'); } catch(x) { window[cfg.hist] = []; }
+  }
+  asstRender(thread);
+}
+
+function asstRecord(thread, role, content) {
+  const cfg = ASST_CFG[thread];
+  const m = { role, content, author: role === 'user' ? asstMe() : 'Assistant', at: new Date().toISOString() };
+  (window[cfg.hist] = window[cfg.hist] || []).push(m);
+  try { localStorage.setItem('livingstoneAsst_' + thread, JSON.stringify(window[cfg.hist].slice(-100))); } catch(e) {}
+  if (!_asst.missing) supa.post('assistant_messages', { thread, role, content, author: m.author }).catch(e => { console.warn('Assistant save failed:', e); _asst.missing = true; });
+  return m;
+}
+
+// Build the message list for Claude: name who's speaking, merge consecutive same-role turns, start on a user turn
+function asstForApi(hist) {
+  const out = [];
+  (hist || []).slice(-ASST_KEEP).forEach(m => {
+    const text = m.role === 'user' ? (m.author ? '[' + m.author + '] ' : '') + m.content : m.content;
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) last.content += '\n\n' + text; else out.push({ role: m.role, content: text });
+  });
+  while (out.length && out[0].role !== 'user') out.shift();
+  return out;
+}
+
+async function asstClear(thread) {
+  if (!confirm('Clear this conversation for both you and Tom? Anything it added to the pipeline stays.')) return;
+  window[ASST_CFG[thread].hist] = [];
+  localStorage.removeItem('livingstoneAsst_' + thread);
+  if (!_asst.missing) { try { await supa.deleteWhere('assistant_messages', 'thread=eq.' + thread); } catch(e) { alert('Couldn\'t clear the shared copy — check your connection.'); } }
+  asstRender(thread);
+}
+
+// Full pipeline detail, so the assistant knows what's been done with each lead
+function asstLeadContext(p, nameKey) {
+  const bits = [p[nameKey] + ' [' + (p.stage || '?') + ']'];
+  if (p.type) bits.push('Type: ' + p.type);
+  if (p.team) bits.push('Team: ' + p.team);
+  if (p.area) bits.push('Area: ' + p.area);
+  if (p.contact || p.role) bits.push('Contact: ' + [p.contact, p.role].filter(Boolean).join(', '));
+  if (p.email) bits.push('Email: ' + p.email);
+  if (p.phone) bits.push('Phone: ' + p.phone);
+  if (p.estValue) bits.push('Est value: £' + p.estValue);
+  if (p.source) bits.push('Source: ' + p.source);
+  bits.push('Next action: ' + (p.nextAction || 'none set'));
+  bits.push('Last contact: ' + (p.lastContact || 'never'));
+  let s = '- ' + bits.join(' | ');
+  if (p.notes) s += '\n    Background: ' + String(p.notes).slice(0, 400);
+  const acts = (typeof plSorted === 'function' ? plSorted(p.activity) : []).slice(0, 6);
+  if (acts.length) s += '\n    Activity (newest first):\n' + acts.map(a => '      ' + a.date + (a.who ? ' ' + a.who : '') + ': ' + a.text).join('\n');
+  return s;
+}
+
+function asstApplyLog(rec, u) {
+  if (!u.log) return false;
+  rec.activity = (rec.activity || []).concat([{ date: u.logDate || asstToday(), who: u.who || asstMe(), text: u.log, ts: Date.now() + Math.random() }]);
+  rec.lastContact = plLastContact(rec.activity);
+  return true;
+}
+
 // --- COUNCIL ASSISTANT ---
 window._cassistantHistory = [];
 
@@ -7436,20 +7536,19 @@ async function sendCouncilAssistantMessage() {
   const msg = input?.value?.trim();
   if (!msg) return;
 
-  messagesEl.innerHTML += '<div style="text-align:right;margin-bottom:8px;"><div style="display:inline-block;max-width:80%;padding:8px 12px;background:#B5DD3C;color:#0D0D0D;border-radius:12px 12px 0 12px;font-size:13px;">' + msg.replace(/</g,'&lt;').replace(/\n/g,'<br>') + '</div></div>';
+  if (!asstMe()) getLivingstoneUser();
   input.value = '';
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  asstRecord('councils', 'user', msg);
+  asstRender('councils');
 
   const cpContext = db.councilPipeline.length
-    ? 'CURRENT COUNCIL PIPELINE (' + db.councilPipeline.length + '):\n' + db.councilPipeline.map(p => '- ' + p.council + ' [' + p.stage + '] Team: ' + (p.team||'?') + ', Contact: ' + (p.contact||'none') + (p.notes?' — '+p.notes:'')).join('\n')
+    ? 'CURRENT COUNCIL PIPELINE (' + db.councilPipeline.length + '):\n' + db.councilPipeline.map(p => asstLeadContext(p, 'council')).join('\n')
     : 'COUNCIL PIPELINE: (empty)';
 
-  const systemPrompt = 'You are a growth assistant for Livingstone Projects, a Staffordshire renovation contractor (Adam Hemming: commercial/brand; Tom Dickson: operations). Based in Stone, Staffordshire. This conversation is about the COUNCIL EMPTY HOMES route — approaching local authority empty homes / housing teams to win renovation work bringing empty properties back into use.\n\nCONTEXT:\n- Target: empty homes officers, private sector housing teams, housing strategy officers at councils within ~40 miles of Stone\n- Local councils: Stafford Borough, Stoke-on-Trent City, Newcastle-under-Lyme, Staffordshire Moorlands, East Staffordshire, Cannock Chase, South Staffordshire, Lichfield, Tamworth, Cheshire East, Shropshire\n- Relevant angles: empty homes grants/loans to owners (council-administered), council-owned stock refurbs, compulsory purchase renovations, VAT advantages (5% reduced rate on homes empty 2+ years, 0% possible on 10+ years), approved contractor lists and frameworks, procurement thresholds (work under ~£25k often needs only 3 quotes)\n- Livingstone strengths: full-refurb capability, professional H&S/insurance documentation, quality domestic finish, local, responsive\n\n' + cpContext + '\n\nYou can:\n1. ANSWER QUESTIONS — research councils, empty homes strategies, grant schemes, procurement routes\n2. ADD councils: [COUNCIL_ADD]\n[{"council":"Name","team":"Empty Homes","contact":"","role":"","area":"","stage":"Research","notes":""}]\n[/COUNCIL_ADD]\n3. UPDATE existing councils (match by council name, only included fields change, notes append): [COUNCIL_UPDATE]\n[{"council":"Name","contact":"...","notes":"..."}]\n[/COUNCIL_UPDATE]\n\nOnly use publicly available contact info. Do not invent names or emails. Be specific and practical; Adam is a senior marketer.';
+  const systemPrompt = 'Today is ' + asstToday() + '. You are talking with Adam and Tom; each of their messages starts with [Name]. You are a growth assistant for Livingstone Projects, a Staffordshire renovation contractor (Adam Hemming: commercial/brand; Tom Dickson: operations). Based in Stone, Staffordshire. This conversation is about the COUNCIL EMPTY HOMES route — approaching local authority empty homes / housing teams to win renovation work bringing empty properties back into use.\n\nCONTEXT:\n- Target: empty homes officers, private sector housing teams, housing strategy officers at councils within ~40 miles of Stone\n- Local councils: Stafford Borough, Stoke-on-Trent City, Newcastle-under-Lyme, Staffordshire Moorlands, East Staffordshire, Cannock Chase, South Staffordshire, Lichfield, Tamworth, Cheshire East, Shropshire\n- Relevant angles: empty homes grants/loans to owners (council-administered), council-owned stock refurbs, compulsory purchase renovations, VAT advantages (5% reduced rate on homes empty 2+ years, 0% possible on 10+ years), approved contractor lists and frameworks, procurement thresholds (work under ~£25k often needs only 3 quotes)\n- Livingstone strengths: full-refurb capability, professional H&S/insurance documentation, quality domestic finish, local, responsive\n\n' + cpContext + '\n\nYou can:\n1. ANSWER QUESTIONS — research councils, empty homes strategies, grant schemes, procurement routes\n2. ADD councils: [COUNCIL_ADD]\n[{"council":"Name","team":"Empty Homes","contact":"","role":"","area":"","stage":"Research","notes":""}]\n[/COUNCIL_ADD]\n3. UPDATE existing councils (match by council name, only included fields change, notes append): [COUNCIL_UPDATE]\n[{"council":"Name","contact":"...","nextAction":"...","notes":"..."}]\n[/COUNCIL_UPDATE]\n4. LOG ACTIVITY when they tell you something was done (a call, email, meeting, visit): include "log" (one line, past tense) and optional "logDate" (YYYY-MM-DD, default today) and "who" (default the person speaking) in a COUNCIL_UPDATE. Usually also set a sensible nextAction. Use the activity history above to answer "where are we with X".\n\nOnly use publicly available contact info. Do not invent names or emails. Be specific and practical; Adam is a senior marketer.';
 
   messagesEl.innerHTML += '<div id="cassistant-thinking" style="margin-bottom:8px;"><div style="display:inline-block;padding:8px 12px;background:var(--limestone);border-radius:12px 12px 12px 0;font-size:13px;color:var(--text-muted);">Thinking...</div></div>';
   messagesEl.scrollTop = messagesEl.scrollHeight;
-
-  window._cassistantHistory.push({ role: 'user', content: msg });
 
   try {
     const response = await fetch(CLAUDE_PROXY_URL, {
@@ -7459,14 +7558,14 @@ async function sendCouncilAssistantMessage() {
         model: 'claude-sonnet-4-6',
         max_tokens: 3000,
         system: systemPrompt,
-        messages: window._cassistantHistory.slice(-10)
+        messages: asstForApi(window._cassistantHistory)
       })
     });
     const data = await response.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
 
     const text = (data.content || []).map(c => c.text || '').join('');
-    window._cassistantHistory.push({ role: 'assistant', content: text });
+    const asstMsg = asstRecord('councils', 'assistant', text);
 
     let addedCount = 0, updatedCount = 0;
 
@@ -7483,8 +7582,9 @@ async function sendCouncilAssistantMessage() {
                 role: e.role || '', email: e.email || '', phone: e.phone || '',
                 stage: e.stage || 'Research', area: e.area || '', estValue: '',
                 source: e.source || 'Claude research', nextAction: e.nextAction || '',
-                notes: e.notes || '', lastContact: ''
+                notes: e.notes || '', lastContact: '', activity: []
               };
+              asstApplyLog(newP, e);
               db.councilPipeline.push(newP);
               syncCouncilToSupabase(newP);
               addedCount++;
@@ -7507,6 +7607,7 @@ async function sendCouncilAssistantMessage() {
               if (u[f] !== undefined && u[f] !== '') p[f] = u[f];
             });
             if (u.notes) p.notes = p.notes ? (p.notes + ' | ' + u.notes) : u.notes;
+            asstApplyLog(p, u);
             syncCouncilToSupabase(p);
             updatedCount++;
           });
@@ -7521,11 +7622,11 @@ async function sendCouncilAssistantMessage() {
     const thinkingEl = document.getElementById('cassistant-thinking');
     if (thinkingEl) thinkingEl.remove();
 
-    let responseHtml = '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:12px 12px 12px 0;font-size:13px;line-height:1.6;">' + displayText + '</div>';
-    if (addedCount) responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Added ' + addedCount + ' council' + (addedCount>1?'s':'') + '</div>';
-    if (updatedCount) responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Updated ' + updatedCount + ' council' + (updatedCount>1?'s':'') + '</div>';
-    responseHtml += '</div>';
-    messagesEl.innerHTML += responseHtml;
+    let extra = '';
+    if (addedCount) extra += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Added ' + addedCount + ' council' + (addedCount>1?'s':'') + '</div>';
+    if (updatedCount) extra += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Updated ' + updatedCount + ' council' + (updatedCount>1?'s':'') + '</div>';
+    asstMsg.extra = extra;
+    asstRender('councils');
     if (addedCount || updatedCount) renderCouncilPipelineNow();
 
   } catch(e) {
@@ -7553,19 +7654,22 @@ async function sendAssistantMessage() {
   const msg = input?.value?.trim();
   if (!msg) return;
 
-  // Show user message
-  messagesEl.innerHTML += '<div style="text-align:right;margin-bottom:8px;"><div style="display:inline-block;max-width:80%;padding:8px 12px;background:#B5DD3C;color:#0D0D0D;border-radius:12px 12px 0 12px;font-size:13px;">' + msg.replace(/</g,'&lt;').replace(/\n/g,'<br>') + '</div></div>';
+  if (!asstMe()) getLivingstoneUser();
   input.value = '';
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  asstRecord('schools', 'user', msg);
+  asstRender('schools');
 
   // Build context
   const pipelineContext = db.pipeline.length
-    ? 'CURRENT PIPELINE (' + db.pipeline.length + ' prospects):\n' + db.pipeline.map(p => '- ' + p.school + ' [' + p.stage + '] Contact: ' + (p.contact||'none') + ' (' + (p.role||'') + ')').join('\n')
+    ? 'CURRENT PIPELINE (' + db.pipeline.length + ' prospects):\n' + db.pipeline.map(p => asstLeadContext(p, 'school')).join('\n')
     : 'PIPELINE: (empty)';
 
-  const jobContext = db.jobs.filter(j => j.status && ['Confirmed','In Progress'].includes(j.status)).map(j => j.ref + ' — ' + (j.name||'')).join('\n');
+  const jobContext = db.jobs.filter(j => j.status && ['Confirmed','In Progress','Snagging','Completed - Not Paid'].includes(j.status)).map(j => j.ref + ' — ' + (j.name||'') + ' [' + j.status + ']').join('\n');
+  const yarlet = db.jobs.find(j => /^LP-?0*1$/i.test(j.ref || ''));
 
-  const systemPrompt = `You are a growth assistant for Livingstone Projects. You have deep context on the business and should respond as a knowledgeable strategic advisor, not a generic AI.
+  const systemPrompt = `Today is ${asstToday()}. You are talking with Adam and Tom; each of their messages starts with [Name].
+
+You are a growth assistant for Livingstone Projects. You have deep context on the business and should respond as a knowledgeable strategic advisor, not a generic AI.
 
 ABOUT LIVINGSTONE
 - Staffordshire-based renovation contractor, run by Adam Hemming (fractional CMO/brand, commercial) and Tom Dickson (operations, on-site)
@@ -7580,8 +7684,7 @@ THREE-LEG STRATEGY (2026-2027)
 3. LIVINGSTONE COMMUNITY — EXPLORATORY. Village halls, parish facilities. Low investment. Decide by Aug 2027.
 
 REFERENCE PROJECT: YARLET
-- LP-001: Yarlet Music Academy, £109k. Client: Yarlet Trust, Bursar: Kirsty Nixon (kirsty.nixon@yarletschool.org)
-- September 2026 completion deadline is non-negotiable
+- LP-001: Yarlet Music Academy, £109k. Client: Yarlet Trust, Bursar: Kirsty Nixon (kirsty.nixon@yarletschool.org). Current status: ${yarlet ? yarlet.status : 'unknown'}
 - This project IS the entire marketing asset for the schools niche
 - Must convert Kirsty into a referrer — one warm bursar introduction is worth more than any cold outreach
 
@@ -7596,14 +7699,6 @@ KEY GROWTH CHANNELS
 - Architect referrals — 5-10 practices specialising in independent school work
 - Peer-bursar introductions from Yarlet
 - Constructionline membership for community tenders
-
-WHAT'S IN PROGRESS
-- Brand-on-a-page v2 done (black/cream/lime identity, Inter font, cube logo)
-- Credentials document drafted, awaiting Tom review
-- Logo production pack with Tara
-- Website scaffold built, needs remaining pages
-- H&S/safeguarding framework not started (IOSH, DBS, policies)
-- Subcontractor bench building ongoing
 
 BRAND POSITIONING
 - Livingstone Academic: "Programme discipline you'd expect from a commercial contractor. Finish you'd expect from a domestic renovator. Both, on every project."
@@ -7629,6 +7724,7 @@ You can do three things:
 1. ANSWER QUESTIONS — research, strategy advice, school information, contacts, market analysis
 2. ADD TO PIPELINE — when the user asks you to add NEW schools/prospects, include a JSON block
 3. UPDATE PIPELINE — when the user asks you to add contacts, notes, stage changes, or any detail to EXISTING prospects, include an update block
+4. LOG ACTIVITY — when they tell you something was done (a call, email, meeting, visit), add "log" (one line, past tense), optional "logDate" (YYYY-MM-DD, default today) and "who" (default the person speaking) to a PIPELINE_UPDATE. Usually also set a sensible nextAction. Use the activity history in the pipeline above to answer "where are we with X".
 
 To add NEW prospects:
 [PIPELINE_ADD]
@@ -7637,7 +7733,7 @@ To add NEW prospects:
 
 To update EXISTING prospects (match by school name, case-insensitive; only fields you include are changed):
 [PIPELINE_UPDATE]
-[{"school":"Name","contact":"Person Name","role":"Bursar","email":"x@y.com","phone":"01234","stage":"Contacted","nextAction":"...","notes":"appended to existing notes"}]
+[{"school":"Name","contact":"Person Name","role":"Bursar","email":"x@y.com","phone":"01234","stage":"Contacted","nextAction":"...","notes":"appended to existing notes","log":"Called the bursar; interested in summer works","logDate":"YYYY-MM-DD"}]
 [/PIPELINE_UPDATE]
 
 Use PIPELINE_UPDATE whenever the school is already in the pipeline list above — PIPELINE_ADD skips duplicates. "notes" in an update is APPENDED, not replaced.
@@ -7648,8 +7744,6 @@ For contacts, only include publicly available information (names from school web
   messagesEl.innerHTML += '<div id="assistant-thinking" style="margin-bottom:8px;"><div style="display:inline-block;padding:8px 12px;background:var(--limestone);border-radius:12px 12px 12px 0;font-size:13px;color:var(--text-muted);">Thinking...</div></div>';
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
-  window._assistantHistory.push({ role: 'user', content: msg });
-
   try {
     const response = await fetch(CLAUDE_PROXY_URL, {
       method: 'POST',
@@ -7658,7 +7752,7 @@ For contacts, only include publicly available information (names from school web
         model: 'claude-sonnet-4-6',
         max_tokens: 3000,
         system: systemPrompt,
-        messages: window._assistantHistory.slice(-10)
+        messages: asstForApi(window._assistantHistory)
       })
     });
     const data = await response.json();
@@ -7668,7 +7762,7 @@ For contacts, only include publicly available information (names from school web
     }
 
     const text = (data.content || []).map(c => c.text || '').join('');
-    window._assistantHistory.push({ role: 'assistant', content: text });
+    const asstMsg = asstRecord('schools', 'assistant', text);
 
     // Check for pipeline additions
     const pipelineMatch = text.match(/\[PIPELINE_ADD\]([\s\S]*?)\[\/PIPELINE_ADD\]/);
@@ -7693,8 +7787,10 @@ For contacts, only include publicly available information (names from school web
                 source: e.source || 'Claude research',
                 nextAction: e.nextAction || '',
                 notes: e.notes || '',
-                lastContact: ''
+                lastContact: '',
+                activity: []
               };
+              asstApplyLog(newP, e);
               db.pipeline.push(newP);
               syncPipelineToSupabase(newP);
               addedCount++;
@@ -7719,6 +7815,7 @@ For contacts, only include publicly available information (names from school web
               if (u[f] !== undefined && u[f] !== '') p[f] = u[f];
             });
             if (u.notes) p.notes = p.notes ? (p.notes + ' | ' + u.notes) : u.notes;
+            asstApplyLog(p, u);
             syncPipelineToSupabase(p);
             updatedCount++;
           });
@@ -7735,15 +7832,12 @@ For contacts, only include publicly available information (names from school web
     const thinkingEl = document.getElementById('assistant-thinking');
     if (thinkingEl) thinkingEl.remove();
 
-    let responseHtml = '<div style="margin-bottom:8px;"><div style="display:inline-block;max-width:85%;padding:10px 14px;background:var(--white);border:1px solid var(--border);border-radius:12px 12px 12px 0;font-size:13px;line-height:1.6;">' + displayText + '</div>';
-    if (addedCount) {
-      responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Added ' + addedCount + ' prospect' + (addedCount>1?'s':'') + ' to pipeline</div>';
-    }
-    if (updatedCount) {
-      responseHtml += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Updated ' + updatedCount + ' prospect' + (updatedCount>1?'s':'') + '</div>';
-    }
-    responseHtml += '</div>';
-    messagesEl.innerHTML += responseHtml;
+    let extra = '';
+    if (addedCount) extra += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Added ' + addedCount + ' prospect' + (addedCount>1?'s':'') + ' to pipeline</div>';
+    if (updatedCount) extra += '<div style="margin-top:4px;font-size:11px;color:var(--copper);font-weight:600;">✓ Updated ' + updatedCount + ' prospect' + (updatedCount>1?'s':'') + '</div>';
+    asstMsg.extra = extra;
+    asstRender('schools');
+    if (addedCount || updatedCount) renderGrowthPipeline();
 
   } catch(e) {
     const thinkingEl = document.getElementById('assistant-thinking');
