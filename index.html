@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.72 -->
+<!-- Livingstone v4.73 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -671,7 +671,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.72</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.73</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -4068,7 +4068,7 @@ function syncQuoteDescToJob() {
   const job = db.jobs.find(j => j.ref === ref);
   if (!job) return;
   job.desc = document.getElementById('qb-desc')?.value || '';
-  saveAll();
+  saveData();
   syncJobToSupabase(ref);
 }
 
@@ -11599,6 +11599,17 @@ function updateTaskDate(idx, field, value) {
 }
 
 // Working days helpers (Mon-Fri, excludes weekends)
+// End date such that start..end (inclusive) holds n working days; matches countWorkingDays
+function addWorkingDays(start, n) {
+  let d;
+  if (start instanceof Date) d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  else { const p = String(start).slice(0, 10).split('-'); d = new Date(+p[0], +p[1] - 1, +p[2]); }
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  let left = Math.max(1, Math.round(n || 1)) - 1;
+  while (left > 0) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) left--; }
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function countWorkingDays(startDate, endDate) {
   const s = new Date(startDate); const e = new Date(endDate);
   if (s > e) return 0;
