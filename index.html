@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.73 -->
+<!-- Livingstone v4.75 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -172,6 +172,7 @@
   .badge-completed { background: #d1ecf1; color: #0c5460; }
   .badge-completed-unpaid { background: #fff3cd; color: #856404; }
   .badge-completed-paid { background: #d4edda; color: #155724; }
+  .badge-lost { background: #ececec; color: #6b6b6b; text-decoration: line-through; }
   .badge-snagging { background: #e2d9f3; color: #4a2d8a; }
   .badge-copper { background: rgba(181,221,60,0.15); color: var(--copper-dark); }
   /* GRID */
@@ -664,14 +665,14 @@ window.onerror=function(m,s,l,c,e){
       <div class="nav-item" onclick="showPage('growth')"><span class="icon">🚀</span> Growth</div>
       <div class="nav-item" onclick="showPage('braindump')"><span class="icon">🧠</span> Brain Dump</div>
       <div class="nav-item" onclick="showPage('actions')"><span class="icon">🎯</span> Business Actions</div>
-      <div class="nav-item" onclick="showPage('finance')"><span class="icon">£</span> Finance</div>
+      <div class="nav-item" onclick="showPage('finance')"><span class="icon">£</span> Finance &amp; P&amp;L</div>
     <div class="nav-item" onclick="showPage('costs')"><span class="icon">💰</span> Cost Tracker</div>
     <div class="nav-item" onclick="showPage('invoices')"><span class="icon">📄</span> Invoices</div>
     </div>
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.73</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.75</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -702,22 +703,22 @@ window.onerror=function(m,s,l,c,e){
   <div id="page-dashboard" class="page active content">
     <div class="grid-4" style="margin-bottom:24px;">
       <div class="stat-card">
-        <div class="stat-label">Pipeline Value</div>
+        <div class="stat-label">Pipeline (enquiries &amp; quotes)</div>
         <div class="stat-value stat-copper" style="color:var(--copper)" id="dash-pipeline-value">—</div>
         <div class="stat-sub" id="dash-pipeline-sub">Loading...</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Est. Total Margin</div>
+        <div class="stat-label">Confirmed, not yet invoiced</div>
         <div class="stat-value" style="color:var(--success)" id="dash-margin-value">—</div>
         <div class="stat-sub" id="dash-margin-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Confirmed Jobs</div>
+        <div class="stat-label">Live jobs</div>
         <div class="stat-value" id="dash-confirmed-value">—</div>
         <div class="stat-sub" id="dash-confirmed-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Quotes Sent</div>
+        <div class="stat-label">Invoiced, awaiting payment</div>
         <div class="stat-value" style="color:var(--slate)" id="dash-quotes-value">—</div>
         <div class="stat-sub" id="dash-quotes-sub"></div>
       </div>
@@ -804,6 +805,7 @@ window.onerror=function(m,s,l,c,e){
           <option value="Snagging">Snagging</option>
           <option value="Completed - Not Paid">Completed - Not Paid</option>
           <option value="Completed - Paid">Completed - Paid</option>
+          <option value="Not Going Ahead">Didn't go ahead</option>
         </select>
         <select style="width:auto;" id="job-filter-lead" onchange="renderJobsTable()">
           <option value="">All Leads</option>
@@ -1280,74 +1282,8 @@ window.onerror=function(m,s,l,c,e){
 
   <!-- FINANCE PAGE -->
   <div id="page-finance" class="page content">
-    <div class="grid-4" style="margin-bottom:24px;">
-      <div class="stat-card">
-        <div class="stat-label">Total Quoted</div>
-        <div class="stat-value" style="color:var(--copper)">£128,056</div>
-        <div class="stat-sub">3 quotes sent</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Expected Margin</div>
-        <div class="stat-value" style="color:var(--success)">£22,098</div>
-        <div class="stat-sub">Avg 17.2%</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Confirmed Revenue</div>
-        <div class="stat-value">£0</div>
-        <div class="stat-sub">0 confirmed jobs</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Payments Received</div>
-        <div class="stat-value">£0</div>
-        <div class="stat-sub">No payments yet</div>
-      </div>
-    </div>
-
-    <div class="grid-2" style="gap:20px;">
-      <div class="card">
-        <div class="card-header"><div class="card-title">Quote Profitability</div></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Quote</th><th>Client</th><th>Subtotal</th><th>PM Fee</th><th>Total</th><th>Margin %</th></tr></thead>
-            <tbody>
-              <tr>
-                <td><strong>LP-001</strong></td>
-                <td>Yarlet Trust</td>
-                <td>£99,340</td>
-                <td>£4,967</td>
-                <td><strong>£104,307</strong></td>
-                <td><span class="badge badge-confirmed">13.4%</span></td>
-              </tr>
-              <tr>
-                <td><strong>LP-003</strong></td>
-                <td>Oak House</td>
-                <td>£17,032</td>
-                <td>£1,250</td>
-                <td><strong>£18,282</strong></td>
-                <td><span class="badge badge-confirmed">13.6%</span></td>
-              </tr>
-              <tr>
-                <td><strong>LP-013</strong></td>
-                <td>Busby</td>
-                <td>£5,882</td>
-                <td>£588</td>
-                <td><strong>£6,470</strong></td>
-                <td><span class="badge badge-confirmed">10%</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><div class="card-title">Payment Gate Tracker</div></div>
-        <div class="card-body">
-          <div class="alert alert-warning">⚠ No confirmed jobs yet — payment gates will appear here once jobs are confirmed.</div>
-          <div style="font-size:13px;color:var(--text-muted);">Payment tracking will show deposit, midpoint, and completion payments for all active jobs.</div>
-        </div>
-      </div>
-    </div>
+    <div id="finance-root" style="max-width:1300px;"></div>
   </div>
-
 
   <!-- PLANNING PAGE -->
 
@@ -1839,6 +1775,8 @@ window.onerror=function(m,s,l,c,e){
             <option>In Progress</option><option>On Hold</option>
             <option>Snagging</option>
             <option>Completed - Not Paid</option><option>Completed - Paid</option>
+            <option value="Not Going Ahead">Didn't go ahead</option>
+            <option value="Completed">Completed (archived)</option>
           </select>
         </div>
         <div class="form-group"><label>Job Name</label><input type="text" id="job-name"></div>
@@ -1864,6 +1802,7 @@ window.onerror=function(m,s,l,c,e){
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('job-modal')">Cancel</button>
+      <button class="btn btn-secondary" id="job-modal-lost-btn" onclick="markJobLost(document.getElementById('job-edit-ref').value, true)" style="display:none;">Didn't go ahead</button>
       <button class="btn btn-danger" id="job-modal-archive-btn" onclick="archiveJob()" style="display:none;">Archive</button>
       <button class="btn btn-danger" id="job-modal-delete-btn" onclick="deleteJob()" style="display:none;background:#c0392b;">Delete</button>
       <button class="btn btn-primary" onclick="saveJob()">Save Job</button>
@@ -3133,7 +3072,7 @@ const SEED = {
 const PAGE_TITLES = {
   dashboard:'Dashboard', pipeline:'Pipeline', jobs:'All Jobs',
   quotes:'Quote Builder', tasks:'Tasks', subs:'Subcontractors',
-  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth', braindump:'Brain Dump', meeting:'Weekly Meeting'
+  products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance & P&L', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth', braindump:'Brain Dump', meeting:'Weekly Meeting'
 };
 
 function toggleMobileNav() {
@@ -3181,6 +3120,7 @@ function renderPage(id) {
   else if(id==='costs') renderCostTracker();
   else if(id==='invoices') { renderInvoicesPage(); loadInvoicesFromSupabase().then(renderInvoicesPage); }
   else if(id==='meeting') renderMeetingPage();
+  else if(id==='finance') renderFinancePage();
   else if(id==='growth') renderGrowthPage();
 }
 
@@ -3444,14 +3384,17 @@ function renderDashboard() {
   const quotedJobs = db.jobs.filter(j => j.status === 'Quoted');
   const quotedVal = quotedJobs.reduce((s,j) => s + (j.quoteValue || 0), 0);
 
-  set('dash-pipeline-value', pipelineVal ? '£' + Math.round(pipelineVal).toLocaleString() : '—');
-  set('dash-pipeline-sub', activeJobs.length + ' active jobs');
-  set('dash-margin-value', marginQuoteVal ? '£' + Math.round(totalMargin).toLocaleString() : '—');
-  set('dash-margin-sub', marginQuoteVal ? marginPct + '% avg margin' : 'Add est. costs to jobs');
-  set('dash-confirmed-value', confirmedJobs.length);
-  set('dash-confirmed-sub', quotedJobs.length + ' quoted, pending');
-  set('dash-quotes-value', quotedVal ? '£' + Math.round(quotedVal).toLocaleString() : '—');
-  set('dash-quotes-sub', quotedJobs.length + ' quotes outstanding');
+  // Same rules as the Weekly Meeting and Finance & P&L pages
+  const _fp = finPipeline(), _fu = finUninvoiced(), _fr = finReceivables();
+  const _live = db.jobs.filter(j => FIN_LIVE.includes(j.status));
+  set('dash-pipeline-value', finGBP(_fp.value));
+  set('dash-pipeline-sub', _fp.jobs.length + ' enquiries & quotes · ' + quotedJobs.length + ' quoted');
+  set('dash-margin-value', finGBP(_fu.total));
+  set('dash-margin-sub', _fu.rows.length + ' job' + (_fu.rows.length === 1 ? '' : 's') + ' · ex VAT');
+  set('dash-confirmed-value', _live.length);
+  set('dash-confirmed-sub', db.jobs.filter(j => j.status === 'On Hold').length + ' on hold');
+  set('dash-quotes-value', finGBP(_fr.total));
+  set('dash-quotes-sub', _fr.invoices.length + ' invoice' + (_fr.invoices.length === 1 ? '' : 's') + ' · inc VAT');
 
   // Upcoming tasks (next 14 days)
   const today = new Date(); today.setHours(0,0,0,0);
@@ -3765,6 +3708,7 @@ function newJobModal() {
   document.getElementById('job-notes').value = '';
   document.getElementById('job-modal-delete-btn').style.display = 'none';
   document.getElementById('job-modal-archive-btn').style.display = 'none';
+  document.getElementById('job-modal-lost-btn').style.display = 'none';
   document.getElementById('job-modal').style.display = 'flex';
 }
 
@@ -3791,6 +3735,7 @@ function editJobByRef(ref) {
   document.getElementById('job-notes').value = j.notes || '';
   document.getElementById('job-modal-delete-btn').style.display = '';
   document.getElementById('job-modal-archive-btn').style.display = '';
+  document.getElementById('job-modal-lost-btn').style.display = '';
   document.getElementById('job-modal').style.display = 'flex';
 }
 
@@ -3853,7 +3798,10 @@ async function archiveJob() {
   const ref = document.getElementById('job-edit-ref').value;
   const job = db.jobs.find(j => j.ref === ref);
   if (!job) { alert('Job not found.'); return; }
-  if (!confirm('Archive ' + ref + '? It will be marked as Completed.')) return;
+  if (FIN_PIPE.includes(job.status)) {
+    if (confirm(ref + ' hasn\'t been confirmed yet.\n\nOK = it didn\'t go ahead\nCancel = archive it as completed work')) { closeModal('job-modal'); return markJobLost(ref); }
+  }
+  if (!confirm('Archive ' + ref + ' as completed work?')) return;
   job.status = 'Completed';
   saveData();
   closeModal('job-modal');
@@ -6703,7 +6651,9 @@ function renderJobPayments() {
   const gates = (db.paymentGates||[]).filter(g => g.jobRef === ref).sort((a,b) => (a.sortOrder||0) - (b.sortOrder||0));
   const quoteVal = job.quoteValue || 0;
   const totalGated = gates.reduce((s,g) => s + (parseFloat(g.amount)||0), 0);
-  const totalPaid = gates.filter(g => g.status === 'Paid').reduce((s,g) => s + (parseFloat(g.amount)||0), 0);
+  const _gs = finGateStatuses(ref);
+  const _gsOf = g => _gs.find(x => x.gate === g) || { status: g.status || 'Pending', auto: false };
+  const totalPaid = gates.filter(g => _gsOf(g).status === 'Paid').reduce((s,g) => s + (parseFloat(g.amount)||0), 0);
 
   let html = '<div style="display:flex;gap:8px;margin-bottom:16px;">';
   html += '<button class="btn btn-sm btn-primary" onclick="addPaymentGateForJob(\'' + ref + '\')">+ Add Payment Gate</button>';
@@ -6733,11 +6683,16 @@ function renderJobPayments() {
     html += '<td style="font-weight:600;width:40px;">' + (i+1) + '</td>';
     html += '<td><input type="text" value="' + (g.name||'').replace(/"/g,'&quot;') + '" oninput="markGateDirty(\'' + g.id + '\',\'name\',this.value)" style="width:100%;font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;"></td>';
     html += '<td style="width:110px;"><input type="number" value="' + (parseFloat(g.amount)||0) + '" oninput="markGateDirty(\'' + g.id + '\',\'amount\',parseFloat(this.value)||0)" style="width:100%;font-size:13px;padding:4px 8px;text-align:right;border:1px solid var(--border);border-radius:4px;"></td>';
-    html += '<td style="text-align:center;width:100px;"><select onchange="updateGateStatus(\'' + g.id + '\',this.value)" style="font-size:12px;padding:2px 6px;">';
-    ['Pending','Invoiced','Paid'].forEach(s => {
-      html += '<option' + (g.status===s?' selected':'') + '>' + s + '</option>';
-    });
-    html += '</select></td>';
+    const gs = _gsOf(g);
+    if (gs.auto) {
+      html += '<td style="text-align:center;width:120px;"><span class="badge ' + (gs.status === 'Paid' ? 'badge-completed-paid' : 'badge-quoted') + '">' + gs.status + '</span><div style="font-size:10px;color:var(--text-muted);margin-top:2px;">from invoices</div></td>';
+    } else {
+      html += '<td style="text-align:center;width:120px;"><select onchange="updateGateStatus(\'' + g.id + '\',this.value)" style="font-size:12px;padding:2px 6px;">';
+      ['Pending','Invoiced','Paid'].forEach(s => {
+        html += '<option' + (gs.status===s?' selected':'') + '>' + s + '</option>';
+      });
+      html += '</select></td>';
+    }
     html += '<td style="width:30px;"><button class="btn btn-sm btn-danger" onclick="deletePaymentGate(\'' + g.id + '\')" style="font-size:10px;">✕</button></td>';
     html += '</tr>';
   });
@@ -11467,7 +11422,7 @@ function hideSpinner() {
 
 function statusBadge(s) {
   const cls = getBadgeClass(s);
-  return '<span class="badge ' + cls + '">' + (s||'Unknown') + '</span>';
+  return '<span class="badge ' + cls + '">' + (s === 'Not Going Ahead' ? 'Didn\'t go ahead' : (s||'Unknown')) + '</span>';
 }
 
 function getBadgeClass(s) {
@@ -11476,7 +11431,7 @@ function getBadgeClass(s) {
     'Quoted':'badge-quoted','Confirmed':'badge-confirmed','In Progress':'badge-progress',
     'On Hold':'badge-hold','Snagging':'badge-snagging',
     'Completed - Not Paid':'badge-completed-unpaid','Completed - Paid':'badge-completed-paid',
-    'Completed':'badge-completed'
+    'Completed':'badge-completed','Not Going Ahead':'badge-lost'
   };
   return map[s]||'badge-enquiry';
 }
@@ -12682,7 +12637,7 @@ function renderJobCosts(jobRef, extraRefs) {
     + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Total Spent</div><div style="font-size:18px;font-weight:700;color:var(--copper);">' + fmtR(totalVat) + '</div></div>'
     + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Labour</div><div style="font-size:18px;font-weight:700;">' + fmtR(labourVat) + '</div></div>'
     + '<div class="stat-card" style="padding:12px;"><div class="stat-label">Materials</div><div style="font-size:18px;font-weight:700;">' + fmtR(materialsVat) + '</div></div>'
-    + (quoteVal ? '<div class="stat-card" style="padding:12px;"><div class="stat-label">Actual Margin</div><div style="font-size:18px;font-weight:700;color:' + marginColVat + ';">' + fmtR(marginVat) + ' (' + marginPctVat + '%)</div><div style="font-size:11px;color:var(--text-muted);">Quote: ' + fmtR(quoteVal) + '</div></div>' : '<div class="stat-card" style="padding:12px;"><div class="stat-label">Other</div><div style="font-size:18px;font-weight:700;">' + fmtR(otherVat) + '</div></div>')
+    + (quoteVal ? (() => { const fs = refs.map(r => finJob(r)); const cn = fs.reduce((t, f) => t + f.contractNet, 0), kn = fs.reduce((t, f) => t + f.costs.net, 0), pr = cn - kn, pc = cn ? Math.round(pr / cn * 100) : 0; return '<div class="stat-card" style="padding:12px;"><div class="stat-label">Expected profit (ex VAT)</div><div style="font-size:18px;font-weight:700;color:' + (pr >= 0 ? 'var(--success)' : 'var(--danger)') + ';">' + finGBP(pr) + ' (' + pc + '%)</div><div style="font-size:11px;color:var(--text-muted);">Quote ' + finGBP(cn) + ' − costs ' + finGBP(kn) + ', ex VAT</div></div>'; })() : '<div class="stat-card" style="padding:12px;"><div class="stat-label">Other</div><div style="font-size:18px;font-weight:700;">' + fmtR(otherVat) + '</div></div>')
     + '</div>'
     + budgetBar
     + '<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--copper);">📋 Breakdown by Supplier (' + uniqueSuppliers.length + ')</summary>'
@@ -12764,7 +12719,8 @@ function loadJobCostsTab() {
 }
 
 function generateJobReport(jobRef) {
-  // Ask about VAT status for this quote
+  // VAT basis comes from the job's invoices (same rule as everywhere else) — no need to ask
+  window._reportVatMode = finVatBasis(jobRef) === 'inc' ? 'pre' : 'post';
   if (window._reportVatMode === undefined) {
     let modal = document.getElementById('report-vat-modal');
     if (!modal) {
@@ -12862,15 +12818,15 @@ function generateJobReport(jobRef) {
     else rcl = e.type === 'Material' || e.type === 'Other'; // default
     return s + (rcl ? e.allocAmount : 0);
   }, 0);
-  const vatReclaimable = reclaimableTotal * 0.2;
+  const vatReclaimable = reclaimableTotal / 6;   // costs are entered inc VAT, so the VAT inside them is 1/6
   const vatOwed = vatCollected - vatReclaimable;
   const trueProfit = exVatRevenue - totalSpent + vatReclaimable - (isPreVat ? 0 : vatOwed);
   // For pre-VAT: trueProfit = (quote/1.2) - costs + reclaimable
   // For post-VAT: trueProfit = quote - costs - (vatCollected - vatReclaimable)
   // Simplified post-VAT: trueProfit = quote - costs - vatOwed
   const trueProfitAlt = isPreVat ? exVatRevenue - totalSpent + vatReclaimable : quoteVal - totalSpent - vatOwed;
-  const trueProfitFinal = trueProfitAlt;
-  const trueProfitPct = quoteVal ? (trueProfitFinal / quoteVal * 100).toFixed(1) : '—';
+  const trueProfitFinal = exVatRevenue - totalSpent + vatReclaimable;   // same as Finance & P&L
+  const trueProfitPct = exVatRevenue ? (trueProfitFinal / exVatRevenue * 100).toFixed(1) : '—';
   const trueProfitCol = trueProfitFinal >= 0 ? '#27ae60' : '#e74c3c';
   const vatStatusLabel = isPreVat ? 'Pre-VAT Quote (fixed price, VAT-inclusive)' : 'VAT Registered Quote (+20% to client)';
 
@@ -12932,16 +12888,12 @@ thead th { padding:7px 10px; text-align:left; font-size:10px; text-transform:upp
       <tr style="border-bottom:2px solid #B5DD3C;"><td style="padding:8px 0;font-weight:600;">Your actual revenue (ex-VAT)</td><td style="text-align:right;font-weight:700;">${fmtM(exVatRevenue)}</td></tr>
       <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">Total Costs</td><td style="text-align:right;font-weight:600;">- ${fmtM(totalSpent)}</td></tr>
       <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">Margin (revenue - costs)</td><td style="text-align:right;font-weight:600;color:${exVatRevenue - totalSpent >= 0 ? '#27ae60' : '#e74c3c'};">${fmtM(exVatRevenue - totalSpent)}</td></tr>
-      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;color:#27ae60;">VAT reclaimed on costs (20% of £${Math.round(reclaimableTotal).toLocaleString()} reclaimable)</td><td style="text-align:right;font-weight:600;color:#27ae60;">+ ${fmtM(vatReclaimable)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;color:#27ae60;">VAT reclaimed on costs (1/6 of £${Math.round(reclaimableTotal).toLocaleString()} VAT-inclusive costs)</td><td style="text-align:right;font-weight:600;color:#27ae60;">+ ${fmtM(vatReclaimable)}</td></tr>
       <tr><td style="padding:10px 0;font-weight:700;font-size:15px;">TRUE PROFIT</td><td style="text-align:right;font-weight:700;font-size:15px;color:${trueProfitCol};">${fmtM(trueProfitFinal)} (${trueProfitPct}%)</td></tr>
       ` : `
-      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">Quote Value (ex-VAT)</td><td style="text-align:right;font-weight:600;">${fmtM(quoteVal)}</td></tr>
-      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">VAT Charged to Client (20%)</td><td style="text-align:right;font-weight:600;">${fmtM(vatCollected)}</td></tr>
-      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">Total Costs</td><td style="text-align:right;font-weight:600;">- ${fmtM(totalSpent)}</td></tr>
-      <tr style="border-bottom:2px solid #B5DD3C;"><td style="padding:8px 0;font-weight:600;">Gross Margin</td><td style="text-align:right;font-weight:700;color:${marginCol};">${fmtM(margin)} (${marginPct}%)</td></tr>
-      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;color:#e74c3c;">VAT Owed to HMRC</td><td style="text-align:right;font-weight:600;color:#e74c3c;">- ${fmtM(vatCollected)}</td></tr>
-      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;color:#27ae60;">Less: Reclaimable VAT (20% of £${Math.round(reclaimableTotal).toLocaleString()} reclaimable)</td><td style="text-align:right;font-weight:600;color:#27ae60;">+ ${fmtM(vatReclaimable)}</td></tr>
-      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">Net VAT Cost</td><td style="text-align:right;font-weight:600;">- ${fmtM(vatOwed)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">Quote value (ex VAT — VAT is added on top and passed to HMRC)</td><td style="text-align:right;font-weight:600;">${fmtM(quoteVal)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;">Total costs (as entered, inc VAT)</td><td style="text-align:right;font-weight:600;">- ${fmtM(totalSpent)}</td></tr>
+      <tr style="border-bottom:1px solid #e8e4db;"><td style="padding:8px 0;color:#27ae60;">Add back: reclaimable VAT (1/6 of £${Math.round(reclaimableTotal).toLocaleString()} VAT-inclusive costs)</td><td style="text-align:right;font-weight:600;color:#27ae60;">+ ${fmtM(vatReclaimable)}</td></tr>
       <tr><td style="padding:10px 0;font-weight:700;font-size:15px;">TRUE PROFIT</td><td style="text-align:right;font-weight:700;font-size:15px;color:${trueProfitCol};">${fmtM(trueProfitFinal)} (${trueProfitPct}%)</td></tr>
       `}
     </table>
@@ -13482,6 +13434,7 @@ function renderMeetingPage() {
     (typeof loadScheduleFromSupabase === 'function' ? loadScheduleFromSupabase() : Promise.resolve()).catch(()=>{}),
     loadInvoicesFromSupabase().catch(()=>{}),
     mtgLoadOpenTodos(),
+    qtLoad(),
     mtgLoadHistory()
   ]).then(() => renderMeetingNow());
 }
@@ -13495,7 +13448,7 @@ function mtgCompute() {
   const drafts = invs.filter(x => (x.inv.status || 'Draft') === 'Draft');
   const jobByRef = r => db.jobs.find(j => j.ref === r);
   const gatesToInvoice = (db.paymentGates || []).filter(g => {
-    if (g.status !== 'Pending' && g.status !== 'Overdue') return false;
+    if (finGateStatus(g) !== 'Pending') return false;
     const d = mtgParse(g.due);
     if (d) return d <= horizon;
     const j = jobByRef(g.jobRef);
@@ -13511,28 +13464,9 @@ function mtgCompute() {
     awaitingTotal: sum(awaiting, x => x.inv.total),
     draftTotal: sum(drafts, x => x.inv.total),
     toInvoiceTotal: sum(gatesToInvoice, g => g.amount),
-    pipelineValue: sum(pipeJobs, j => j.quoteValue || j.estimate),
-    uninvoiced: mtgUninvoiced()
+    pipelineValue: finPipeline().value,
+    uninvoiced: finUninvoiced()
   };
-}
-
-// Confirmed work not yet invoiced: per live job, quote value minus
-// everything invoiced (Sent or Paid) against it. Ex VAT throughout.
-function mtgUninvoiced() {
-  const norm = r => (r || '').replace('-', '').toUpperCase();
-  const rows = db.jobs.filter(j => MTG_LIVE.includes(j.status)).map(j => {
-    let invoiced = 0, drafted = 0;
-    (db.invoices || []).forEach(inv => {
-      (inv.lines || []).forEach(l => {
-        if (norm(l.jobRef) !== norm(j.ref)) return;
-        const net = inv.vatInclusive ? (l.amount || 0) / 1.2 : (l.amount || 0);
-        if (inv.status === 'Sent' || inv.status === 'Paid') invoiced += net; else drafted += net;
-      });
-    });
-    const quote = j.quoteValue || 0;
-    return { job: j, quote, invoiced, drafted, remaining: Math.max(0, quote - invoiced) };
-  });
-  return { rows: rows.filter(r => r.quote > 0 && r.remaining > 0.5), noQuote: rows.filter(r => !r.quote), total: rows.reduce((t, r) => t + r.remaining, 0) };
 }
 
 function mtgJobCostToDate(ref) {
@@ -13627,6 +13561,28 @@ function renderMeetingNow() {
   });
   h += '</tbody></table></div>' + laterBtn('showLaterJob', jobLater.length) + addForm('job') + '</div></div>';
 
+  // 1b2. Quotes to be completed
+  const qtRows = _qt.rows.map(r => ({ r, due: due(r.due), done: r.status === 'Sent' })).sort(byDue).sort(doneLast);
+  h += mtgSectionStart('Quotes to be completed', '', _qt.missing ? '<span style="color:var(--warning);">Run the v4.74 SQL in Supabase to set this list up</span>' : (qtRows.filter(x => !x.done && x.due && x.due < c.today).length + ' overdue · ' + qtRows.filter(x => !x.done).length + ' to do' + (qtRows.some(x => x.done) ? ' · ' + qtRows.filter(x => x.done).length + ' sent this meeting' : '')));
+  h += '<div class="table-wrap"><table><thead><tr><th>Quote</th><th>Who</th><th>Due by</th><th>Status</th><th style="width:28%;">Notes</th><th></th></tr></thead><tbody>';
+  if (!qtRows.length) h += '<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:16px;">No quotes waiting.</td></tr>';
+  qtRows.forEach(x => {
+    const r = x.r, id = mtgEsc(r.id);
+    h += '<tr' + doneStyle(x.done) + '><td>' + doneText(r.name, x.done) + '</td>'
+      + '<td>' + whoCell(r.who || '', 'qtUpdate(\'' + id + '\',\'who\',this.value.trim())') + '</td>'
+      + '<td>' + dueCell(x.due, 'qtUpdate(\'' + id + '\',\'due\',this.value)', x.done) + '</td>'
+      + '<td><select style="width:auto;padding:4px 8px;font-size:12px;" onchange="qtUpdate(\'' + id + '\',\'status\',this.value)">' + ['To Do','In Progress','Sent'].map(st => '<option' + (st === (r.status || 'To Do') ? ' selected' : '') + '>' + st + '</option>').join('') + '</select></td>'
+      + '<td>' + notesCell(r.notes || '', 'qtUpdate(\'' + id + '\',\'notes\',this.value)') + '</td>'
+      + '<td><button onclick="qtDelete(\'' + id + '\')" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button></td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">'
+    + '<input id="qt-name" placeholder="Job name, e.g. Whitby Samways office" style="flex:2;min-width:220px;" onkeydown="if(event.key===\'Enter\')qtAdd()">'
+    + '<input id="qt-who" list="mtg-who-list" value="Tom" placeholder="Who?" onfocus="this.select()" style="width:120px;">'
+    + '<input id="qt-due" type="date" value="' + mtgISO(mtgAddDays(md, 7)) + '" style="width:auto;">'
+    + '<button class="btn btn-primary" onclick="qtAdd()">Add quote</button></div>';
+  h += '</div></div>';
+
   // 1c. Long-term goals
   const pRank = { High: 0, Medium: 1, Low: 2 };
   const goals = (db.actionsLT || []).map((a, i) => ({ a, i, done: a.status === 'Completed' })).filter(x => !x.done || _mtg.doneObjs.has(x.a)).sort((x, y) => (pRank[x.a.priority] ?? 1) - (pRank[y.a.priority] ?? 1)).sort(doneLast);
@@ -13683,9 +13639,9 @@ function renderMeetingNow() {
   // Confirmed not invoiced detail
   if (u.rows.length || u.noQuote.length) {
     h += '<div style="padding:16px 20px 6px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Confirmed work not yet invoiced</div>';
-    h += '<div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th style="text-align:right;">Quote</th><th style="text-align:right;">Invoiced</th><th style="text-align:right;">Left to invoice</th><th></th></tr></thead><tbody>';
-    u.rows.sort((a, b) => b.remaining - a.remaining).forEach(r => {
-      h += '<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(r.job.ref) + '\');return false;"><strong>' + mtgEsc(r.job.ref) + '</strong></a> ' + mtgEsc(r.job.name) + '</td><td>' + statusBadge(r.job.status) + '</td><td style="text-align:right;">' + mtgGBP(r.quote) + '</td><td style="text-align:right;">' + mtgGBP(r.invoiced) + (r.drafted ? '<div style="font-size:11px;color:var(--text-muted);">+' + mtgGBP(r.drafted) + ' in draft</div>' : '') + '</td><td style="text-align:right;font-weight:600;">' + mtgGBP(r.remaining) + '</td><td><button class="btn btn-sm btn-primary" onclick="openInvoiceModal(\'' + mtgEsc(r.job.ref) + '\')">Invoice</button></td></tr>';
+    h += '<div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th style="text-align:right;">Quote (ex VAT)</th><th style="text-align:right;">Invoiced (ex VAT)</th><th style="text-align:right;">Left to invoice</th><th></th></tr></thead><tbody>';
+    u.rows.sort((a, b) => b.leftNet - a.leftNet).forEach(r => {
+      h += '<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(r.job.ref) + '\');return false;"><strong>' + mtgEsc(r.job.ref) + '</strong></a> ' + mtgEsc(r.job.name) + '</td><td>' + statusBadge(r.job.status) + '</td><td style="text-align:right;">' + mtgGBP(r.contractNet) + '</td><td style="text-align:right;">' + mtgGBP(r.billedNet) + (r.draftNet ? '<div style="font-size:11px;color:var(--text-muted);">+' + mtgGBP(r.draftNet) + ' in draft</div>' : '') + '</td><td style="text-align:right;font-weight:600;">' + mtgGBP(r.leftNet) + '</td><td><button class="btn btn-sm btn-primary" onclick="openInvoiceModal(\'' + mtgEsc(r.job.ref) + '\')">Invoice</button></td></tr>';
     });
     u.noQuote.forEach(r => {
       h += '<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(r.job.ref) + '\');return false;"><strong>' + mtgEsc(r.job.ref) + '</strong></a> ' + mtgEsc(r.job.name) + '</td><td>' + statusBadge(r.job.status) + '</td><td colspan="3" style="color:var(--warning);font-size:12px;">No quote in the Quote Builder, so it can\'t be counted</td><td></td></tr>';
@@ -13697,27 +13653,26 @@ function renderMeetingNow() {
 
   // 3. Live jobs
   h += mtgSectionStart('Live jobs', '15 min', c.liveJobs.length + ' job' + (c.liveJobs.length === 1 ? '' : 's'));
-  h += '<div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th style="text-align:right;">Quote</th><th style="text-align:right;">Cost to date</th><th>Of est. cost</th><th>Open to-dos</th><th>Next week</th><th></th></tr></thead><tbody>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th style="text-align:right;">Quote</th><th style="text-align:right;">Costs so far</th><th>Margin / spend</th><th>Open to-dos</th><th>Next week</th><th></th></tr></thead><tbody>';
   if (!c.liveJobs.length) h += '<tr><td colspan="8" style="color:var(--text-muted);text-align:center;padding:16px;">No live jobs.</td></tr>';
   c.liveJobs.forEach(j => {
-    const cost = mtgJobCostToDate(j.ref);
-    const est = j.estCost || 0;
-    const pct = est ? Math.round(cost / est * 100) : null;
-    const pctCol = pct == null ? 'var(--text-muted)' : pct > 100 ? 'var(--danger)' : pct > 85 ? 'var(--warning)' : 'var(--success)';
+    const fj = finJob(j.ref);
+    const cost = fj.costs.net;
+    const pcell = finProfitCell(fj);
     const todos = _mtg.todos.filter(t => t.jobRef === j.ref && !t.done);
     const odTodos = todos.filter(t => t.due && mtgParse(t.due) < c.today).length;
     const crew = mtgNextWeekCrew(j.ref);
     h += '<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td>' +
       '<td>' + statusBadge(j.status) + '</td>' +
-      '<td style="text-align:right;">' + (j.quoteValue ? mtgGBP(j.quoteValue) : '—') + '</td>' +
+      '<td style="text-align:right;">' + (j.quoteValue ? mtgGBP(fj.contractNet) : '—') + '</td>' +
       '<td style="text-align:right;">' + mtgGBP(cost) + '</td>' +
-      '<td style="color:' + pctCol + ';font-weight:600;">' + (pct == null ? 'No quote' : pct + '%') + '</td>' +
+      '<td style="color:' + pcell.col + ';' + (pcell.small ? 'font-size:12px;' : 'font-weight:600;') + '">' + (j.quoteValue ? pcell.html : 'No quote') + '</td>' +
       '<td>' + todos.length + (odTodos ? ' <span style="color:var(--danger);font-size:12px;">(' + odTodos + ' late)</span>' : '') + '</td>' +
       '<td style="font-size:12px;">' + (crew.length ? mtgEsc(crew.join(', ')) : '<span style="color:var(--warning);">Nothing scheduled</span>') + '</td>' +
       '<td><button class="btn btn-sm btn-secondary" onclick="mtgPrefillAction(\'' + mtgEsc(j.ref) + '\')">+ Action</button></td></tr>';
   });
   h += '</tbody></table></div>';
-  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Extras to quote go in the Quote Builder; schedule changes in Planning → Schedule.</div>';
+  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">All ex VAT. Margin shows once a job reaches snagging; before that, how much of the quote has been spent. Extras to quote go in the Quote Builder; schedule changes in Planning → Schedule.</div>';
   h += '</div></div>';
 
   // 4. Pipeline
@@ -13913,6 +13868,12 @@ function mtgBuildSummary() {
   L.push('Invoiced, awaiting payment: ' + gbp(c.overdueTotal + c.awaitingTotal) + ' inc VAT' + (c.overdueTotal > 0 ? ' (' + gbp(c.overdueTotal) + ' overdue)' : ''));
   L.push('Confirmed, not yet invoiced: ' + gbp(c.uninvoiced.total) + ' ex VAT');
   L.push('');
+  const qtOpen = _qt.rows.filter(r => r.status !== 'Sent').sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
+  if (qtOpen.length) {
+    L.push('QUOTES TO COMPLETE');
+    qtOpen.forEach(r => { const d = mtgParse(r.due); L.push('- ' + r.name + ' — ' + (r.who || 'unassigned') + ', ' + (d ? 'due ' + mtgShort(d) + (d < c.today ? ' (OVERDUE)' : '') : 'no date') + (r.status === 'In Progress' ? ' (in progress)' : '')); });
+    L.push('');
+  }
   if ((_mtg.decisions || '').trim()) {
     L.push('DECISIONS');
     _mtg.decisions.split('\n').map(x => x.trim()).filter(Boolean).forEach(x => L.push('- ' + x.replace(/^[-•]\s*/, '')));
@@ -13940,8 +13901,9 @@ function mtgBuildSummary() {
       L.push('');
     });
   }
-  const doneList = [..._mtg.doneObjs].filter(a => a.status === 'Completed').map(a => ({ text: a.desc, who: mtgOwnerName(a.owner), job: '' }))
-    .concat(_mtg.todos.filter(t => t.done).map(t => ({ text: t.text, who: t.who || '', job: t.jobRef })));
+  const qtSent = _qt.rows.filter(r => r.status === 'Sent').map(r => ({ text: 'Quote sent: ' + r.name, who: r.who || '', job: '' }));
+  const doneList = qtSent.concat([..._mtg.doneObjs].filter(a => a.status === 'Completed').map(a => ({ text: a.desc, who: mtgOwnerName(a.owner), job: '' }))
+    .concat(_mtg.todos.filter(t => t.done).map(t => ({ text: t.text, who: t.who || '', job: t.jobRef }))));
   if (doneList.length) {
     L.push('DONE THIS WEEK');
     doneList.forEach(d => L.push('- ' + d.text + (d.job ? ' [' + d.job + ']' : '') + (d.who && d.who !== '—' ? ' (' + d.who + ')' : '')));
@@ -14040,6 +14002,438 @@ async function syncInvoiceToSupabase(inv) {
 async function deleteInvoiceFromSupabase(number) {
   if (!number || _mtg.tablesMissing.invoices) return;
   try { await supa.deleteWhere('invoices', 'number=eq.' + encodeURIComponent(number)); } catch(e) { console.warn('Invoice delete failed:', e); }
+}
+
+
+// ============================================================
+// FINANCE RULES (v4.74): the ONE place money is calculated.
+// Every page (Dashboard, Weekly Meeting, Finance & P&L, job tabs, job report) uses these.
+//
+//  • Revenue = invoices marked Sent or Paid, ex VAT, by invoice date. Drafts don't count.
+//  • Costs   = Cost Tracker entries. Labour carries no VAT; Materials/Other are entered
+//              inc VAT, so the reclaimable VAT (1/6 of the gross) is taken off.
+//  • A job's quote total is in the same terms its invoices are raised in. If the job's
+//    invoices are VAT-inclusive, the quote is VAT-inclusive (assumed until the first invoice).
+//  • Payment gates follow the invoices: once invoices against a job cover a gate it shows
+//    Invoiced, and Paid when those invoices are paid. A gate set by hand is still respected.
+// ============================================================
+const FIN_PIPE = ['Initial Enquiry','Preparing Quote','Quoted'];
+const FIN_LIVE = ['Confirmed','In Progress','Snagging','Completed - Not Paid'];
+const FIN_DONE = ['Completed - Paid','Completed'];
+const FIN_LOST = 'Not Going Ahead';
+const FIN_BILLED = ['Sent','Paid'];
+
+function finNorm(r) { return String(r || '').replace(/-/g, '').toUpperCase(); }
+function finSameJob(a, b) { return finNorm(a) === finNorm(b) && !!finNorm(a); }
+function finInvLines(ref) {
+  const out = [];
+  (db.invoices || []).forEach(inv => (inv.lines || []).forEach(l => { if (finSameJob(l.jobRef, ref)) out.push({ inv, l }); }));
+  return out;
+}
+function finLineNet(inv, l) { return inv.vatInclusive ? (parseFloat(l.amount) || 0) / 1.2 : (parseFloat(l.amount) || 0); }
+function finInvNet(inv) { return inv.vatInclusive ? (inv.total || 0) / 1.2 : (inv.subtotal != null ? inv.subtotal : (inv.lines || []).reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)); }
+
+// 'inc' = quote/invoices include VAT, 'plus' = VAT added on top, 'none' = no VAT charged
+function finVatBasis(ref) {
+  const lines = finInvLines(ref);
+  if (!lines.length) return 'inc';
+  if (lines.some(x => x.inv.vatInclusive)) return 'inc';
+  if (lines.some(x => x.inv.addVat)) return 'plus';
+  return 'none';
+}
+function finToNet(amount, basis) { return basis === 'inc' ? amount / 1.2 : amount; }
+
+function finJob(ref) {
+  const job = db.jobs.find(j => finSameJob(j.ref, ref)) || { ref, name: '', status: '' };
+  const basis = finVatBasis(ref);
+  const quote = job.quoteValue || 0;
+  const lines = finInvLines(ref);
+  let billedQ = 0, billedNet = 0, paidQ = 0, draftQ = 0, outstandingGross = 0;
+  lines.forEach(({ inv, l }) => {
+    const a = parseFloat(l.amount) || 0;
+    if (FIN_BILLED.includes(inv.status)) { billedQ += a; billedNet += finLineNet(inv, l); }
+    if (inv.status === 'Paid') paidQ += a;
+    if (inv.status === 'Sent') outstandingGross += inv.vatInclusive ? a : a * (inv.addVat ? 1.2 : 1);
+    if ((inv.status || 'Draft') === 'Draft') draftQ += a;
+  });
+  const costs = finJobCosts(ref);
+  const contractNet = finToNet(quote, basis);
+  const leftQ = quote ? Math.max(0, quote - billedQ) : 0;
+  return {
+    job, ref: job.ref || ref, basis, basisAssumed: !lines.length,
+    quote, contractNet, billedQ, billedNet, paidQ, draftQ, outstandingGross,
+    leftQ, leftNet: finToNet(leftQ, basis), draftNet: finToNet(draftQ, basis),
+    costs,
+    profitToDate: billedNet - costs.net,                 // invoiced so far minus spent so far
+    expectedProfit: quote ? contractNet - costs.net : null, // whole job, once costs are complete
+    expectedPct: quote && contractNet ? (contractNet - costs.net) / contractNet * 100 : null
+  };
+}
+
+function finCostNet(type, gross) { return type === 'Labour' ? gross : gross - gross / 6; }
+function finJobCosts(ref) {
+  const t = { gross: 0, net: 0, labour: 0, materials: 0, other: 0, vatReclaim: 0, entries: 0 };
+  (db.costs || []).forEach(c => (c.allocations || []).forEach(a => {
+    if (!finSameJob(a.jobRef, ref)) return;
+    const g = parseFloat(a.amount) || 0, n = finCostNet(c.type, g);
+    t.gross += g; t.net += n; t.vatReclaim += g - n; t.entries++;
+    if (c.type === 'Labour') t.labour += n; else if (c.type === 'Material') t.materials += n; else t.other += n;
+  }));
+  return t;
+}
+
+// Payment gate status derived from invoices (cumulative, in gate order)
+function finGateStatuses(ref) {
+  const gates = (db.paymentGates || []).filter(g => finSameJob(g.jobRef, ref)).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  const f = finJob(ref);
+  const rank = { Pending: 0, Overdue: 0, Invoiced: 1, Paid: 2 };
+  let cum = 0;
+  return gates.map(g => {
+    cum += parseFloat(g.amount) || 0;
+    let auto = 'Pending';
+    if (f.paidQ >= cum - 0.5) auto = 'Paid'; else if (f.billedQ >= cum - 0.5) auto = 'Invoiced';
+    const manual = g.status || 'Pending';
+    const status = (rank[manual] || 0) > rank[auto] ? manual : auto;
+    return { gate: g, status, auto: status === auto && auto !== 'Pending', manual };
+  });
+}
+function finGateStatus(g) { const s = finGateStatuses(g.jobRef).find(x => x.gate === g); return s ? s.status : (g.status || 'Pending'); }
+
+function finPipeline() {
+  const jobs = db.jobs.filter(j => FIN_PIPE.includes(j.status));
+  return { jobs, value: jobs.reduce((s, j) => s + (j.quoteValue || j.estimate || 0), 0) };
+}
+function finUninvoiced() {
+  const all = db.jobs.filter(j => FIN_LIVE.includes(j.status)).map(j => finJob(j.ref));
+  return { rows: all.filter(f => f.quote > 0 && f.leftQ > 0.5), noQuote: all.filter(f => !f.quote), total: all.reduce((s, f) => s + f.leftNet, 0) };
+}
+function finReceivables() {
+  const sent = (db.invoices || []).filter(i => i.status === 'Sent');
+  return { invoices: sent, total: sent.reduce((s, i) => s + (i.total || 0), 0) };
+}
+function finConversion() {
+  const won = db.jobs.filter(j => FIN_LIVE.includes(j.status) || FIN_DONE.includes(j.status) || j.status === 'On Hold');
+  const lost = db.jobs.filter(j => j.status === FIN_LOST);
+  const decided = won.length + lost.length;
+  return { won: won.length, lost: lost.length, rate: decided ? Math.round(won.length / decided * 100) : null,
+    wonValue: won.reduce((s, j) => s + (j.quoteValue || 0), 0), lostValue: lost.reduce((s, j) => s + (j.quoteValue || j.estimate || 0), 0) };
+}
+
+// Month-by-month P&L from invoices and costs
+function finPnl(fromISO, toISO) {
+  const months = [];
+  const d = new Date(fromISO.slice(0, 7) + '-01T00:00:00');
+  const end = new Date(toISO.slice(0, 7) + '-01T00:00:00');
+  while (d <= end) { months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); d.setMonth(d.getMonth() + 1); }
+  const row = () => Object.fromEntries(months.map(m => [m, 0]));
+  const r = { months, revenue: row(), labour: row(), materials: row(), other: row(), unlinkedRevenue: 0, undatedCosts: 0 };
+  (db.invoices || []).forEach(inv => {
+    if (!FIN_BILLED.includes(inv.status)) return;
+    const m = (inv.date || '').slice(0, 7);
+    if (m in r.revenue) r.revenue[m] += finInvNet(inv);
+    if (!(inv.lines || []).some(l => l.jobRef)) r.unlinkedRevenue += finInvNet(inv);
+  });
+  (db.costs || []).forEach(c => {
+    const m = (c.date || '').slice(0, 7);
+    if (!m) { r.undatedCosts++; return; }
+    if (!(m in r.labour)) return;
+    const n = finCostNet(c.type, parseFloat(c.amount) || 0);
+    if (c.type === 'Labour') r.labour[m] += n; else if (c.type === 'Material') r.materials[m] += n; else r.other[m] += n;
+  });
+  return r;
+}
+
+// Things that make the numbers disagree — shown on the Finance page so they get fixed at source
+function finDataChecks() {
+  const out = [];
+  db.jobs.forEach(j => {
+    const f = finJob(j.ref);
+    const hasInv = finInvLines(j.ref).length > 0, hasCost = f.costs.entries > 0;
+    if (j.status === 'Completed' && !hasInv && !hasCost) out.push({ ref: j.ref, kind: 'lost?', text: j.name + ' is archived as Completed but has no invoices or costs — did it go ahead?' });
+    if (FIN_LIVE.includes(j.status) && !j.quoteValue) out.push({ ref: j.ref, kind: 'noquote', text: j.name + ' is ' + j.status + ' but has no quote in the Quote Builder, so its value can\'t be counted.' });
+    if (j.status === 'Completed - Paid' && f.outstandingGross > 0.5) out.push({ ref: j.ref, kind: 'status', text: j.name + ' is marked Completed - Paid but has ' + finGBP(f.outstandingGross) + ' of invoices still unpaid.' });
+    if (j.status === 'Completed - Not Paid' && hasInv && f.quote && f.leftQ < 0.5 && f.outstandingGross < 0.5) out.push({ ref: j.ref, kind: 'status', text: j.name + ' is fully invoiced and paid — move it to Completed - Paid?' });
+    if (f.quote && f.billedQ > f.quote + 0.5) out.push({ ref: j.ref, kind: 'over', text: j.name + ' has been invoiced ' + finGBP(f.billedQ - f.quote) + ' more than its quote — extras not in the quote?' });
+    finGateStatuses(j.ref).forEach(s => { if (s.manual === 'Paid' && !hasInv) out.push({ ref: j.ref, kind: 'gate', text: j.name + ': gate "' + (s.gate.name || '') + '" is marked Paid but there\'s no invoice for it in the app.' }); });
+  });
+  const unlinked = (db.invoices || []).filter(i => FIN_BILLED.includes(i.status) && !(i.lines || []).some(l => l.jobRef));
+  if (unlinked.length) out.push({ kind: 'unlinked', text: unlinked.length + ' invoice' + (unlinked.length === 1 ? ' isn\'t' : 's aren\'t') + ' linked to a job (' + unlinked.map(i => i.number).join(', ') + '), so they count in the P&L but not against any job.' });
+  return out;
+}
+
+// Profit only means something once a job's costs are (nearly) all in; before that, show how much of the quote is spent
+const FIN_COSTS_IN = ['Snagging','Completed - Not Paid','Completed - Paid','Completed'];
+function finProfitCell(f) {
+  if (!f.quote) return { html: '—', col: 'var(--text-muted)' };
+  if (FIN_COSTS_IN.includes(f.job.status)) {
+    const pc = Math.round(f.expectedPct);
+    return { html: finGBP(f.expectedProfit) + ' <span style="font-size:11px;">(' + pc + '%)</span>', col: pc < 10 ? 'var(--danger)' : pc < 20 ? 'var(--warning)' : 'var(--success)' };
+  }
+  const spent = f.contractNet ? Math.round(f.costs.net / f.contractNet * 100) : 0;
+  return { html: spent + '% of quote spent', col: spent > 100 ? 'var(--danger)' : spent > 80 ? 'var(--warning)' : 'var(--text-muted)', small: true };
+}
+
+function finGBP(n) { const v = Math.round(n || 0); return (v < 0 ? '−£' : '£') + Math.abs(v).toLocaleString('en-GB'); }
+
+// --- "Didn't go ahead" ---
+async function markJobLost(ref, fromModal) {
+  const job = db.jobs.find(j => finSameJob(j.ref, ref));
+  if (!job) return;
+  const reason = prompt('Mark ' + (job.name || job.ref) + ' as didn\'t go ahead.\n\nReason (optional) — e.g. price, timing, went with someone else:');
+  if (reason === null) return;
+  job.status = FIN_LOST;
+  const stamp = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+  job.notes = ((job.notes || '').trim() + '\nDidn\'t go ahead (' + stamp + ')' + (reason.trim() ? ': ' + reason.trim() : '')).trim();
+  saveData();
+  if (fromModal) closeModal('job-modal');
+  try { await syncJobToSupabase(job.ref); } catch(e) { console.warn('Job sync failed:', e); }
+  ['renderJobsTable','renderPipeline','renderDashboard'].forEach(fn => { try { window[fn] && window[fn](); } catch(e) {} });
+  if (document.getElementById('page-finance')?.classList.contains('active')) renderFinancePage();
+}
+
+// ============================================================
+// FINANCE & P&L PAGE
+// ============================================================
+let _finPeriod = 'ytd';
+function finPeriodRange() {
+  const t = new Date(), iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  if (_finPeriod === '12m') return [iso(new Date(t.getFullYear(), t.getMonth() - 11, 1)), iso(t)];
+  if (_finPeriod === '6m') return [iso(new Date(t.getFullYear(), t.getMonth() - 5, 1)), iso(t)];
+  if (_finPeriod === 'all') {
+    const ds = (db.invoices || []).map(i => i.date).concat((db.costs || []).map(c => c.date)).filter(Boolean).sort();
+    return [ds[0] || iso(t), iso(t)];
+  }
+  return [t.getFullYear() + '-01-01', iso(t)];
+}
+
+function renderFinancePage() {
+  const root = document.getElementById('finance-root');
+  if (!root) return;
+  if (!root.dataset.loaded) { root.dataset.loaded = '1'; Promise.all([loadInvoicesFromSupabase().catch(()=>{}), ohLoad()]).then(renderFinancePage); }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const rec = finReceivables(), un = finUninvoiced(), pipe = finPipeline(), conv = finConversion();
+  const [from, to] = finPeriodRange();
+  const p = finPnl(from, to);
+  const sumRow = o => Object.values(o).reduce((s, v) => s + v, 0);
+  const rev = sumRow(p.revenue), lab = sumRow(p.labour), mat = sumRow(p.materials), oth = sumRow(p.other);
+  const cos = lab + mat + oth, gp = rev - cos;
+  const tile = (label, value, sub, col) => '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="' + (col ? 'color:' + col : '') + '">' + value + '</div><div class="stat-sub">' + sub + '</div></div>';
+  let h = '';
+
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-bottom:24px;">';
+  h += tile('Invoiced, awaiting payment', finGBP(rec.total), rec.invoices.length + ' invoice' + (rec.invoices.length === 1 ? '' : 's') + ' · inc VAT');
+  h += tile('Confirmed, not yet invoiced', finGBP(un.total), un.rows.length + ' job' + (un.rows.length === 1 ? '' : 's') + ' · ex VAT', un.total ? 'var(--warning)' : '');
+  h += tile('Pipeline', finGBP(pipe.value), pipe.jobs.length + ' enquiries & quotes');
+  h += tile('Quote conversion', conv.rate == null ? '—' : conv.rate + '%', conv.won + ' won · ' + conv.lost + ' didn\'t go ahead' + (conv.lostValue ? ' (' + finGBP(conv.lostValue) + ')' : ''));
+  h += '</div>';
+
+  // P&L
+  const periods = [['ytd','This year'],['6m','Last 6 months'],['12m','Last 12 months'],['all','All time']];
+  const mLabel = m => new Date(m + '-01T00:00:00').toLocaleDateString('en-GB', { month:'short', year:'2-digit' });
+  const cell = (v, bold, col) => '<td style="text-align:right;white-space:nowrap;' + (bold ? 'font-weight:700;' : '') + (col ? 'color:' + col + ';' : '') + '">' + (Math.abs(v) < 0.5 ? '<span style="color:var(--text-muted);">—</span>' : finGBP(v)) + '</td>';
+  const line = (label, o, total, opts) => '<tr' + (opts && opts.top ? ' style="border-top:2px solid var(--border);"' : '') + '><td style="white-space:nowrap;' + (opts && opts.bold ? 'font-weight:700;' : '') + (opts && opts.indent ? 'padding-left:24px;color:var(--text-muted);' : '') + '">' + label + '</td>' + p.months.map(m => cell(o[m], opts && opts.bold, opts && opts.col && o[m] < 0 ? 'var(--danger)' : '')).join('') + cell(total, true, opts && opts.col && total < 0 ? 'var(--danger)' : '') + '</tr>';
+  const gpRow = Object.fromEntries(p.months.map(m => [m, p.revenue[m] - p.labour[m] - p.materials[m] - p.other[m]]));
+  const cosRow = Object.fromEntries(p.months.map(m => [m, p.labour[m] + p.materials[m] + p.other[m]]));
+  const pctRow = '<tr><td style="color:var(--text-muted);">Gross margin</td>' + p.months.map(m => '<td style="text-align:right;color:var(--text-muted);">' + (p.revenue[m] ? Math.round(gpRow[m] / p.revenue[m] * 100) + '%' : '—') + '</td>').join('') + '<td style="text-align:right;font-weight:700;">' + (rev ? Math.round(gp / rev * 100) + '%' : '—') + '</td></tr>';
+
+  h += '<div class="card" style="margin-bottom:20px;"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">Profit & loss</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Ex VAT. Revenue from invoices sent or paid; direct costs from the Cost Tracker; overheads from the list below.</div></div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + periods.map(([k, l]) => '<button class="btn btn-sm ' + (_finPeriod === k ? 'btn-primary' : 'btn-secondary') + '" onclick="_finPeriod=\'' + k + '\';renderFinancePage()">' + l + '</button>').join('') + '</div></div>';
+  h += '<div class="table-wrap"><table><thead><tr><th></th>' + p.months.map(m => '<th style="text-align:right;">' + mLabel(m) + '</th>').join('') + '<th style="text-align:right;">Total</th></tr></thead><tbody>';
+  h += line('Revenue', p.revenue, rev, { bold: true });
+  h += line('Labour', p.labour, lab, { indent: true });
+  h += line('Materials', p.materials, mat, { indent: true });
+  h += line('Other (skips, hire, etc.)', p.other, oth, { indent: true });
+  h += line('Direct costs', cosRow, cos, {});
+  h += line('Gross profit', gpRow, gp, { bold: true, top: true, col: true });
+  h += pctRow;
+  const oh = finOverheads(p.months);
+  const ohTot = sumRow(oh.total), net = gp - ohTot;
+  const netRow = Object.fromEntries(p.months.map(m => [m, gpRow[m] - oh.total[m]]));
+  OH_CATS.filter(c => oh.byCat[c]).forEach(c => { h += line(c, oh.byCat[c], sumRow(oh.byCat[c]), { indent: true }); });
+  if (!_oh.rows.length) h += '<tr><td colspan="' + (p.months.length + 2) + '" style="color:var(--text-muted);font-style:italic;padding-left:24px;">No overheads entered yet — add them below</td></tr>';
+  h += line('Overheads', oh.total, ohTot, {});
+  h += line('Net profit', netRow, net, { bold: true, top: true, col: true });
+  h += '<tr><td style="color:var(--text-muted);">Net margin</td>' + p.months.map(m => '<td style="text-align:right;color:var(--text-muted);">' + (p.revenue[m] ? Math.round(netRow[m] / p.revenue[m] * 100) + '%' : '—') + '</td>').join('') + '<td style="text-align:right;font-weight:700;">' + (rev ? Math.round(net / rev * 100) + '%' : '—') + '</td></tr>';
+  h += '</tbody></table></div>';
+  h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Costs land in the month they were logged and revenue in the month it was invoiced, so a single month can look lumpy. Only invoices raised in the app are included.</div></div>';
+
+  h += ohCard();
+
+  // Job profitability
+  const jobs = db.jobs.filter(j => FIN_LIVE.includes(j.status) || FIN_DONE.includes(j.status)).map(j => finJob(j.ref)).filter(f => f.quote || f.billedNet || f.costs.net);
+  jobs.sort((a, b) => (FIN_LIVE.includes(b.job.status) ? 1 : 0) - (FIN_LIVE.includes(a.job.status) ? 1 : 0) || b.contractNet - a.contractNet);
+  h += '<div class="card" style="margin-bottom:20px;"><div class="card-header"><div><div class="card-title">Job profitability</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">All ex VAT. Profit = quote minus costs, shown once a job reaches snagging; before that, how much of the quote has been spent.</div></div></div>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th style="text-align:right;">Quote</th><th style="text-align:right;">Invoiced</th><th style="text-align:right;">Left to invoice</th><th style="text-align:right;">Costs</th><th style="text-align:right;">Profit</th></tr></thead><tbody>';
+  if (!jobs.length) h += '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px;">No confirmed or completed jobs yet.</td></tr>';
+  jobs.forEach(f => {
+    const pcell = finProfitCell(f);
+    h += '<tr><td><a href="#" onclick="openJob(\'' + esc(f.job.ref) + '\');return false;" style="color:var(--copper-dark);text-decoration:none;"><strong>' + esc(f.job.ref) + '</strong></a> ' + esc(f.job.name) + '</td><td>' + statusBadge(f.job.status) + '</td>'
+      + '<td style="text-align:right;">' + (f.quote ? finGBP(f.contractNet) + (f.basisAssumed && f.basis === 'inc' ? '<div style="font-size:10px;color:var(--text-muted);">assumed inc VAT</div>' : '') : '<span style="color:var(--warning);font-size:12px;">No quote</span>') + '</td>'
+      + '<td style="text-align:right;">' + finGBP(f.billedNet) + '</td>'
+      + '<td style="text-align:right;">' + (f.leftNet > 0.5 ? finGBP(f.leftNet) : '—') + '</td>'
+      + '<td style="text-align:right;">' + finGBP(f.costs.net) + '</td>'
+      + '<td style="text-align:right;' + (pcell.small ? 'font-size:12px;' : 'font-weight:600;') + 'color:' + pcell.col + ';">' + pcell.html + '</td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+
+  // Payment gates
+  const gateJobs = db.jobs.filter(j => FIN_LIVE.includes(j.status)).map(j => ({ j, gs: finGateStatuses(j.ref) })).filter(x => x.gs.length);
+  h += '<div class="card" style="margin-bottom:20px;"><div class="card-header"><div><div class="card-title">Payment gates</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Status follows the invoices raised against each job.</div></div></div>';
+  if (!gateJobs.length) h += '<div style="padding:16px 20px;color:var(--text-muted);font-size:13px;">No payment gates on live jobs.</div>';
+  else {
+    h += '<div class="table-wrap"><table><thead><tr><th>Job</th><th>Gate</th><th style="text-align:right;">Amount</th><th>Status</th></tr></thead><tbody>';
+    const badge = s => '<span class="badge ' + (s === 'Paid' ? 'badge-completed-paid' : s === 'Invoiced' ? 'badge-quoted' : 'badge-preparing') + '">' + s + '</span>';
+    gateJobs.forEach(x => x.gs.forEach((s, i) => {
+      h += '<tr><td>' + (i === 0 ? '<strong>' + esc(x.j.ref) + '</strong> ' + esc(x.j.name) : '') + '</td><td>' + esc(s.gate.name) + '</td><td style="text-align:right;">' + finGBP(s.gate.amount) + '</td><td>' + badge(s.status) + '</td></tr>';
+    }));
+    h += '</tbody></table></div>';
+  }
+  h += '</div>';
+
+  // Lost
+  const lost = db.jobs.filter(j => j.status === FIN_LOST);
+  if (lost.length) {
+    h += '<div class="card" style="margin-bottom:20px;"><div class="card-header"><div class="card-title">Didn\'t go ahead</div></div><div class="table-wrap"><table><thead><tr><th>Job</th><th style="text-align:right;">Quote</th><th>Why</th></tr></thead><tbody>';
+    lost.forEach(j => {
+      const why = ((j.notes || '').match(/Didn't go ahead \([^)]*\):?\s*([^\n]*)/) || [])[1] || '';
+      h += '<tr><td><a href="#" onclick="openJob(\'' + esc(j.ref) + '\');return false;" style="color:var(--copper-dark);text-decoration:none;"><strong>' + esc(j.ref) + '</strong></a> ' + esc(j.name) + '</td><td style="text-align:right;">' + ((j.quoteValue || j.estimate) ? finGBP(j.quoteValue || j.estimate) : '—') + '</td><td style="font-size:12px;color:var(--text-muted);">' + esc(why) + '</td></tr>';
+    });
+    h += '</tbody></table></div></div>';
+  }
+
+  // Data checks
+  const checks = finDataChecks();
+  h += '<div class="card"><div class="card-header"><div><div class="card-title">Data checks</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Things that would make the numbers disagree. Fix them at source and they disappear.</div></div></div>';
+  if (!checks.length) h += '<div style="padding:16px 20px;color:var(--success);font-size:13px;">✓ Nothing to fix.</div>';
+  else h += '<div>' + checks.map(c => '<div style="display:flex;gap:10px;align-items:center;padding:10px 20px;border-top:1px solid var(--border);font-size:13px;"><span style="flex:1;">' + esc(c.text) + '</span>'
+      + (c.kind === 'lost?' ? '<button class="btn btn-sm btn-secondary" onclick="markJobLost(\'' + esc(c.ref) + '\')">Didn\'t go ahead</button>' : '')
+      + (c.ref ? '<button class="btn btn-sm btn-secondary" onclick="openJob(\'' + esc(c.ref) + '\')">Open job</button>' : '') + '</div>').join('') + '</div>';
+  h += '</div>';
+
+  root.innerHTML = h;
+}
+
+// ============================================================
+// QUOTES TO BE COMPLETED (v4.74) — shared list in the quote_todos table
+// ============================================================
+let _qt = { rows: [], missing: false, doneIds: new Set() };
+async function qtLoad() {
+  try {
+    const rows = await supa.get('quote_todos', 'order=due.asc.nullslast,created_at.asc');
+    _qt.missing = false;
+    _qt.rows = (rows || []).filter(r => r.status !== 'Sent' || _qt.doneIds.has(r.id));
+  } catch(e) { _qt.missing = true; }
+}
+async function qtUpdate(id, field, val) {
+  const r = _qt.rows.find(x => x.id === id);
+  if (!r) return;
+  r[field] = val;
+  if (field === 'status' && val === 'Sent') _qt.doneIds.add(id);
+  renderMeetingNow();
+  try { await supa.patch('quote_todos', id, { [field]: val || null }); }
+  catch(e) { alert('Couldn\'t save that — check your connection.'); }
+}
+async function qtAdd() {
+  const g = id => document.getElementById(id);
+  const name = (g('qt-name').value || '').trim();
+  if (!name) return;
+  const row = { name, who: (g('qt-who').value || '').trim(), due: g('qt-due').value || null, status: 'To Do', notes: '' };
+  try {
+    const res = await supa.post('quote_todos', row);
+    if (res && res[0]) _qt.rows.push(res[0]);
+    renderMeetingNow();
+    const n = document.getElementById('qt-name'); if (n) n.focus();
+  } catch(e) { alert(_qt.missing ? 'Run the v4.74 SQL in Supabase first to set up the quotes list.' : 'Couldn\'t save that — check your connection.'); }
+}
+async function qtDelete(id) {
+  const r = _qt.rows.find(x => x.id === id);
+  if (!r || !confirm('Remove "' + r.name + '" from the list?')) return;
+  _qt.rows = _qt.rows.filter(x => x.id !== id);
+  renderMeetingNow();
+  try { await supa.delete('quote_todos', id); } catch(e) { alert('Couldn\'t remove it — check your connection.'); }
+}
+
+
+// ============================================================
+// OVERHEADS (v4.75) — simple monthly/one-off costs not tied to a job; feeds the P&L
+// ============================================================
+const OH_CATS = ['Vehicles','Fuel','Insurance','Phones & software','Accountant & fees','Pay (Adam & Tom)','Premises & storage','Other'];
+let _oh = { rows: [], missing: false, loaded: false };
+async function ohLoad() {
+  try { _oh.rows = await supa.get('overheads', 'order=category.asc,name.asc') || []; _oh.missing = false; }
+  catch(e) { _oh.missing = true; }
+  _oh.loaded = true;
+}
+// Amount of each overhead falling in each month: monthly items run from start to end (inclusive), one-offs hit their month
+function finOverheads(months) {
+  const byCat = {}, total = Object.fromEntries(months.map(m => [m, 0]));
+  (_oh.rows || []).forEach(r => {
+    const amt = parseFloat(r.amount) || 0;
+    const start = (r.start_month || '').slice(0, 7), end = (r.end_month || '').slice(0, 7);
+    months.forEach(m => {
+      const hit = r.kind === 'One-off' ? m === start : (!start || m >= start) && (!end || m <= end);
+      if (!hit) return;
+      const cat = r.category || 'Other';
+      (byCat[cat] = byCat[cat] || Object.fromEntries(months.map(x => [x, 0])))[m] += amt;
+      total[m] += amt;
+    });
+  });
+  return { byCat, total };
+}
+async function ohAdd() {
+  const g = id => document.getElementById(id);
+  const name = (g('oh-name').value || '').trim(), amount = parseFloat(g('oh-amount').value);
+  if (!name || isNaN(amount)) { alert('Enter a name and an amount.'); return; }
+  const row = { name, category: g('oh-cat').value, kind: g('oh-kind').value, amount, start_month: g('oh-start').value || null, end_month: null, notes: '' };
+  try {
+    const res = await supa.post('overheads', row);
+    _oh.rows.push(res && res[0] ? res[0] : row);
+    renderFinancePage();
+  } catch(e) { alert(_oh.missing ? 'Run the v4.75 SQL in Supabase first to set up overheads.' : 'Couldn\'t save that — check your connection.'); }
+}
+async function ohUpdate(id, field, val) {
+  const r = _oh.rows.find(x => x.id === id);
+  if (!r) return;
+  r[field] = field === 'amount' ? (parseFloat(val) || 0) : (val || null);
+  renderFinancePage();
+  try { await supa.patch('overheads', id, { [field]: r[field] }); } catch(e) { alert('Couldn\'t save that — check your connection.'); }
+}
+async function ohDelete(id) {
+  const r = _oh.rows.find(x => x.id === id);
+  if (!r || !confirm('Remove "' + r.name + '"? It comes out of every month of the P&L.')) return;
+  _oh.rows = _oh.rows.filter(x => x.id !== id);
+  renderFinancePage();
+  try { await supa.delete('overheads', id); } catch(e) { alert('Couldn\'t remove it — check your connection.'); }
+}
+function ohCard() {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const monthly = _oh.rows.filter(r => r.kind !== 'One-off' && (!r.end_month || r.end_month.slice(0,7) >= thisMonth)).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const inp = 'padding:4px 8px;font-size:12px;';
+  let h = '<div class="card" style="margin-bottom:20px;"><div class="card-header"><div><div class="card-title">Overheads</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Running costs not tied to a job. Enter amounts ex VAT (or as paid if there\'s no VAT). Monthly items repeat from their start month until you set an end month.</div></div>'
+    + '<div style="text-align:right;"><div style="font-size:11px;color:var(--text-muted);">Current monthly run-rate</div><div style="font-size:20px;font-weight:700;">' + finGBP(monthly) + '</div></div></div>';
+  if (_oh.missing) h += '<div style="padding:12px 20px;font-size:13px;color:var(--warning);">Run the v4.75 SQL in Supabase to set up overheads.</div>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Category</th><th>Type</th><th style="text-align:right;">Amount</th><th>From</th><th>Until</th><th></th></tr></thead><tbody>';
+  if (!_oh.rows.length) h += '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px;">No overheads yet. Start with the big ones: vans, insurance, fuel, your pay.</td></tr>';
+  _oh.rows.slice().sort((a, b) => OH_CATS.indexOf(a.category) - OH_CATS.indexOf(b.category) || (a.name || '').localeCompare(b.name || '')).forEach(r => {
+    const id = esc(r.id), oneOff = r.kind === 'One-off';
+    h += '<tr><td><input value="' + esc(r.name) + '" onchange="ohUpdate(\'' + id + '\',\'name\',this.value)" style="' + inp + 'width:100%;min-width:140px;"></td>'
+      + '<td><select onchange="ohUpdate(\'' + id + '\',\'category\',this.value)" style="' + inp + 'width:auto;">' + OH_CATS.map(c => '<option' + (c === r.category ? ' selected' : '') + '>' + c + '</option>').join('') + '</select></td>'
+      + '<td><select onchange="ohUpdate(\'' + id + '\',\'kind\',this.value)" style="' + inp + 'width:auto;">' + ['Monthly','One-off'].map(k => '<option' + (k === (r.kind || 'Monthly') ? ' selected' : '') + '>' + k + '</option>').join('') + '</select></td>'
+      + '<td style="text-align:right;"><input type="number" step="1" value="' + (parseFloat(r.amount) || 0) + '" onchange="ohUpdate(\'' + id + '\',\'amount\',this.value)" style="' + inp + 'width:100px;text-align:right;"></td>'
+      + '<td><input type="month" value="' + esc((r.start_month || '').slice(0, 7)) + '" onchange="ohUpdate(\'' + id + '\',\'start_month\',this.value)" style="' + inp + 'width:auto;"></td>'
+      + '<td>' + (oneOff ? '<span style="color:var(--text-muted);font-size:12px;">—</span>' : '<input type="month" value="' + esc((r.end_month || '').slice(0, 7)) + '" onchange="ohUpdate(\'' + id + '\',\'end_month\',this.value)" style="' + inp + 'width:auto;" title="Leave blank if it\'s ongoing">') + '</td>'
+      + '<td><button onclick="ohDelete(\'' + id + '\')" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button></td></tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">'
+    + '<input id="oh-name" placeholder="e.g. Van finance, Public liability insurance" style="flex:2;min-width:200px;" onkeydown="if(event.key===\'Enter\')ohAdd()">'
+    + '<select id="oh-cat" style="width:auto;">' + OH_CATS.map(c => '<option>' + c + '</option>').join('') + '</select>'
+    + '<select id="oh-kind" style="width:auto;"><option>Monthly</option><option>One-off</option></select>'
+    + '<input id="oh-amount" type="number" step="1" placeholder="£" style="width:100px;">'
+    + '<input id="oh-start" type="month" value="' + thisMonth + '" style="width:auto;" title="Start month (or the month of a one-off)">'
+    + '<button class="btn btn-primary" onclick="ohAdd()">Add</button></div></div>';
+  return h;
 }
 
 </script>
