@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.81 -->
+<!-- Livingstone v4.83 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.81</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.83</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -827,8 +827,8 @@ window.onerror=function(m,s,l,c,e){
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th><th>Type</th><th>Quote</th><th>Est. Cost</th><th>Margin £</th>
-              <th>Margin %</th><th>Start</th><th></th>
+              <th>Lead</th><th>Type</th><th style="text-align:right;">Quote<div style="font-weight:400;font-size:10px;">ex VAT</div></th><th style="text-align:right;">Est. cost</th><th style="text-align:right;">Planned margin</th>
+              <th style="text-align:right;">Actual</th><th>Start</th><th></th>
             </tr>
           </thead>
           <tbody id="jobs-table-body"></tbody>
@@ -1896,7 +1896,7 @@ window.onerror=function(m,s,l,c,e){
         <div class="grid-4" style="gap:16px;margin-bottom:20px;">
           <div class="stat-card"><div class="stat-label">Quote Value</div><div class="stat-value" id="jdf-quote" style="font-size:20px;color:var(--copper)"></div></div>
           <div class="stat-card"><div class="stat-label">Est. Cost</div><div class="stat-value" id="jdf-cost" style="font-size:20px;"></div></div>
-          <div class="stat-card"><div class="stat-label">Est. Margin £</div><div class="stat-value" id="jdf-margin" style="font-size:20px;color:var(--success)"></div></div>
+          <div class="stat-card"><div class="stat-label">Planned margin (ex VAT)</div><div class="stat-value" id="jdf-margin" style="font-size:20px;color:var(--success)"></div></div>
           <div class="stat-card"><div class="stat-label">Margin %</div><div class="stat-value" id="jdf-mpct" style="font-size:20px;"></div></div>
         </div>
         <div class="alert alert-warning">Payment gates will be trackable once this job is confirmed.</div>
@@ -2332,7 +2332,8 @@ async function loadFromSupabase() {
       startDate: j.start_date || '',
       endDate: j.end_date || '',
       notes: j.notes || '',
-      address: j.address || ''
+      address: j.address || '',
+      vatBasis: j.vat_basis || ''
     }));
     db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
     // Deduplicate: normalise refs (LP001 == LP-001), prefer hyphenated version
@@ -3494,10 +3495,10 @@ function renderDashboard() {
   if (pipelineEl) {
     const statuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold','Snagging','Completed - Not Paid','Completed - Paid'];
     const colors = {'Initial Enquiry':'#adb5bd','Preparing Quote':'var(--warning)','Quoted':'#3d57b5','Confirmed':'var(--success)','In Progress':'var(--copper)','On Hold':'#95a5a6','Snagging':'#7c3aed','Completed - Not Paid':'#d4a017','Completed - Paid':'#27ae60'};
-    const maxVal = Math.max(...statuses.map(s => activeJobs.filter(j=>j.status===s).reduce((sum,j)=>sum+(j.quoteValue||j.estimate||0),0)), 1);
+    const maxVal = Math.max(...statuses.map(s => activeJobs.filter(j=>j.status===s).reduce((sum,j)=>sum+finJobValueNet(j),0)), 1);
     pipelineEl.innerHTML = statuses.map(s => {
       const sJobs = activeJobs.filter(j => j.status === s);
-      const sVal = sJobs.reduce((sum,j) => sum + (j.quoteValue||j.estimate||0), 0);
+      const sVal = sJobs.reduce((sum,j) => sum + finJobValueNet(j), 0);
       const pct = Math.round(sVal / maxVal * 100);
       return '<div>' +
         '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;">' +
@@ -3512,9 +3513,9 @@ function renderDashboard() {
   // High Value Jobs (top 5 by value)
   const hvBody = document.getElementById('dash-highvalue-body');
   if (hvBody) {
-    const topJobs = [...activeJobs].sort((a,b) => (b.quoteValue||b.estimate||0) - (a.quoteValue||a.estimate||0)).slice(0, 5);
+    const topJobs = [...activeJobs].sort((a,b) => finJobValueNet(b) - finJobValueNet(a)).slice(0, 5);
     hvBody.innerHTML = topJobs.map(j => {
-      const val = j.quoteValue || j.estimate || 0;
+      const val = finJobValueNet(j);
       return '<tr class="clickable-row" onclick="openJob(\'' + j.ref + '\')">' +
         '<td><strong>' + (j.ref||'') + '</strong><br><span style="color:var(--text-muted);font-size:12px;">' + (j.name||'') + '</span></td>' +
         '<td>' + (j.client&&j.client.name?j.client.name:'') + '</td>' +
@@ -3537,9 +3538,9 @@ function renderPipeline() {
 
     board.innerHTML = cols.map(status => {
     const colJobs = jobs.filter(j=>j.status===status);
-    const total = colJobs.reduce((s,j)=>s+(j.quoteValue||j.estimate||0),0);
+    const total = colJobs.reduce((s,j)=>s+finJobValueNet(j),0);
     const cards = colJobs.map(j=>{
-      const valLabel = j.quoteValue ? '\u00a3'+j.quoteValue.toLocaleString() : j.estimate ? '~\u00a3'+j.estimate.toLocaleString() : 'TBC';
+      const valLabel = j.quoteValue ? finGBP(finJobValueNet(j)) : j.estimate ? '~' + finGBP(finJobValueNet(j)) : 'TBC';
       return '<div class="pipeline-card" onclick="openJob(\'' + j.ref + '\')">'
         + '<div class="job-ref">' + j.ref + '</div>'
         + '<div class="job-name">' + j.name + '</div>'
@@ -3547,7 +3548,7 @@ function renderPipeline() {
         + '</div>';
     }).join('');
     const emptyHtml = colJobs.length === 0 ? '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">Empty</div>' : '';
-    const totalHtml = total > 0 ? '<div style="text-align:right;font-size:11px;color:var(--text-muted);padding:4px 6px 0;">Total: <strong>\u00a3' + total.toLocaleString() + '</strong></div>' : '';
+    const totalHtml = total > 0 ? '<div style="text-align:right;font-size:11px;color:var(--text-muted);padding:4px 6px 0;">Total: <strong>' + finGBP(total) + '</strong> ex VAT</div>' : '';
     return '<div class="pipeline-col">'
       + '<div class="pipeline-col-header">' + status + '<span style="font-size:11px;color:rgba(255,255,255,0.5);">' + colJobs.length + '</span></div>'
       + '<div class="pipeline-cards">' + (cards || emptyHtml) + totalHtml + '</div>'
@@ -3581,18 +3582,20 @@ function renderJobsTable() {
   var tbody = document.getElementById('jobs-table-body');
   if (!tbody) return;
   tbody.innerHTML = jobs.map(function(j, i) {
+    // Same rules as Finance & P&L: ex VAT; planned = how the quote was built, actual = quote minus costs logged
+    var pl = finPlanned(j);
     var quoteVal = j.quoteValue || 0;
-    var estCost = j.estCost || 0;
-    var margin = quoteVal && estCost ? Math.round((quoteVal - estCost) / quoteVal * 100) : null;
-    var quoteDisplay = quoteVal ? '£' + quoteVal.toLocaleString() : '--';
-    var estCostDisplay = estCost ? '£' + estCost.toLocaleString() : '--';
-    var marginVal = quoteVal && estCost ? quoteVal - estCost : null;
-    var marginValDisplay = marginVal !== null ? '<span style="color:' + (marginVal > 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;">£' + Math.round(marginVal).toLocaleString() + '</span>' : '--';
-    var marginDisplay = margin !== null ? '<span style="font-size:11px;color:' + (margin > 20 ? 'var(--success)' : margin > 10 ? '#e67e22' : 'var(--danger)') + ';">' + margin + '%</span>' : '';
+    var margin = pl.pct;
+    var pctCol = function(p) { return p > 20 ? 'var(--success)' : p > 10 ? '#e67e22' : 'var(--danger)'; };
+    var quoteDisplay = quoteVal ? finGBP(pl.quote) : (j.estimate ? '<span style="color:var(--text-muted);">~' + finGBP(finJobValueNet(j)) + '</span>' : '--');
+    var estCostDisplay = pl.cost ? finGBP(pl.cost) : '--';
+    var marginValDisplay = pl.margin !== null ? '<span style="color:' + (pl.margin > 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;">' + finGBP(pl.margin) + '</span> <span style="font-size:11px;color:' + pctCol(margin) + ';">' + margin + '%</span>' : '--';
+    var marginDisplay = '';
+    var actualDisplay = '--';
+    if (quoteVal && (FIN_LIVE.includes(j.status) || FIN_DONE.includes(j.status))) { var pc = finProfitCell(finJob(j.ref)); actualDisplay = '<span style="color:' + pc.col + ';' + (pc.small ? 'font-size:11px;' : 'font-weight:600;') + '">' + pc.html + '</span>'; }
     var leadName = j.lead === 'A' ? 'Adam' : 'Tom';
     var leadClass = j.lead === 'A' ? 'a' : 't';
     var refDisplay = j.ref ? '<strong>' + j.ref + '</strong>' : '<span style="color:#e74c3c;font-size:11px;font-weight:600;">⚠ NO REF</span>';
-    var marginDisplay = margin !== null ? '<span style="font-size:11px;color:' + (margin > 20 ? 'var(--success)' : margin > 10 ? '#e67e22' : 'var(--danger)') + ';">' + margin + '%</span>' : '';
     var statusDisplay = statusBadge(j.status);
     var taskCount = db.tasks.filter(function(t){return t.jobRef===j.ref}).length;
     var fmtD = function(d) { return d ? new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—'; };
@@ -3603,8 +3606,8 @@ function renderJobsTable() {
       + '📅 ' + fmtD(j.startDate) + ' → ' + fmtD(j.endDate) + (dur !== null ? ' (' + dur + ' days)' : '') + '<br>'
       + '🏗 Lead: ' + leadName + ' · Scale: ' + (j.scale||'—') + '/10<br>'
       + '📋 ' + taskCount + ' task' + (taskCount!==1?'s':'')
-      + (quoteVal ? ' · Quote: £' + quoteVal.toLocaleString() : '')
-      + (j.estimate ? ' · Estimate: ~£' + parseFloat(j.estimate).toLocaleString() : '')
+      + (quoteVal ? ' · Quote: ' + finGBP(pl.quote) + ' ex VAT' : '')
+      + (!quoteVal && j.estimate ? ' · Estimate: ~' + finGBP(finJobValueNet(j)) + ' ex VAT' : '')
       + (j.notes ? '<br>📝 ' + j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '')
       + '</div>';
     var row = '<tr class="clickable-row" data-ref="' + (j.ref||'') + '" onclick="openJob(this.dataset.ref)" style="cursor:pointer;">';
@@ -3617,10 +3620,10 @@ function renderJobsTable() {
     var pmLabel = pmType === 'cash' ? '💵' : '🏦';
     var pmColor = pmType === 'cash' ? 'background:#27ae60;color:white;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
     row += '<td><button onclick="event.stopPropagation();toggleJobPaymentMethod(\'' + j.ref + '\',' + i + ')" style="border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;' + pmColor + '" title="' + (pmType==='cash'?'Cash':'Account') + '">' + pmLabel + ' ' + (pmType==='cash'?'Cash':'Acc') + '</button></td>';
-    row += '<td>' + quoteDisplay + '</td>';
-    row += '<td>' + estCostDisplay + '</td>';
-    row += '<td>' + marginValDisplay + '</td>';
-    row += '<td>' + marginDisplay + '</td>';
+    row += '<td style="text-align:right;white-space:nowrap;">' + quoteDisplay + ((quoteVal || j.estimate) ? '<div>' + finVatChip(j) + '</div>' : '') + '</td>';
+    row += '<td style="text-align:right;white-space:nowrap;">' + estCostDisplay + '</td>';
+    row += '<td style="text-align:right;white-space:nowrap;">' + marginValDisplay + '</td>';
+    row += '<td style="text-align:right;">' + actualDisplay + '</td>';
     row += '<td>' + (j.startDate||'--') + '</td>';
     row += '<td><button class="btn btn-sm btn-secondary" data-ref="' + (j.ref||'') + '" data-idx="' + i + '" onclick="event.stopPropagation();editJobByRef(this.dataset.ref,parseInt(this.dataset.idx))">Edit</button></td>';
     row += '</tr>';
@@ -3628,16 +3631,18 @@ function renderJobsTable() {
   }).join('');
 
   // Totals row
-  var totalQuote = jobs.reduce(function(s,j) { return s + (j.quoteValue||0); }, 0);
-  var totalCost = jobs.reduce(function(s,j) { return s + (j.estCost||0); }, 0);
-  var totalMarginVal = totalQuote && totalCost ? totalQuote - totalCost : null;
-  var totalMarginPct = totalQuote && totalCost ? Math.round((totalQuote - totalCost) / totalQuote * 100) : null;
+  var _pls = jobs.map(finPlanned);
+  var totalQuote = _pls.reduce(function(s,p) { return s + p.quote; }, 0);
+  var totalCost = _pls.reduce(function(s,p) { return s + (p.margin !== null ? p.cost : 0); }, 0);
+  var totalMarginVal = _pls.reduce(function(s,p) { return s + (p.margin || 0); }, 0);
+  var _withCost = _pls.filter(function(p) { return p.margin !== null; }).reduce(function(s,p) { return s + p.quote; }, 0);
+  var totalMarginPct = _withCost ? Math.round(totalMarginVal / _withCost * 100) : null;
   var totalsRow = '<tr style="background:var(--limestone-dark);font-weight:700;border-top:2px solid var(--slate);">';
   totalsRow += '<td colspan="6" style="text-align:right;padding-right:12px;">' + jobs.length + ' jobs</td>';
-  totalsRow += '<td>£' + Math.round(totalQuote).toLocaleString() + '</td>';
-  totalsRow += '<td>£' + Math.round(totalCost).toLocaleString() + '</td>';
-  totalsRow += '<td>' + (totalMarginVal !== null ? '<span style="color:' + (totalMarginVal > 0 ? 'var(--success)' : 'var(--danger)') + ';">£' + Math.round(totalMarginVal).toLocaleString() + '</span>' : '') + '</td>';
-  totalsRow += '<td>' + (totalMarginPct !== null ? '<span style="font-size:11px;color:' + (totalMarginPct > 20 ? 'var(--success)' : totalMarginPct > 10 ? '#e67e22' : 'var(--danger)') + ';">' + totalMarginPct + '%</span>' : '') + '</td>';
+  totalsRow += '<td style="text-align:right;">' + finGBP(totalQuote) + '</td>';
+  totalsRow += '<td style="text-align:right;">' + finGBP(totalCost) + '</td>';
+  totalsRow += '<td style="text-align:right;">' + (totalMarginPct !== null ? '<span style="color:' + (totalMarginVal > 0 ? 'var(--success)' : 'var(--danger)') + ';">' + finGBP(totalMarginVal) + '</span> <span style="font-size:11px;">' + totalMarginPct + '%</span>' : '') + '</td>';
+  totalsRow += '<td></td>';
   totalsRow += '<td></td><td></td></tr>';
   tbody.innerHTML += totalsRow;
 }
@@ -3817,7 +3822,7 @@ async function archiveJob() {
   }
   const _f = finJob(ref);
   const _warn = [];
-  if (_f.quote && _f.leftQ > 0.5) _warn.push(finGBP(_f.leftNet) + ' (ex VAT) of the quote hasn\'t been invoiced yet');
+  if (_f.quote && _f.leftNet > 0.5) _warn.push(finGBP(_f.leftNet) + ' (ex VAT) of the quote hasn\'t been invoiced yet');
   if (_f.outstandingGross > 0.5) _warn.push(finGBP(_f.outstandingGross) + ' of invoices are still unpaid');
   if (!confirm('Archive ' + ref + ' as completed work?' + (_warn.length ? '\n\nHeads up:\n• ' + _warn.join('\n• ') + '\n\nArchived jobs drop out of "Confirmed, not yet invoiced". Archive anyway?' : ''))) return;
   job.status = 'Completed';
@@ -3861,21 +3866,22 @@ function openJob(ref) {
   document.getElementById('jd-title').textContent = j.ref + ' — ' + j.name;
   document.getElementById('jd-client').textContent = j.client?.name + (j.client?.phone ? ' · '+j.client.phone : '') + (j.client?.email ? ' · '+j.client.email : '');
   document.getElementById('jd-status-badge').innerHTML = statusBadge(j.status);
-  const margin = j.quoteValue && j.estCost ? j.quoteValue-j.estCost : 0;
-  const marginPct = j.quoteValue ? (margin/j.quoteValue*100).toFixed(1)+'%' : '—';
+  const _pl = finPlanned(j);
+  const margin = _pl.margin || 0;
+  const marginPct = _pl.pct != null ? _pl.pct + '%' : '—';
   const dur = j.startDate&&j.endDate ? Math.round((new Date(j.endDate)-new Date(j.startDate))/(1000*60*60*24))+' days' : '—';
   document.getElementById('jd-scale').textContent = j.scale ? '⭐'.repeat(Math.min(j.scale,10))+' ('+j.scale+'/10)' : '—';
   document.getElementById('jd-lead').innerHTML = j.lead==='A' ? '<span class="chip chip-a">Adam</span>' : '<span class="chip chip-t">Tom</span>';
   document.getElementById('jd-start').textContent = j.startDate||'—';
   document.getElementById('jd-end').textContent = j.endDate||'—';
   document.getElementById('jd-duration').textContent = dur;
-  document.getElementById('jd-quote-val').textContent = j.quoteValue ? '£'+j.quoteValue.toLocaleString() : '—';
+  document.getElementById('jd-quote-val').textContent = j.quoteValue ? finGBP(_pl.quote) + ' ex VAT' : '—';
   document.getElementById('jd-cost').textContent = j.estCost ? '£'+j.estCost.toLocaleString() : '—';
   document.getElementById('jd-margin').textContent = margin ? '£'+margin.toLocaleString() : '—';
   document.getElementById('jd-margin-pct').textContent = marginPct;
   document.getElementById('jd-desc').textContent = j.desc||'No description';
   document.getElementById('jd-notes').textContent = j.notes||'';
-  document.getElementById('jdf-quote').textContent = j.quoteValue ? '£'+j.quoteValue.toLocaleString() : '—';
+  document.getElementById('jdf-quote').textContent = j.quoteValue ? finGBP(_pl.quote) + ' ex VAT' : '—';
   document.getElementById('jdf-cost').textContent = j.estCost ? '£'+j.estCost.toLocaleString() : '—';
   document.getElementById('jdf-margin').textContent = margin ? '£'+margin.toLocaleString() : '—';
   document.getElementById('jdf-mpct').textContent = marginPct;
@@ -4749,7 +4755,7 @@ function updateTaskJobInfo() {
     <div style="display:flex;gap:16px;flex-wrap:wrap;color:var(--text-muted);">
       <span>👤 ${leadName}</span>
       <span>📋 ${taskCount} task${taskCount !== 1 ? 's' : ''}${taskCount > 0 ? ' (' + doneTasks + ' done)' : ''}</span>
-      ${j.quoteValue ? '<span>💰 £' + j.quoteValue.toLocaleString() + '</span>' : ''}
+      ${j.quoteValue ? '<span>💰 ' + finGBP(finJobValueNet(j)) + ' ex VAT</span>' : ''}
     </div>
   `;
 }
@@ -6682,7 +6688,7 @@ function renderJobPayments() {
 
   // Stats
   html += '<div class="grid-3" style="gap:12px;margin-bottom:16px;">';
-  html += '<div class="stat-card" style="padding:12px;"><div class="stat-label">Quote Value</div><div style="font-size:18px;font-weight:700;color:var(--copper);">£' + Math.round(quoteVal).toLocaleString() + '</div></div>';
+  html += '<div class="stat-card" style="padding:12px;"><div class="stat-label">Quote Value (as quoted)</div><div style="font-size:18px;font-weight:700;color:var(--copper);">£' + Math.round(quoteVal).toLocaleString() + '</div></div>';
   html += '<div class="stat-card" style="padding:12px;"><div class="stat-label">Total Gated</div><div style="font-size:18px;font-weight:700;">£' + Math.round(totalGated).toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">' + (quoteVal ? Math.round(totalGated/quoteVal*100) + '% of quote' : '') + '</div></div>';
   html += '<div class="stat-card" style="padding:12px;"><div class="stat-label">Paid</div><div style="font-size:18px;font-weight:700;color:var(--success);">£' + Math.round(totalPaid).toLocaleString() + '</div><div style="font-size:11px;color:var(--text-muted);">' + (totalGated ? Math.round(totalPaid/totalGated*100) + '% collected' : '') + '</div></div>';
   html += '</div>';
@@ -10530,8 +10536,9 @@ function exportProjectPlanPDF() {
   const gates = db.paymentGates ? db.paymentGates.filter(g => g.jobRef === ref) : [];
   const done = tasks.filter(t => t.status === 'Completed').length;
   const pct = tasks.length ? Math.round(done / tasks.length * 100) : 0;
-  const margin = (job.quoteValue||0) - (job.estCost||0);
-  const marginPct = job.quoteValue ? (margin / job.quoteValue * 100).toFixed(1) : 0;
+  const _pl = finPlanned(job);
+  const margin = Math.round(_pl.margin || 0);
+  const marginPct = _pl.pct != null ? _pl.pct : 0;
   const today = new Date().toLocaleDateString('en-GB', {day:'numeric',month:'long',year:'numeric'});
 
   const taskRows = tasks.map(t => {
@@ -10605,7 +10612,7 @@ function exportProjectPlanPDF() {
   </div>
 
   <div class="summary">
-    <div class="summary-item"><div class="lbl">Quote Value</div><div class="val" style="color:#B5DD3C;">£${job.quoteValue ? job.quoteValue.toLocaleString() : '—'}</div></div>
+    <div class="summary-item"><div class="lbl">Quote Value (ex VAT)</div><div class="val" style="color:#B5DD3C;">${job.quoteValue ? finGBP(_pl.quote) : '—'}</div></div>
     <div class="summary-item"><div class="lbl">Est. Margin</div><div class="val" style="color:#2e7d32;">£${margin ? margin.toLocaleString() : '—'} (${marginPct}%)</div></div>
     <div class="summary-item"><div class="lbl">Timeline</div><div class="val" style="font-size:14px;">${job.startDate||'TBC'} → ${job.endDate||'TBC'}</div></div>
     <div class="summary-item"><div class="lbl">Lead</div><div class="val" style="font-size:14px;">${job.lead==='A'?'Adam':'Tom'}</div></div>
@@ -10790,7 +10797,7 @@ function renderGantt() {
           <div style="margin-bottom:4px;opacity:0.9;">⏱ ${durDays} day${durDays!==1?'s':''}</div>
           ${subbies.length ? `<div style="margin-bottom:4px;opacity:0.9;">👷 ${subbies.join(', ')}</div>` : '<div style="margin-bottom:4px;opacity:0.6;">👷 No tasks assigned yet</div>'}
           ${jobTasks.length ? `<div style="margin-bottom:4px;opacity:0.9;">✓ ${doneTasks}/${jobTasks.length} tasks complete</div>` : ''}
-          ${j.quoteValue ? `<div style="margin-bottom:6px;opacity:0.9;">£ ${j.quoteValue.toLocaleString()}</div>` : ''}
+          ${j.quoteValue ? `<div style="margin-bottom:6px;opacity:0.9;">${finGBP(finJobValueNet(j))} ex VAT</div>` : ''}
           <div style="margin-top:6px;font-size:10px;opacity:0.45;border-top:1px solid rgba(255,255,255,0.1);padding-top:5px;">Click to open project plan · Drag to move · Drag edge to resize</div>
         </div>`}
 
@@ -11079,8 +11086,9 @@ function renderJobPlan() {
   });
   const gates = (db.paymentGates || []).filter(g => g.jobRef === ref);
 
-  const margin = job.quoteValue && job.estCost ? job.quoteValue - job.estCost : 0;
-  const marginPct = job.quoteValue ? (margin / job.quoteValue * 100).toFixed(1) : '0';
+  const _pl = finPlanned(job);
+  const margin = Math.round(_pl.margin || 0);
+  const marginPct = _pl.pct != null ? String(_pl.pct) : '0';
 
   const statusColors = {
     'Not Started': '#adb5bd', 'In Progress': 'var(--copper)',
@@ -11193,7 +11201,7 @@ function renderJobPlan() {
       <div class="card-body">
         <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:16px;">
           <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Quote Value</div>
-            <div style="font-family:Inter,sans-serif;font-size:18px;font-weight:700;color:var(--copper);">${job.quoteValue ? '£'+job.quoteValue.toLocaleString() : '—'}</div></div>
+            <div style="font-family:Inter,sans-serif;font-size:18px;font-weight:700;color:var(--copper);">${job.quoteValue ? finGBP(_pl.quote) + ' <span style="font-size:11px;font-weight:400;color:var(--text-muted);">ex VAT</span>' : '—'}</div></div>
           <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Est. Margin</div>
             <div style="font-family:Inter,sans-serif;font-size:18px;font-weight:700;color:var(--success);">${margin ? '£'+margin.toLocaleString() : '—'} <span style="font-size:13px;font-weight:400;">(${marginPct}%)</span></div></div>
           <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Timeline</div>
@@ -14077,6 +14085,8 @@ function finInvNet(inv) { return inv.vatInclusive ? (inv.total || 0) / 1.2 : (in
 
 // 'inc' = quote/invoices include VAT, 'plus' = VAT added on top, 'none' = no VAT charged
 function finVatBasis(ref) {
+  const job = db.jobs.find(j => finSameJob(j.ref, ref));
+  if (job && ['inc','plus','none'].includes(job.vatBasis)) return job.vatBasis;
   const lines = finInvLines(ref);
   if (!lines.length) return 'inc';
   if (lines.some(x => x.inv.vatInclusive)) return 'inc';
@@ -14090,21 +14100,20 @@ function finJob(ref) {
   const basis = finVatBasis(ref);
   const quote = job.quoteValue || 0;
   const lines = finInvLines(ref);
-  let billedQ = 0, billedNet = 0, paidQ = 0, draftQ = 0, outstandingGross = 0;
+  let billedNet = 0, paidNet = 0, draftNet = 0, outstandingGross = 0;
   lines.forEach(({ inv, l }) => {
-    const a = parseFloat(l.amount) || 0;
-    if (FIN_BILLED.includes(inv.status)) { billedQ += a; billedNet += finLineNet(inv, l); }
-    if (inv.status === 'Paid') paidQ += a;
+    const a = parseFloat(l.amount) || 0, n = finLineNet(inv, l);
+    if (FIN_BILLED.includes(inv.status)) billedNet += n;
+    if (inv.status === 'Paid') paidNet += n;
     if (inv.status === 'Sent') outstandingGross += inv.vatInclusive ? a : a * (inv.addVat ? 1.2 : 1);
-    if ((inv.status || 'Draft') === 'Draft') draftQ += a;
+    if ((inv.status || 'Draft') === 'Draft') draftNet += n;
   });
   const costs = finJobCosts(ref);
   const contractNet = finToNet(quote, basis);
-  const leftQ = quote ? Math.max(0, quote - billedQ) : 0;
+  const leftNet = quote ? Math.max(0, contractNet - billedNet) : 0;
   return {
-    job, ref: job.ref || ref, basis, basisAssumed: !lines.length,
-    quote, contractNet, billedQ, billedNet, paidQ, draftQ, outstandingGross,
-    leftQ, leftNet: finToNet(leftQ, basis), draftNet: finToNet(draftQ, basis),
+    job, ref: job.ref || ref, basis, basisAssumed: !lines.length && !job.vatBasis,
+    quote, contractNet, billedNet, paidNet, draftNet, outstandingGross, leftNet,
     costs,
     profitToDate: billedNet - costs.net,                 // invoiced so far minus spent so far
     expectedProfit: quote ? contractNet - costs.net : null, // whole job, once costs are complete
@@ -14131,9 +14140,9 @@ function finGateStatuses(ref) {
   const rank = { Pending: 0, Overdue: 0, Invoiced: 1, Paid: 2 };
   let cum = 0;
   return gates.map(g => {
-    cum += parseFloat(g.amount) || 0;
+    cum += finToNet(parseFloat(g.amount) || 0, f.basis);   // gates are in quote terms; compare ex VAT
     let auto = 'Pending';
-    if (f.paidQ >= cum - 0.5) auto = 'Paid'; else if (f.billedQ >= cum - 0.5) auto = 'Invoiced';
+    if (f.paidNet >= cum - 0.5) auto = 'Paid'; else if (f.billedNet >= cum - 0.5) auto = 'Invoiced';
     const manual = g.status || 'Pending';
     const status = (rank[manual] || 0) > rank[auto] ? manual : auto;
     return { gate: g, status, auto: status === auto && auto !== 'Pending', manual };
@@ -14141,13 +14150,41 @@ function finGateStatuses(ref) {
 }
 function finGateStatus(g) { const s = finGateStatuses(g.jobRef).find(x => x.gate === g); return s ? s.status : (g.status || 'Pending'); }
 
+// Job value for management views: quote (or rough estimate if no quote yet), ex VAT
+const FIN_VAT_LABEL = { inc: 'inc VAT', plus: '+ VAT', none: 'no VAT' };
+function finVatSource(j) { return ['inc','plus','none'].includes(j.vatBasis) ? 'set' : finInvLines(j.ref).length ? 'invoices' : 'assumed'; }
+async function setJobVat(ref, val) {
+  const job = db.jobs.find(j => finSameJob(j.ref, ref));
+  if (!job) return;
+  job.vatBasis = val;
+  saveData();
+  ['renderJobsTable','renderDashboard'].forEach(fn => { try { window[fn] && window[fn](); } catch(e) {} });
+  if (document.getElementById('page-finance')?.classList.contains('active')) renderFinancePage();
+  if (!job.id) return;
+  try { await supa.patch('jobs', job.id, { vat_basis: val || null }); }
+  catch(e) { alert('Saved on this device only — run the v4.83 SQL in Supabase so Tom sees VAT settings too.'); }
+}
+function finVatChip(j) {
+  const src = finVatSource(j), b = finVatBasis(j.ref);
+  const tip = src === 'set' ? 'Set by you' : src === 'invoices' ? 'Worked out from this job\'s invoices' : 'Assumed — no invoices yet. Pick the right one.';
+  const col = src === 'assumed' ? 'background:#fff3cd;color:#856404;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
+  return '<select onclick="event.stopPropagation()" onchange="setJobVat(\'' + j.ref + '\',this.value)" title="' + tip + '" style="width:auto;margin-top:3px;padding:1px 4px;font-size:10px;border:none;border-radius:4px;cursor:pointer;' + col + '">'
+    + ['inc','plus','none'].map(v => '<option value="' + v + '"' + (v === b ? ' selected' : '') + '>' + FIN_VAT_LABEL[v] + (v === b && src === 'assumed' ? ' ?' : '') + '</option>').join('') + '</select>';
+}
+
+function finJobValueNet(j) { return finToNet(j.quoteValue || j.estimate || 0, finVatBasis(j.ref)); }
+function finPlanned(j) {   // the margin the quote was built with, ex VAT
+  const b = finVatBasis(j.ref), q = finToNet(j.quoteValue || 0, b), c = finToNet(j.estCost || 0, b);
+  return { quote: q, cost: c, margin: q && c ? q - c : null, pct: q && c ? Math.round((q - c) / q * 100) : null };
+}
+
 function finPipeline() {
   const jobs = db.jobs.filter(j => FIN_PIPE.includes(j.status));
-  return { jobs, value: jobs.reduce((s, j) => s + (j.quoteValue || j.estimate || 0), 0) };
+  return { jobs, value: jobs.reduce((s, j) => s + finJobValueNet(j), 0) };
 }
 function finUninvoiced() {
   const all = db.jobs.filter(j => FIN_LIVE.includes(j.status)).map(j => finJob(j.ref));
-  return { rows: all.filter(f => f.quote > 0 && f.leftQ > 0.5), noQuote: all.filter(f => !f.quote), total: all.reduce((s, f) => s + f.leftNet, 0) };
+  return { rows: all.filter(f => f.quote > 0 && f.leftNet > 0.5), noQuote: all.filter(f => !f.quote), total: all.reduce((s, f) => s + f.leftNet, 0) };
 }
 function finReceivables() {
   const sent = (db.invoices || []).filter(i => i.status === 'Sent');
@@ -14158,7 +14195,7 @@ function finConversion() {
   const lost = db.jobs.filter(j => j.status === FIN_LOST);
   const decided = won.length + lost.length;
   return { won: won.length, lost: lost.length, rate: decided ? Math.round(won.length / decided * 100) : null,
-    wonValue: won.reduce((s, j) => s + (j.quoteValue || 0), 0), lostValue: lost.reduce((s, j) => s + (j.quoteValue || j.estimate || 0), 0) };
+    wonValue: won.reduce((s, j) => s + finJobValueNet(j), 0), lostValue: lost.reduce((s, j) => s + finJobValueNet(j), 0) };
 }
 
 // Month-by-month P&L from invoices and costs
@@ -14192,11 +14229,12 @@ function finDataChecks() {
     const f = finJob(j.ref);
     const hasInv = finInvLines(j.ref).length > 0, hasCost = f.costs.entries > 0;
     if (j.status === 'Completed' && !hasInv && !hasCost) out.push({ ref: j.ref, kind: 'lost?', text: j.name + ' is archived as Completed but has no invoices or costs — did it go ahead?' });
+    if (FIN_LIVE.includes(j.status) && j.quoteValue && finVatSource(j) === 'assumed') out.push({ ref: j.ref, kind: 'vat', text: j.name + ': VAT treatment is assumed (inc VAT) — set it in the jobs list so the figures are right.' });
     if (FIN_LIVE.includes(j.status) && !j.quoteValue) out.push({ ref: j.ref, kind: 'noquote', text: j.name + ' is ' + j.status + ' but has no quote in the Quote Builder, so its value can\'t be counted.' });
     if (j.status === 'Completed - Paid' && f.outstandingGross > 0.5) out.push({ ref: j.ref, kind: 'status', text: j.name + ' is marked Completed - Paid but has ' + finGBP(f.outstandingGross) + ' of invoices still unpaid.' });
-    if (j.status === 'Completed - Not Paid' && hasInv && f.quote && f.leftQ < 0.5 && f.outstandingGross < 0.5) out.push({ ref: j.ref, kind: 'status', text: j.name + ' is fully invoiced and paid — move it to Completed - Paid?' });
-    if (FIN_DONE.includes(j.status) && f.quote && f.leftQ > 0.5) out.push({ ref: j.ref, kind: 'archived-unbilled', text: j.name + ' is ' + (j.status === 'Completed' ? 'archived' : 'marked ' + j.status) + ' but ' + finGBP(f.leftNet) + ' (ex VAT) of its quote hasn\'t been invoiced.' });
-    if (f.quote && f.billedQ > f.quote + 0.5) out.push({ ref: j.ref, kind: 'over', text: j.name + ' has been invoiced ' + finGBP(f.billedQ - f.quote) + ' more than its quote — extras not in the quote?' });
+    if (j.status === 'Completed - Not Paid' && hasInv && f.quote && f.leftNet < 0.5 && f.outstandingGross < 0.5) out.push({ ref: j.ref, kind: 'status', text: j.name + ' is fully invoiced and paid — move it to Completed - Paid?' });
+    if (FIN_DONE.includes(j.status) && f.quote && f.leftNet > 0.5) out.push({ ref: j.ref, kind: 'archived-unbilled', text: j.name + ' is ' + (j.status === 'Completed' ? 'archived' : 'marked ' + j.status) + ' but ' + finGBP(f.leftNet) + ' (ex VAT) of its quote hasn\'t been invoiced.' });
+    if (f.quote && f.billedNet > f.contractNet + 0.5) out.push({ ref: j.ref, kind: 'over', text: j.name + ' has been invoiced ' + finGBP(f.billedNet - f.contractNet) + ' (ex VAT)  more than its quote — extras not in the quote?' });
     finGateStatuses(j.ref).forEach(s => { if (s.manual === 'Paid' && !hasInv) out.push({ ref: j.ref, kind: 'gate', text: j.name + ': gate "' + (s.gate.name || '') + '" is marked Paid but there\'s no invoice for it in the app.' }); });
   });
   const unlinked = (db.invoices || []).filter(i => FIN_BILLED.includes(i.status) && !(i.lines || []).some(l => l.jobRef));
@@ -14238,6 +14276,10 @@ async function markJobLost(ref, fromModal) {
 // FINANCE & P&L PAGE
 // ============================================================
 let _finPeriod = 'ytd';
+let _finMtg = null;   // latest weekly meeting record: the source of bank and card balances
+async function finLoadLatestMeeting() {
+  try { const r = await supa.get('meetings', 'bank_balance=not.is.null&order=meeting_date.desc&limit=1'); _finMtg = (r && r[0]) || null; } catch(e) { _finMtg = null; }
+}
 function finPeriodRange() {
   const t = new Date(), iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   if (_finPeriod === '12m') return [iso(new Date(t.getFullYear(), t.getMonth() - 11, 1)), iso(t)];
@@ -14252,7 +14294,7 @@ function finPeriodRange() {
 function renderFinancePage() {
   const root = document.getElementById('finance-root');
   if (!root) return;
-  if (!root.dataset.loaded) { root.dataset.loaded = '1'; Promise.all([loadInvoicesFromSupabase().catch(()=>{}), ohLoad()]).then(renderFinancePage); }
+  if (!root.dataset.loaded) { root.dataset.loaded = '1'; Promise.all([loadInvoicesFromSupabase().catch(()=>{}), ohLoad(), finLoadLatestMeeting()]).then(renderFinancePage); }
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const rec = finReceivables(), un = finUninvoiced(), pipe = finPipeline(), conv = finConversion();
   const [from, to] = finPeriodRange();
@@ -14263,11 +14305,45 @@ function renderFinancePage() {
   const tile = (label, value, sub, col) => '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="' + (col ? 'color:' + col : '') + '">' + value + '</div><div class="stat-sub">' + sub + '</div></div>';
   let h = '';
 
-  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-bottom:24px;">';
-  h += tile('Invoiced, awaiting payment', finGBP(rec.total), rec.invoices.length + ' invoice' + (rec.invoices.length === 1 ? '' : 's') + ' · inc VAT');
-  h += tile('Confirmed, not yet invoiced', finGBP(un.total), un.rows.length + ' job' + (un.rows.length === 1 ? '' : 's') + ' · ex VAT', un.total ? 'var(--warning)' : '');
-  h += tile('Pipeline', finGBP(pipe.value), pipe.jobs.length + ' enquiries & quotes');
-  h += tile('Quote conversion', conv.rate == null ? '—' : conv.rate + '%', conv.won + ' won · ' + conv.lost + ' didn\'t go ahead' + (conv.lostValue ? ' (' + finGBP(conv.lostValue) + ')' : ''));
+  // ---------- Snapshot: where we are today, and how the year's going ----------
+  const today = new Date();
+  const ymNow = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+  const ytd = finPnl(today.getFullYear() + '-01-01', ymNow + '-01');
+  const ytdOh = finOverheads(ytd.months);
+  const S = o => Object.values(o).reduce((t, v) => t + v, 0);
+  const ytdRev = S(ytd.revenue), ytdCos = S(ytd.labour) + S(ytd.materials) + S(ytd.other), ytdGp = ytdRev - ytdCos, ytdNet = ytdGp - S(ytdOh.total);
+  const mRev = ytd.revenue[ymNow] || 0, mNet = mRev - (ytd.labour[ymNow] || 0) - (ytd.materials[ymNow] || 0) - (ytd.other[ymNow] || 0) - (ytdOh.total[ymNow] || 0);
+  const bank = _finMtg && _finMtg.bank_balance != null ? parseFloat(_finMtg.bank_balance) : null;
+  const sn = (_finMtg && _finMtg.snapshot) || {};
+  const card = sn.cotBalance != null ? parseFloat(sn.cotBalance) : null;
+  const netCash = bank != null ? bank - (card || 0) : null;
+  const asOf = _finMtg ? new Date(_finMtg.meeting_date + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '';
+  const stale = _finMtg && (today - new Date(_finMtg.meeting_date + 'T00:00:00')) > 10 * 86400000;
+  const overdueTot = rec.invoices.filter(i => { const d = mtgInvoiceDue(i); return d && d < mtgToday(); }).reduce((t, i) => t + (i.total || 0), 0);
+  const owedNet = rec.invoices.reduce((t, i) => t + finInvNet(i), 0);
+  const ohMonthly = (_oh.rows || []).filter(r => r.kind !== 'One-off' && (!r.end_month || r.end_month.slice(0, 7) >= ymNow) && (!r.start_month || r.start_month.slice(0, 7) <= ymNow)).reduce((t, r) => t + (parseFloat(r.amount) || 0), 0);
+  const cover = ohMonthly && netCash != null ? (netCash + owedNet) / ohMonthly : null;
+  const big = (label, value, sub, col) => '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value" style="' + (col ? 'color:' + col : '') + '">' + value + '</div><div class="stat-sub">' + sub + '</div></div>';
+  const grid = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-bottom:12px;">';
+  const head = t => '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin:0 0 8px 2px;">' + t + '</div>';
+
+  h += head('Today' + (asOf ? ' · bank and card as at the ' + asOf + ' meeting' + (stale ? ' <span style="color:var(--warning);">(over a week old)</span>' : '') : ''));
+  h += grid;
+  h += big('Net cash', netCash == null ? '—' : finGBP(netCash),
+    netCash == null ? 'Enter bank and card in the Weekly Meeting' : 'Bank ' + finGBP(bank) + ' · card −' + finGBP(card || 0) + (sn.cotPayment ? '<br>Card payment ' + finGBP(sn.cotPayment) + (sn.cotDue ? ' due ' + new Date(sn.cotDue + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '') : ''),
+    netCash != null && netCash < 0 ? 'var(--danger)' : '');
+  h += big('Owed to us', finGBP(rec.total), rec.invoices.length + ' invoice' + (rec.invoices.length === 1 ? '' : 's') + ' sent · inc VAT' + (overdueTot > 0.5 ? '<br><span style="color:var(--danger);font-weight:600;">' + finGBP(overdueTot) + ' overdue</span>' : ''), overdueTot > 0.5 ? 'var(--danger)' : '');
+  h += big('Work in hand', finGBP(un.total), 'Confirmed, not yet invoiced · ex VAT<br>' + un.rows.length + ' job' + (un.rows.length === 1 ? '' : 's'), '');
+  h += big('Overheads covered', cover == null ? '—' : (cover < 0 ? '0' : cover.toFixed(1)) + ' months',
+    cover == null ? (ohMonthly ? 'Needs a bank balance' : 'Add overheads below to see this') : 'Net cash + money owed ÷ ' + finGBP(ohMonthly) + '/month overheads',
+    cover != null ? (cover < 2 ? 'var(--danger)' : cover < 4 ? 'var(--warning)' : 'var(--success)') : '');
+  h += '</div>';
+  h += head(today.getFullYear() + ' so far');
+  h += grid.replace('margin-bottom:12px', 'margin-bottom:24px');
+  h += big('Net profit', finGBP(ytdNet), (ytdRev ? Math.round(ytdNet / ytdRev * 100) + '% of revenue' : 'No revenue yet') + (_oh.rows.length ? '' : ' · no overheads entered'), ytdNet < 0 ? 'var(--danger)' : 'var(--success)');
+  h += big('Revenue', finGBP(ytdRev), 'Invoiced, ex VAT · gross margin ' + (ytdRev ? Math.round(ytdGp / ytdRev * 100) + '%' : '—'), '');
+  h += big('This month', finGBP(mNet), 'Net profit · ' + finGBP(mRev) + ' invoiced', mNet < 0 ? 'var(--danger)' : '');
+  h += big('Pipeline', finGBP(pipe.value), pipe.jobs.length + ' enquiries & quotes · ex VAT<br>Conversion ' + (conv.rate == null ? '—' : conv.rate + '%') + ' (' + conv.won + ' won, ' + conv.lost + ' lost)', '');
   h += '</div>';
 
   // P&L
