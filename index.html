@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.79 -->
+<!-- Livingstone v4.80 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.79</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.80</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -806,12 +806,17 @@ window.onerror=function(m,s,l,c,e){
           <option value="Completed - Not Paid">Completed - Not Paid</option>
           <option value="Completed - Paid">Completed - Paid</option>
           <option value="Not Going Ahead">Didn't go ahead</option>
+          <option value="Completed">Archived (completed)</option>
         </select>
         <select style="width:auto;" id="job-filter-lead" onchange="renderJobsTable()">
           <option value="">All Leads</option>
           <option value="A">Adam</option>
           <option value="T">Tom</option>
         </select>
+        <div style="display:flex;gap:12px;align-items:center;font-size:13px;padding:0 4px;">
+          <label style="display:flex;gap:5px;align-items:center;cursor:pointer;margin:0;"><input type="radio" name="job-archived" value="hide" onchange="setJobsArchived(this.value)" style="width:auto;margin:0;"> Hide archived</label>
+          <label style="display:flex;gap:5px;align-items:center;cursor:pointer;margin:0;"><input type="radio" name="job-archived" value="show" onchange="setJobsArchived(this.value)" style="width:auto;margin:0;"> Show archived <span id="job-archived-count" style="color:var(--text-muted);"></span></label>
+        </div>
       </div>
       <button class="btn btn-primary" onclick="newJobModal()">+ New Job</button>
       
@@ -3554,11 +3559,20 @@ function renderPipeline() {
 // JOBS TABLE
 // ============================================================
 
+// Archived = archived as completed, or didn't go ahead. Hidden from the jobs list unless asked for.
+const JOB_ARCHIVED = ['Completed', 'Not Going Ahead'];
+function jobsShowArchived() { try { return localStorage.getItem('livingstoneJobsArchived') === 'show'; } catch(e) { return false; } }
+function setJobsArchived(v) { try { localStorage.setItem('livingstoneJobsArchived', v); } catch(e) {} renderJobsTable(); }
+
 function renderJobsTable() {
   var statusF = document.getElementById('job-filter-status') ? document.getElementById('job-filter-status').value : '';
   var leadF = document.getElementById('job-filter-lead') ? document.getElementById('job-filter-lead').value : '';
+  var showArch = jobsShowArchived() || JOB_ARCHIVED.includes(statusF);   // picking an archived status in the filter shows them
+  document.querySelectorAll('input[name="job-archived"]').forEach(function(r) { r.checked = (r.value === 'show') === jobsShowArchived(); });
+  var archCount = db.jobs.filter(function(j) { return JOB_ARCHIVED.includes(j.status); }).length;
+  var cEl = document.getElementById('job-archived-count'); if (cEl) cEl.textContent = '(' + archCount + ')';
   var jobs = db.jobs.filter(function(j) {
-    return (!statusF || j.status === statusF) && (!leadF || j.lead === leadF);
+    return (!statusF || j.status === statusF) && (!leadF || j.lead === leadF) && (showArch || !JOB_ARCHIVED.includes(j.status));
   }).sort(function(a, b) {
     var na = parseInt((a.ref||'').replace(/\D/g, '')) || 0;
     var nb = parseInt((b.ref||'').replace(/\D/g, '')) || 0;
