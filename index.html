@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.83 -->
+<!-- Livingstone v4.84 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.83</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.84</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -827,7 +827,7 @@ window.onerror=function(m,s,l,c,e){
           <thead>
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
-              <th>Lead</th><th>Type</th><th style="text-align:right;">Quote<div style="font-weight:400;font-size:10px;">ex VAT</div></th><th style="text-align:right;">Est. cost</th><th style="text-align:right;">Planned margin</th>
+              <th>Lead</th><th>Type</th><th style="text-align:right;">Quote<div style="font-weight:400;font-size:10px;">as quoted</div></th><th style="text-align:right;">Est. cost<div style="font-weight:400;font-size:10px;">ex VAT</div></th><th style="text-align:right;">Planned margin<div style="font-weight:400;font-size:10px;">ex VAT</div></th>
               <th style="text-align:right;">Actual</th><th>Start</th><th></th>
             </tr>
           </thead>
@@ -3587,7 +3587,13 @@ function renderJobsTable() {
     var quoteVal = j.quoteValue || 0;
     var margin = pl.pct;
     var pctCol = function(p) { return p > 20 ? 'var(--success)' : p > 10 ? '#e67e22' : 'var(--danger)'; };
-    var quoteDisplay = quoteVal ? finGBP(pl.quote) : (j.estimate ? '<span style="color:var(--text-muted);">~' + finGBP(finJobValueNet(j)) + '</span>' : '--');
+    // Show the price as quoted (what the client sees), with the VAT tag and the ex-VAT figure the margins use underneath
+    var asQuoted = quoteVal || parseFloat(j.estimate) || 0;
+    var basisNow = asQuoted ? finVatBasis(j.ref) : '';
+    var quoteDisplay = asQuoted
+      ? (quoteVal ? '' : '<span style="color:var(--text-muted);">~</span>') + finGBP(asQuoted)
+        + (basisNow === 'inc' ? '<div style="font-size:10px;color:var(--text-muted);">' + finGBP(finJobValueNet(j)) + ' ex VAT</div>' : '')
+      : '--';
     var estCostDisplay = pl.cost ? finGBP(pl.cost) : '--';
     var marginValDisplay = pl.margin !== null ? '<span style="color:' + (pl.margin > 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:600;">' + finGBP(pl.margin) + '</span> <span style="font-size:11px;color:' + pctCol(margin) + ';">' + margin + '%</span>' : '--';
     var marginDisplay = '';
@@ -3620,7 +3626,7 @@ function renderJobsTable() {
     var pmLabel = pmType === 'cash' ? '💵' : '🏦';
     var pmColor = pmType === 'cash' ? 'background:#27ae60;color:white;' : 'background:rgba(0,0,0,0.06);color:var(--text-muted);';
     row += '<td><button onclick="event.stopPropagation();toggleJobPaymentMethod(\'' + j.ref + '\',' + i + ')" style="border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;' + pmColor + '" title="' + (pmType==='cash'?'Cash':'Account') + '">' + pmLabel + ' ' + (pmType==='cash'?'Cash':'Acc') + '</button></td>';
-    row += '<td style="text-align:right;white-space:nowrap;">' + quoteDisplay + ((quoteVal || j.estimate) ? '<div>' + finVatChip(j) + '</div>' : '') + '</td>';
+    row += '<td style="text-align:right;white-space:nowrap;">' + quoteDisplay + (asQuoted ? '<div>' + finVatChip(j) + '</div>' : '') + '</td>';
     row += '<td style="text-align:right;white-space:nowrap;">' + estCostDisplay + '</td>';
     row += '<td style="text-align:right;white-space:nowrap;">' + marginValDisplay + '</td>';
     row += '<td style="text-align:right;">' + actualDisplay + '</td>';
@@ -3639,7 +3645,7 @@ function renderJobsTable() {
   var totalMarginPct = _withCost ? Math.round(totalMarginVal / _withCost * 100) : null;
   var totalsRow = '<tr style="background:var(--limestone-dark);font-weight:700;border-top:2px solid var(--slate);">';
   totalsRow += '<td colspan="6" style="text-align:right;padding-right:12px;">' + jobs.length + ' jobs</td>';
-  totalsRow += '<td style="text-align:right;">' + finGBP(totalQuote) + '</td>';
+  totalsRow += '<td style="text-align:right;">' + finGBP(totalQuote) + '<div style="font-size:10px;font-weight:400;color:var(--text-muted);">ex VAT</div></td>';
   totalsRow += '<td style="text-align:right;">' + finGBP(totalCost) + '</td>';
   totalsRow += '<td style="text-align:right;">' + (totalMarginPct !== null ? '<span style="color:' + (totalMarginVal > 0 ? 'var(--success)' : 'var(--danger)') + ';">' + finGBP(totalMarginVal) + '</span> <span style="font-size:11px;">' + totalMarginPct + '%</span>' : '') + '</td>';
   totalsRow += '<td></td>';
