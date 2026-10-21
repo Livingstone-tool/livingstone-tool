@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.80 -->
+<!-- Livingstone v4.81 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.80</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.81</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -3815,7 +3815,11 @@ async function archiveJob() {
   if (FIN_PIPE.includes(job.status)) {
     if (confirm(ref + ' hasn\'t been confirmed yet.\n\nOK = it didn\'t go ahead\nCancel = archive it as completed work')) { closeModal('job-modal'); return markJobLost(ref); }
   }
-  if (!confirm('Archive ' + ref + ' as completed work?')) return;
+  const _f = finJob(ref);
+  const _warn = [];
+  if (_f.quote && _f.leftQ > 0.5) _warn.push(finGBP(_f.leftNet) + ' (ex VAT) of the quote hasn\'t been invoiced yet');
+  if (_f.outstandingGross > 0.5) _warn.push(finGBP(_f.outstandingGross) + ' of invoices are still unpaid');
+  if (!confirm('Archive ' + ref + ' as completed work?' + (_warn.length ? '\n\nHeads up:\n• ' + _warn.join('\n• ') + '\n\nArchived jobs drop out of "Confirmed, not yet invoiced". Archive anyway?' : ''))) return;
   job.status = 'Completed';
   saveData();
   closeModal('job-modal');
@@ -14191,6 +14195,7 @@ function finDataChecks() {
     if (FIN_LIVE.includes(j.status) && !j.quoteValue) out.push({ ref: j.ref, kind: 'noquote', text: j.name + ' is ' + j.status + ' but has no quote in the Quote Builder, so its value can\'t be counted.' });
     if (j.status === 'Completed - Paid' && f.outstandingGross > 0.5) out.push({ ref: j.ref, kind: 'status', text: j.name + ' is marked Completed - Paid but has ' + finGBP(f.outstandingGross) + ' of invoices still unpaid.' });
     if (j.status === 'Completed - Not Paid' && hasInv && f.quote && f.leftQ < 0.5 && f.outstandingGross < 0.5) out.push({ ref: j.ref, kind: 'status', text: j.name + ' is fully invoiced and paid — move it to Completed - Paid?' });
+    if (FIN_DONE.includes(j.status) && f.quote && f.leftQ > 0.5) out.push({ ref: j.ref, kind: 'archived-unbilled', text: j.name + ' is ' + (j.status === 'Completed' ? 'archived' : 'marked ' + j.status) + ' but ' + finGBP(f.leftNet) + ' (ex VAT) of its quote hasn\'t been invoiced.' });
     if (f.quote && f.billedQ > f.quote + 0.5) out.push({ ref: j.ref, kind: 'over', text: j.name + ' has been invoiced ' + finGBP(f.billedQ - f.quote) + ' more than its quote — extras not in the quote?' });
     finGateStatuses(j.ref).forEach(s => { if (s.manual === 'Paid' && !hasInv) out.push({ ref: j.ref, kind: 'gate', text: j.name + ': gate "' + (s.gate.name || '') + '" is marked Paid but there\'s no invoice for it in the app.' }); });
   });
