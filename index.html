@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.75 -->
+<!-- Livingstone v4.76 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.75</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.76</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -13587,11 +13587,11 @@ function renderMeetingNow() {
   const pRank = { High: 0, Medium: 1, Low: 2 };
   const goals = (db.actionsLT || []).map((a, i) => ({ a, i, done: a.status === 'Completed' })).filter(x => !x.done || _mtg.doneObjs.has(x.a)).sort((x, y) => (pRank[x.a.priority] ?? 1) - (pRank[y.a.priority] ?? 1)).sort(doneLast);
   h += mtgSectionStart('Long-term goals', '', goals.filter(x => !x.done).length + ' open' + (goals.some(x => x.done) ? ' · ' + goals.filter(x => x.done).length + ' done this meeting' : ''));
-  h += '<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Who</th><th>Priority</th><th>Status</th><th style="width:30%;">Notes</th></tr></thead><tbody>';
-  if (!goals.length) h += '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">No open goals.</td></tr>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Goal</th><th>Who</th><th>Priority</th><th>Status</th><th style="width:30%;">Notes</th><th></th></tr></thead><tbody>';
+  if (!goals.length) h += '<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:16px;">No open goals.</td></tr>';
   goals.forEach(x => {
     const pb = x.a.priority === 'High' ? 'badge-hold' : x.a.priority === 'Low' ? 'badge-enquiry' : 'badge-preparing';
-    h += '<tr' + doneStyle(x.done) + '><td>' + doneText(x.a.desc, x.done) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'lt\',' + x.i + ',this.value)') + '</td><td><span class="badge ' + pb + '">' + mtgEsc(x.a.priority || 'Medium') + '</span></td><td>' + statusSel('lt', x.i, x.a.status) + '</td><td>' + notesCell(x.a.notes, 'mtgSetActionNotes(\'lt\',' + x.i + ',this.value)') + '</td></tr>';
+    h += '<tr' + doneStyle(x.done) + '><td>' + doneText(x.a.desc, x.done) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'lt\',' + x.i + ',this.value)') + '</td><td><span class="badge ' + pb + '">' + mtgEsc(x.a.priority || 'Medium') + '</span></td><td>' + statusSel('lt', x.i, x.a.status) + '</td><td>' + notesCell(x.a.notes, 'mtgSetActionNotes(\'lt\',' + x.i + ',this.value)') + '</td><td><button onclick="mtgDeleteGoal(' + x.i + ')" title="Delete goal" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button></td></tr>';
   });
   h += '</tbody></table></div>';
   h += '<div style="padding:12px 20px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);">';
@@ -13771,6 +13771,16 @@ async function mtgSetTodoDue(id, val) {
   if (t) t.due = val;
   renderMeetingNow();
   try { await supa.patch('job_todos', id, { due_date: val || null }); } catch(e) { alert('Couldn\'t save that date — check your connection.'); }
+}
+
+function mtgDeleteGoal(idx) {
+  const a = db.actionsLT[idx];
+  if (!a || !confirm('Delete the goal "' + a.desc + '"? This removes it for both of you.')) return;
+  if (a.id) supa.delete('actions', a.id).catch(() => alert('Couldn\'t delete it from the shared list — check your connection.'));
+  db.actionsLT.splice(idx, 1);
+  _mtg.doneObjs.delete(a);
+  saveData();
+  renderMeetingNow();
 }
 
 function mtgSetActionStatus(type, idx, val) {
