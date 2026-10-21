@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.78 -->
+<!-- Livingstone v4.79 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.78</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.79</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1248,7 +1248,7 @@ window.onerror=function(m,s,l,c,e){
     <div style="display:flex;gap:12px;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <div class="tabs" style="margin:0;border:none;">
         <div class="tab active" onclick="switchActionTab('q1',this)">Q1 2026</div>
-        <div class="tab" onclick="switchActionTab('longterm',this)">Long-term Goals</div>
+        <div class="tab" onclick="switchActionTab('longterm',this)">Strategic Goals</div>
       </div>
       <button class="btn btn-primary" onclick="addActionModal()">+ Add Action</button>
     </div>
@@ -2000,7 +2000,7 @@ window.onerror=function(m,s,l,c,e){
         <label>Type</label>
         <select id="action-type">
           <option value="q1">Q1 2026 Action</option>
-          <option value="longterm">Long-term Goal</option>
+          <option value="longterm">Strategic Goal</option>
         </select>
       </div>
       <div class="form-group" id="action-due-group"><label>Due Date</label><input type="date" id="action-due"></div>
@@ -13586,7 +13586,7 @@ function renderMeetingNow() {
   // 1c. Long-term goals
   const pRank = { High: 0, Medium: 1, Low: 2 };
   const goals = (db.actionsLT || []).map((a, i) => ({ a, i, done: a.status === 'Completed' })).filter(x => !x.done || _mtg.doneObjs.has(x.a)).sort((x, y) => (pRank[x.a.priority] ?? 1) - (pRank[y.a.priority] ?? 1)).sort(doneLast);
-  h += mtgSectionStart('Long-term goals', '', goals.filter(x => !x.done).length + ' open' + (goals.some(x => x.done) ? ' · ' + goals.filter(x => x.done).length + ' done this meeting' : ''));
+  h += mtgSectionStart('Strategic goals', '', goals.filter(x => !x.done).length + ' open' + (goals.some(x => x.done) ? ' · ' + goals.filter(x => x.done).length + ' done this meeting' : ''));
   h += '<div class="table-wrap"><table><thead><tr><th style="width:38%;">Goal</th><th>Who</th><th>Priority</th><th>Status</th><th style="width:24%;">Notes</th><th></th></tr></thead><tbody>';
   if (!goals.length) h += '<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:16px;">No open goals.</td></tr>';
   goals.forEach(x => {
