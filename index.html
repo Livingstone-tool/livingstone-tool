@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.87 -->
+<!-- Livingstone v4.88 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.87</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.88</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -14712,7 +14712,7 @@ function tdDeadlineCell(r) {
 function renderTenders() {
   const el = document.getElementById('tenders-content');
   if (!el) return;
-  if (!_td.loaded) { el.innerHTML = '<div style="color:var(--text-muted);padding:20px;">Loading…</div>'; tdLoad().then(renderTenders); return; }
+  if (!_td.loaded) { el.innerHTML = '<div style="color:var(--text-muted);padding:20px;">Loading…</div>'; Promise.all([tdLoad(), tsLoad()]).then(() => { renderTenders(); tsScore(); }); return; }
   const showClosed = !!window._tdShowClosed;
   let sortBy = 'deadline'; try { sortBy = localStorage.getItem('livingstoneTenderSort') || 'deadline'; } catch(e) {}
   const fitRank = { Good: 0, Maybe: 1, Poor: 2 };
@@ -14727,7 +14727,9 @@ function renderTenders() {
   const closedCount = _td.rows.length - _td.rows.filter(r => TD_OPEN.includes(r.status) || r.status === 'Submitted').length;
   let h = '';
   if (_td.missing) h += '<div class="alert alert-warning" style="margin-bottom:12px;">Run the v4.85 SQL in Supabase to set up Tenders.</div>';
+  h += tsCard();
   h += '<div class="card" style="margin-bottom:16px;"><div class="card-body">'
+    + '<div style="font-size:13px;font-weight:600;margin-bottom:8px;">Add a tender from a link</div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;"><input id="td-url" placeholder="Paste a Find a Tender or Contracts Finder link" style="flex:1;min-width:260px;" onkeydown="if(event.key===\'Enter\')tdAddFromUrl()">'
     + '<button class="btn btn-primary" onclick="tdAddFromUrl()">Read tender</button></div>'
     + '<div id="td-status" style="font-size:12px;margin-top:8px;min-height:16px;"></div>'
@@ -14780,6 +14782,130 @@ function tdOpen(id) {
     + plActivityBlock('tender', r, 0);
   plRenderActivity();
   modal.style.display = 'flex';
+}
+
+
+// ============================================================
+// SUGGESTED TENDERS (v4.88) — the livingstone-tenders worker searches Find a Tender and
+// Contracts Finder; new matches land in the shared tender_suggestions table, Claude rates fit.
+// ============================================================
+const TS_WORKER_DEFAULT = 'https://livingstone-tenders.adam-hemming.workers.dev';
+let _ts = { rows: [], missing: false, loaded: false, searching: false, msg: '', msgKind: '' };
+function tsSettings() {
+  let s = {}; try { s = JSON.parse(localStorage.getItem('livingstoneTenderSearch') || '{}'); } catch(e) {}
+  return { worker: s.worker || TS_WORKER_DEFAULT, regions: s.regions || ['wm','em','nw'], min: s.min || 5000, max: s.max || 750000, days: s.days || 14 };
+}
+function tsSaveSettings(patch) {
+  const s = { ...tsSettings(), ...patch };
+  try { localStorage.setItem('livingstoneTenderSearch', JSON.stringify(s)); } catch(e) {}
+  renderTenders();
+}
+async function tsLoad() {
+  try { _ts.rows = await supa.get('tender_suggestions', 'status=eq.new&order=deadline.asc.nullslast&limit=200') || []; _ts.missing = false; }
+  catch(e) { _ts.missing = true; _ts.rows = []; }
+  _ts.loaded = true;
+}
+function tsMsg(m, kind) { _ts.msg = m; _ts.msgKind = kind || ''; renderTenders(); }
+
+async function tsSearch() {
+  if (_ts.searching) return;
+  const s = tsSettings();
+  _ts.searching = true; tsMsg('Searching Find a Tender and Contracts Finder… (up to a minute)');
+  try {
+    const q = new URLSearchParams({ days: s.days, min: s.min, max: s.max, regions: s.regions.join(',') });
+    const r = await fetch(s.worker.replace(/\/$/, '') + '/search?' + q.toString());
+    if (!r.ok) throw new Error('search service replied ' + r.status);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    // skip anything already tracked, suggested or dismissed
+    let known = new Set(_td.rows.map(t => t.url).filter(Boolean));
+    try { (await supa.get('tender_suggestions', 'select=url&limit=5000') || []).forEach(x => known.add(x.url)); } catch(e) {}
+    const fresh = (data.results || []).filter(x => x.url && !known.has(x.url));
+    for (const x of fresh) {
+      const row = { ...x, status: 'new' };
+      try { const res = await supa.post('tender_suggestions', row); if (res && res[0]) Object.assign(row, res[0]); } catch(e) { row.id = 'local_' + Math.random().toString(36).slice(2); }
+      _ts.rows.push(row);
+    }
+    const d = data.diagnostics || {};
+    const parts = [];
+    if (d.fts_releases_checked != null) parts.push(d.fts_releases_checked + ' notices checked on Find a Tender');
+    if (d.cf_hits != null) parts.push(d.cf_hits + ' on Contracts Finder');
+    const errs = [d.fts_error && 'Find a Tender: ' + d.fts_error, d.cf_error && 'Contracts Finder: ' + d.cf_error].filter(Boolean);
+    tsMsg((fresh.length ? '✓ ' + fresh.length + ' new match' + (fresh.length === 1 ? '' : 'es') : 'No new matches') + (parts.length ? ' · ' + parts.join(', ') : '') + (errs.length ? ' · ⚠ ' + errs.join(' · ') : ''), errs.length && !fresh.length ? 'err' : 'ok');
+    await tsScore();
+  } catch(e) {
+    tsMsg('Search didn\'t work: ' + e.message + '. Check the search service is deployed (Tenders → Search settings).', 'err');
+  }
+  _ts.searching = false; renderTenders();
+}
+
+// Claude rates fit for any suggestions that haven't been rated yet
+async function tsScore() {
+  const todo = _ts.rows.filter(r => !r.fit).slice(0, 20);
+  if (!todo.length) return;
+  const before = _ts.msg, kind = _ts.msgKind;
+  tsMsg(before + ' · rating fit…', kind);
+  const list = todo.map((r, i) => i + '. ' + r.title + ' | ' + (r.buyer || '') + ' | ' + (r.location || '') + ' | ' + (r.value_text || 'value not stated') + ' | closes ' + (r.deadline || '?') + ' | CPV ' + (r.cpv || '') + ' | ' + String(r.description || '').slice(0, 400)).join('\n');
+  const system = 'You assess UK public tenders for Livingstone Projects, a small renovation contractor in Stone, Staffordshire (ST15). They refurbish independent schools and homes and are exploring council empty-homes refurbishment. Sweet spot £10k–£250k; can stretch to ~£500k. Trades: joinery, painting, flooring, plumbing, electrics, fire-prevention installs, full refurbs. Not new-build, groundworks, civils or highways. Not yet Constructionline/CHAS accredited. Prefer within ~50 miles of Stone.\nReturn ONLY:\n[FIT]\n[{"i":0,"fit":"Good|Maybe|Poor","reason":"one short sentence"}]\n[/FIT]';
+  try {
+    const r = await fetch(CLAUDE_PROXY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2500, system, messages: [{ role: 'user', content: list }] }) });
+    const data = await r.json();
+    const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+    const m = text.match(/\[FIT\]([\s\S]*?)\[\/FIT\]/);
+    if (!m) return;
+    JSON.parse(m[1].trim()).forEach(f => {
+      const row = todo[f.i]; if (!row) return;
+      row.fit = f.fit; row.fit_reason = f.reason;
+      if (row.id && !String(row.id).startsWith('local_')) supa.patch('tender_suggestions', row.id, { fit: f.fit, fit_reason: f.reason }).catch(() => {});
+    });
+  } catch(e) { console.warn('Fit rating failed:', e); }
+  _ts.msg = before; _ts.msgKind = kind;
+  renderTenders();
+}
+
+async function tsAdd(id) {
+  const s = _ts.rows.find(x => String(x.id) === String(id)); if (!s) return;
+  await tdCreate({ title: s.title, buyer: s.buyer, location: s.location, value_text: s.value_text, value_num: s.value_num,
+    deadline: s.deadline, clarification_deadline: s.enquiry_deadline, cpv: s.cpv, summary: String(s.description || '').slice(0, 600),
+    fit: s.fit, fit_reason: s.fit_reason, procedure: s.source }, s.url);
+  tsSetStatus(s, 'added');
+}
+function tsDismiss(id) { const s = _ts.rows.find(x => String(x.id) === String(id)); if (s) tsSetStatus(s, 'dismissed'); }
+function tsSetStatus(s, status) {
+  _ts.rows = _ts.rows.filter(x => x !== s);
+  if (s.id && !String(s.id).startsWith('local_')) supa.patch('tender_suggestions', s.id, { status }).catch(() => {});
+  renderTenders();
+}
+
+function tsCard() {
+  const s = tsSettings();
+  const fitRank = { Good: 0, Maybe: 1, Poor: 2 };
+  const rows = _ts.rows.slice().sort((a, b) => (fitRank[a.fit] ?? 1.5) - (fitRank[b.fit] ?? 1.5) || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+  const regionBox = (k, l) => '<label style="display:flex;gap:4px;align-items:center;margin:0;cursor:pointer;"><input type="checkbox" style="width:auto;margin:0;"' + (s.regions.includes(k) ? ' checked' : '') + ' onchange="tsSaveSettings({regions:[...document.querySelectorAll(\'.ts-reg:checked\')].map(x=>x.value)})" class="ts-reg" value="' + k + '"> ' + l + '</label>';
+  let h = '<div class="card" style="margin-bottom:16px;"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">Suggested tenders</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px;">New refurbishment, school and housing tenders from Find a Tender and Contracts Finder, rated for fit. Best fits first.</div></div>'
+    + '<button class="btn btn-primary" onclick="tsSearch()"' + (_ts.searching ? ' disabled' : '') + '>' + (_ts.searching ? 'Searching…' : 'Search now') + '</button></div>';
+  h += '<details style="padding:0 20px;"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted);padding:6px 0;">Search settings</summary><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px;padding:8px 0 12px;">'
+    + regionBox('wm', 'West Midlands') + regionBox('em', 'East Midlands') + regionBox('nw', 'North West')
+    + '<span>Value £<input type="number" value="' + s.min + '" onchange="tsSaveSettings({min:parseFloat(this.value)||0})" style="width:90px;padding:3px 6px;font-size:12px;"> to £<input type="number" value="' + s.max + '" onchange="tsSaveSettings({max:parseFloat(this.value)||750000})" style="width:100px;padding:3px 6px;font-size:12px;"></span>'
+    + '<span>Published in the last <select onchange="tsSaveSettings({days:parseInt(this.value)})" style="width:auto;padding:3px 6px;font-size:12px;">' + [7, 14, 30].map(d => '<option' + (d === s.days ? ' selected' : '') + '>' + d + '</option>').join('') + '</select> days</span>'
+    + '<span style="flex-basis:100%;">Search service: <input value="' + tdEsc(s.worker) + '" onchange="tsSaveSettings({worker:this.value.trim()})" style="width:380px;max-width:100%;padding:3px 6px;font-size:12px;"></span></div></details>';
+  if (_ts.missing) h += '<div style="padding:8px 20px;font-size:12px;color:var(--warning);">Run the v4.88 SQL in Supabase to set up suggestions.</div>';
+  if (_ts.msg) h += '<div style="padding:6px 20px;font-size:12px;color:' + (_ts.msgKind === 'err' ? 'var(--danger)' : _ts.msgKind === 'ok' ? 'var(--success)' : 'var(--text-muted)') + ';">' + tdEsc(_ts.msg) + '</div>';
+  if (!rows.length) h += '<div style="padding:12px 20px 18px;font-size:13px;color:var(--text-muted);">' + (_ts.loaded ? 'Nothing waiting. Press Search now to look for new tenders.' : 'Loading…') + '</div>';
+  else {
+    h += '<div class="table-wrap"><table><thead><tr><th>Tender</th><th style="text-align:right;">Value</th><th>Closes</th><th>Fit</th><th></th></tr></thead><tbody>';
+    rows.forEach(r => {
+      const id = tdEsc(r.id), d = tdDaysLeft(r.deadline);
+      h += '<tr><td><a href="' + tdEsc(r.url) + '" target="_blank" rel="noopener" style="font-weight:600;color:inherit;">' + tdEsc(r.title) + ' ↗</a><div style="font-size:12px;color:var(--text-muted);">' + tdEsc(r.buyer || '') + (r.location ? ' · ' + tdEsc(r.location) : '') + ' · ' + tdEsc(r.source || '') + '</div>'
+        + (r.fit_reason ? '<div style="font-size:12px;margin-top:2px;">' + tdEsc(r.fit_reason) + '</div>' : '') + '</td>'
+        + '<td style="text-align:right;font-size:12px;white-space:nowrap;">' + tdEsc(r.value_text || '—') + '</td>'
+        + '<td style="font-size:12px;white-space:nowrap;">' + (r.deadline ? new Date(r.deadline + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' }) + '<div style="color:' + (d != null && d <= 7 ? 'var(--danger)' : 'var(--text-muted)') + ';">' + (d != null ? d + ' days' : '') + '</div>' : '—') + '</td>'
+        + '<td>' + (r.fit ? tdFitChip(r.fit) : '<span style="font-size:11px;color:var(--text-muted);">rating…</span>') + '</td>'
+        + '<td style="white-space:nowrap;"><button class="btn btn-sm btn-primary" onclick="tsAdd(\'' + id + '\')">Add to tracker</button> <button class="btn btn-sm btn-secondary" onclick="tsDismiss(\'' + id + '\')">Dismiss</button></td></tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  return h + '</div>';
 }
 
 </script>
