@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.84 -->
+<!-- Livingstone v4.86 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.84</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.86</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1205,6 +1205,7 @@ window.onerror=function(m,s,l,c,e){
       <div class="tab" onclick="switchGrowthTab('assistant',this)">🤖 Schools Assistant</div>
       <div class="tab" onclick="switchGrowthTab('councils',this)">🏘 Councils</div>
       <div class="tab" onclick="switchGrowthTab('cassistant',this)">🏛 Council Assistant</div>
+      <div class="tab" onclick="switchGrowthTab('tenders',this)">📑 Tenders</div>
     </div>
 
     <!-- PLAN TRACKER -->
@@ -1228,6 +1229,10 @@ window.onerror=function(m,s,l,c,e){
         <button class="btn btn-sm btn-primary" onclick="addCouncilEntry()">+ Add Council</button>
       </div>
       <div id="council-pipeline-content"></div>
+    </div>
+
+    <div id="growth-tab-tenders" style="display:none;">
+      <div id="tenders-content"></div>
     </div>
 
     <!-- COUNCIL ASSISTANT -->
@@ -6928,13 +6933,14 @@ async function deletePipelineFromSupabase(p) {
 function switchGrowthTab(tab, el) {
   document.querySelectorAll('#page-growth .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['plan','pipeline','assistant','councils','cassistant'].forEach(t => {
+  ['plan','pipeline','assistant','councils','cassistant','tenders'].forEach(t => {
     const el2 = document.getElementById('growth-tab-' + t);
     if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
   if (tab === 'plan') renderGrowthPlan();
   if (tab === 'pipeline') renderGrowthPipeline();
   if (tab === 'councils') renderCouncilPipeline();
+  if (tab === 'tenders') { _td.loaded = false; renderTenders(); }
   if (tab === 'cassistant') { loadCouncilFromSupabase().catch(()=>{}); asstRender('councils'); asstLoad('councils'); }
   if (tab === 'assistant') { asstRender('schools'); asstLoad('schools'); }
 }
@@ -7092,6 +7098,11 @@ function plRenderActivity() {
 
 // Logged entries save straight away on an existing prospect, so closing the box doesn't lose them
 function plPersistActivity() {
+  if (window._plKind === 'tender') {
+    const t = _td.rows.find(x => String(x.id) === String(window._plTenderId));
+    if (t) { t.activity = window._plActivity.slice(); tdSave(t); }
+    return;
+  }
   const list = window._plKind === 'council' ? db.councilPipeline : db.pipeline;
   const rec = window._plIdx >= 0 ? list[window._plIdx] : null;
   if (!rec) return;
@@ -13467,6 +13478,7 @@ function renderMeetingPage() {
     loadInvoicesFromSupabase().catch(()=>{}),
     mtgLoadOpenTodos(),
     qtLoad(),
+    tdLoad(),
     mtgLoadHistory()
   ]).then(() => renderMeetingNow());
 }
@@ -13716,7 +13728,8 @@ function renderMeetingNow() {
   h += mtgSectionStart('Pipeline', '10 min', mtgGBP(c.pipelineValue) + ' in enquiries and quotes');
   h += '<div class="table-wrap"><table><thead><tr><th>Lead</th><th>Stage</th><th style="text-align:right;">Value</th><th>Next action</th><th>Last activity</th></tr></thead><tbody>';
   const pipeRows = [];
-  c.pipeJobs.forEach(j => pipeRows.push('<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td><td>' + statusBadge(j.status) + '</td><td style="text-align:right;">' + ((j.quoteValue || j.estimate) ? mtgGBP(j.quoteValue || j.estimate) : '—') + '</td><td style="font-size:12px;">' + (j.status === 'Quoted' ? 'Follow up on quote' : '') + '</td><td>—</td></tr>'));
+  c.pipeJobs.forEach(j => pipeRows.push('<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td><td>' + statusBadge(j.status) + '</td><td style="text-align:right;">' + ((j.quoteValue || j.estimate) ? mtgGBP(finJobValueNet(j)) : '—') + '</td><td style="font-size:12px;">' + (j.status === 'Quoted' ? 'Follow up on quote' : '') + '</td><td>—</td></tr>'));
+  _td.rows.filter(t => TD_OPEN.includes(t.status) && (tdDaysLeft(t.deadline) == null || tdDaysLeft(t.deadline) >= 0)).forEach(t => pipeRows.push('<tr><td>' + mtgEsc(t.title) + ' <span style="font-size:11px;color:var(--text-muted);">Tender · ' + mtgEsc(t.buyer || '') + '</span></td><td><span class="badge badge-enquiry">' + mtgEsc(t.status) + '</span></td><td style="text-align:right;font-size:12px;">' + mtgEsc(t.value_text || '—') + '</td><td style="font-size:12px;">' + (t.owner ? mtgEsc(t.owner) + ' · ' : '') + 'Decide bid / no-bid</td><td style="font-size:12px;">' + tdDeadlineCell(t) + '</td></tr>'));
   schools.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.school) + ' <span style="font-size:11px;color:var(--text-muted);">School</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
   councils.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.council) + ' <span style="font-size:11px;color:var(--text-muted);">Council</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
   h += pipeRows.length ? pipeRows.join('') : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">Pipeline is empty.</td></tr>';
@@ -13924,6 +13937,12 @@ function mtgBuildSummary() {
   L.push('Invoiced, awaiting payment: ' + gbp(c.overdueTotal + c.awaitingTotal) + ' inc VAT' + (c.overdueTotal > 0 ? ' (' + gbp(c.overdueTotal) + ' overdue)' : ''));
   L.push('Confirmed, not yet invoiced: ' + gbp(c.uninvoiced.total) + ' ex VAT');
   L.push('');
+  const tdSoon = _td.rows.filter(t => TD_OPEN.includes(t.status) && tdDaysLeft(t.deadline) != null && tdDaysLeft(t.deadline) >= 0 && tdDaysLeft(t.deadline) <= 21).sort((a, b) => a.deadline.localeCompare(b.deadline));
+  if (tdSoon.length) {
+    L.push('TENDERS CLOSING IN THE NEXT 3 WEEKS');
+    tdSoon.forEach(t => L.push('- ' + t.title + (t.buyer ? ' (' + t.buyer + ')' : '') + ' — closes ' + mtgShort(mtgParse(t.deadline)) + ', ' + t.status.toLowerCase() + (t.owner ? ', ' + t.owner : '')));
+    L.push('');
+  }
   const qtOpen = _qt.rows.filter(r => r.status !== 'Sent').sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
   if (qtOpen.length) {
     L.push('QUOTES TO COMPLETE');
@@ -14559,6 +14578,197 @@ function ohCard() {
     + '<input id="oh-start" type="month" value="' + thisMonth + '" style="width:auto;" title="Start month (or the month of a one-off)">'
     + '<button class="btn btn-primary" onclick="ohAdd()">Add</button></div></div>';
   return h;
+}
+
+
+// ============================================================
+// TENDERS (v4.85) — paste a Find a Tender / Contracts Finder link, Claude reads the notice
+// and fills in the details. Stored in the shared `tenders` table.
+// ============================================================
+const TD_STATUSES = ['Reviewing','Bidding','Submitted','Won','Lost','Not bidding'];
+const TD_OPEN = ['Reviewing','Bidding'];
+let _td = { rows: [], missing: false, loaded: false, busy: false, lastUrl: '' };
+
+async function tdLoad() {
+  try { const r = await supa.get('tenders', 'order=deadline.asc.nullslast,created_at.desc'); _td.rows = (r || []).map(x => ({ ...x, activity: plParseActivity(x.activity) })); _td.missing = false; }
+  catch(e) { _td.missing = true; }
+  _td.loaded = true;
+}
+function tdEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function tdDaysLeft(d) { if (!d) return null; const t = new Date(); t.setHours(0,0,0,0); return Math.round((new Date(String(d).slice(0,10) + 'T00:00:00') - t) / 86400000); }
+function tdPayload(r) {
+  const f = ['url','title','buyer','location','value_text','value_num','deadline','clarification_deadline','start_date','duration','cpv','procedure','summary','requirements','how_to_bid','fit','fit_reason','status','owner','notes','reference','award_criteria','award_date','buyer_contact','docs_url'];
+  const o = {}; f.forEach(k => { o[k] = r[k] === '' || r[k] === undefined ? null : r[k]; });
+  o.activity = JSON.stringify(r.activity || []);
+  return o;
+}
+async function tdSave(r) {
+  try {
+    if (r.id && !String(r.id).startsWith('local_')) await supa.patch('tenders', r.id, tdPayload(r));
+    else { const res = await supa.post('tenders', tdPayload(r)); if (res && res[0]) r.id = res[0].id; }
+  } catch(e) { alert(_td.missing ? 'Run the v4.85 SQL in Supabase to set up Tenders.' : 'Couldn\'t save that tender — check your connection.'); }
+}
+
+const TD_PROMPT = `You extract UK public-sector tender notices for Livingstone Projects, a Staffordshire renovation contractor (based in Stone, ST15) that does refurbishment of independent schools and homes, and is exploring council empty-homes refurbishment. Typical job size £5k–£250k. Trades: joinery, painting, flooring, plumbing, electrics, fire-prevention installs, full refurbs. Not yet Constructionline/CHAS accredited.
+
+Return ONLY this block, with valid JSON inside (use null when the notice doesn't say; never invent):
+[TENDER]
+{"title":"","buyer":"","location":"town/county","value_text":"as stated, e.g. £40k–£60k ex VAT","value_num":60000,"deadline":"YYYY-MM-DD (tender submission deadline)","clarification_deadline":"YYYY-MM-DD","start_date":"","duration":"e.g. 12 weeks / 2 years","cpv":"codes with names, comma separated","procedure":"e.g. Open, Below threshold, Mini-competition, DPS","summary":"2-3 sentences: what work, where","requirements":"key requirements to bid: accreditations, insurance levels, turnover, experience","how_to_bid":"portal/route and any registration needed","fit":"Good|Maybe|Poor","fit_reason":"one sentence on fit for Livingstone: size, distance from Stone, trades, accreditation gaps","reference":"buyer's reference","award_criteria":"each criterion with its weighting, e.g. Price 40%; Methodology 15%; ...","award_date":"YYYY-MM-DD (estimated award decision)","buyer_contact":"contact name and/or email/phone","docs_url":"full https link to the tender documents or e-tendering portal"}
+[/TENDER]`;
+
+async function tdAsk(content, useFetch) {
+  const body = { model: 'claude-sonnet-4-6', max_tokens: 2000, system: TD_PROMPT, messages: [{ role: 'user', content }] };
+  if (useFetch) body.tools = [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 2, allowed_domains: ['find-tender.service.gov.uk', 'www.find-tender.service.gov.uk', 'contractsfinder.service.gov.uk', 'www.contractsfinder.service.gov.uk'] }];
+  const r = await fetch(CLAUDE_PROXY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+  const m = text.match(/\[TENDER\]([\s\S]*?)\[\/TENDER\]/);
+  if (!m) throw new Error('Couldn\'t read the notice');
+  const j = JSON.parse(m[1].trim().replace(/^```json|```$/g, ''));
+  if (!j.title) throw new Error('No tender found on that page');
+  return j;
+}
+
+function tdStatus(msg, kind) {
+  const el = document.getElementById('td-status');
+  if (el) el.innerHTML = msg ? '<span style="color:' + (kind === 'err' ? 'var(--danger)' : kind === 'ok' ? 'var(--success)' : 'var(--text-muted)') + ';">' + msg + '</span>' : '';
+}
+
+async function tdAddFromUrl() {
+  const url = (document.getElementById('td-url').value || '').trim();
+  if (!/^https?:\/\//i.test(url)) { tdStatus('Paste the full link, starting https://', 'err'); return; }
+  if (!/(find-tender|contractsfinder)\.service\.gov\.uk/i.test(url)) { tdStatus('That link isn\'t from Find a Tender or Contracts Finder — use "Paste the notice" below instead.', 'err'); tdShowPaste(url); return; }
+  if (_td.rows.some(r => r.url === url)) { tdStatus('That tender is already on the list.', 'err'); return; }
+  _td.busy = true; tdStatus('Reading the notice… (10–30 seconds)');
+  try {
+    const j = await tdAsk('Read this tender notice and extract it: ' + url, true);
+    await tdCreate(j, url);
+    document.getElementById('td-url').value = '';
+    tdStatus('✓ Added "' + tdEsc(j.title) + '"', 'ok');
+  } catch(e) {
+    console.warn('Tender fetch failed:', e);
+    tdStatus('Couldn\'t read that page automatically (' + tdEsc(e.message).slice(0, 90) + '). Open the link, select all the text (Ctrl+A, Ctrl+C) and paste it below.', 'err');
+    tdShowPaste(url);
+  }
+  _td.busy = false;
+}
+function tdShowPaste(url) { _td.lastUrl = url || ''; const p = document.getElementById('td-paste-wrap'); if (p) p.style.display = 'block'; }
+async function tdAddFromPaste() {
+  const txt = (document.getElementById('td-paste').value || '').trim();
+  if (txt.length < 200) { tdStatus('Paste the whole notice page — that looks too short.', 'err'); return; }
+  tdStatus('Reading the pasted notice…');
+  try {
+    const j = await tdAsk('Here is the text of a tender notice' + (_td.lastUrl ? ' (from ' + _td.lastUrl + ')' : '') + ':\n\n' + txt.slice(0, 60000), false);
+    await tdCreate(j, _td.lastUrl);
+    document.getElementById('td-paste').value = ''; document.getElementById('td-url').value = '';
+    document.getElementById('td-paste-wrap').style.display = 'none';
+    tdStatus('✓ Added "' + tdEsc(j.title) + '"', 'ok');
+  } catch(e) { tdStatus('Couldn\'t pick out the tender details: ' + tdEsc(e.message).slice(0, 120), 'err'); }
+}
+async function tdCreate(j, url) {
+  const valid = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : null;
+  const link = u => /^https?:\/\//i.test(u || '') ? u : null;
+  const r = { ...j, url: url || null, deadline: valid(j.deadline), clarification_deadline: valid(j.clarification_deadline), award_date: valid(j.award_date), docs_url: link(j.docs_url), value_num: parseFloat(j.value_num) || null,
+    status: 'Reviewing', owner: (localStorage.getItem('livingstoneUser') || '').trim() || null, notes: '', activity: [] };
+  _td.rows.push(r);
+  await tdSave(r);
+  renderTenders();
+}
+async function tdUpdate(id, field, val) {
+  const r = _td.rows.find(x => String(x.id) === String(id)); if (!r) return;
+  r[field] = val === '' ? null : val;
+  renderTenders();
+  await tdSave(r);
+}
+async function tdDelete(id) {
+  const r = _td.rows.find(x => String(x.id) === String(id)); if (!r || !confirm('Remove "' + r.title + '"?')) return;
+  _td.rows = _td.rows.filter(x => x !== r);
+  renderTenders();
+  if (r.id && !String(r.id).startsWith('local_')) { try { await supa.delete('tenders', r.id); } catch(e) {} }
+}
+
+// Turn any web address or email in a field into a clickable link
+function tdLinkify(t) {
+  return tdEsc(t).replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+    .replace(/([\w.+-]+@[\w-]+\.[\w.-]+)/g, '<a href="mailto:$1">$1</a>');
+}
+function tdQuestionsClosed(r) { const d = tdDaysLeft(r.clarification_deadline); return d != null && d < 0 && TD_OPEN.includes(r.status) && (tdDaysLeft(r.deadline) == null || tdDaysLeft(r.deadline) >= 0); }
+
+function tdFitChip(f) {
+  const c = f === 'Good' ? 'badge-completed-paid' : f === 'Poor' ? 'badge-hold' : 'badge-preparing';
+  return f ? '<span class="badge ' + c + '">' + tdEsc(f) + '</span>' : '';
+}
+function tdDeadlineCell(r) {
+  const d = tdDaysLeft(r.deadline);
+  if (d == null) return '<span style="color:var(--text-muted);">—</span>';
+  const label = new Date(r.deadline.slice(0,10) + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+  const open = TD_OPEN.includes(r.status);
+  const col = !open ? 'var(--text-muted)' : d < 0 ? 'var(--text-muted)' : d <= 7 ? 'var(--danger)' : d <= 14 ? 'var(--warning)' : 'inherit';
+  return '<span style="color:' + col + ';font-weight:' + (open && d >= 0 && d <= 14 ? 600 : 400) + ';">' + label + '</span><div style="font-size:11px;color:var(--text-muted);">' + (d < 0 ? 'closed' : d === 0 ? 'today' : d + ' day' + (d === 1 ? '' : 's') + ' left') + '</div>'
+    + (tdQuestionsClosed(r) ? '<div style="font-size:11px;color:var(--warning);">Questions closed</div>' : '');
+}
+
+function renderTenders() {
+  const el = document.getElementById('tenders-content');
+  if (!el) return;
+  if (!_td.loaded) { el.innerHTML = '<div style="color:var(--text-muted);padding:20px;">Loading…</div>'; tdLoad().then(renderTenders); return; }
+  const showClosed = !!window._tdShowClosed;
+  const rows = _td.rows.filter(r => showClosed || TD_OPEN.includes(r.status) || r.status === 'Submitted')
+    .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+  const closedCount = _td.rows.length - _td.rows.filter(r => TD_OPEN.includes(r.status) || r.status === 'Submitted').length;
+  let h = '';
+  if (_td.missing) h += '<div class="alert alert-warning" style="margin-bottom:12px;">Run the v4.85 SQL in Supabase to set up Tenders.</div>';
+  h += '<div class="card" style="margin-bottom:16px;"><div class="card-body">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;"><input id="td-url" placeholder="Paste a Find a Tender or Contracts Finder link" style="flex:1;min-width:260px;" onkeydown="if(event.key===\'Enter\')tdAddFromUrl()">'
+    + '<button class="btn btn-primary" onclick="tdAddFromUrl()">Read tender</button></div>'
+    + '<div id="td-status" style="font-size:12px;margin-top:8px;min-height:16px;"></div>'
+    + '<div id="td-paste-wrap" style="display:none;margin-top:8px;"><textarea id="td-paste" rows="5" style="width:100%;font-size:12px;" placeholder="Paste the full text of the notice page here"></textarea>'
+    + '<div style="text-align:right;margin-top:6px;"><button class="btn btn-sm btn-primary" onclick="tdAddFromPaste()">Extract details</button></div></div>'
+    + '</div></div>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;color:var(--text-muted);"><span>' + rows.length + ' tender' + (rows.length === 1 ? '' : 's') + ' shown · soonest deadline first</span>'
+    + (closedCount ? '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0;"><input type="checkbox" style="width:auto;margin:0;"' + (showClosed ? ' checked' : '') + ' onchange="window._tdShowClosed=this.checked;renderTenders()"> Show won, lost and not bidding (' + closedCount + ')</label>' : '') + '</div>';
+  h += '<div class="card"><div class="table-wrap"><table><thead><tr><th>Tender</th><th style="text-align:right;">Value</th><th>Deadline</th><th>Fit</th><th>Status</th><th>Who</th><th></th></tr></thead><tbody>';
+  if (!rows.length) h += '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No tenders yet. Paste a link above.</td></tr>';
+  rows.forEach(r => {
+    const id = tdEsc(r.id);
+    h += '<tr style="cursor:pointer;" onclick="tdOpen(\'' + id + '\')"><td><strong>' + tdEsc(r.title) + '</strong><div style="font-size:12px;color:var(--text-muted);">' + tdEsc(r.buyer || '') + (r.location ? ' · ' + tdEsc(r.location) : '') + '</div></td>'
+      + '<td style="text-align:right;font-size:12px;">' + tdEsc(r.value_text || (r.value_num ? finGBP(r.value_num) : '—')) + '</td>'
+      + '<td>' + tdDeadlineCell(r) + '</td>'
+      + '<td title="' + tdEsc(r.fit_reason || '') + '">' + tdFitChip(r.fit) + '</td>'
+      + '<td onclick="event.stopPropagation()"><select onchange="tdUpdate(\'' + id + '\',\'status\',this.value)" style="width:auto;padding:4px 8px;font-size:12px;">' + TD_STATUSES.map(s => '<option' + (s === (r.status || 'Reviewing') ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></td>'
+      + '<td onclick="event.stopPropagation()"><input list="pla-who-list2" value="' + tdEsc(r.owner || '') + '" placeholder="Who?" onchange="tdUpdate(\'' + id + '\',\'owner\',this.value.trim())" style="width:90px;padding:4px 8px;font-size:12px;"></td>'
+      + '<td onclick="event.stopPropagation()" style="white-space:nowrap;font-size:12px;">' + (r.url ? '<a href="' + tdEsc(r.url) + '" target="_blank" rel="noopener">Notice ↗</a> ' : '') + (r.docs_url ? '<a href="' + tdEsc(r.docs_url) + '" target="_blank" rel="noopener" style="margin-left:6px;">Docs ↗</a> ' : '') + '<button onclick="tdDelete(\'' + id + '\')" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button></td></tr>';
+  });
+  h += '</tbody></table></div></div><datalist id="pla-who-list2"><option value="Adam"><option value="Tom"><option value="Both"></datalist>';
+  el.innerHTML = h;
+}
+
+function tdOpen(id) {
+  const r = _td.rows.find(x => String(x.id) === String(id)); if (!r) return;
+  let modal = document.getElementById('td-modal');
+  if (!modal) {
+    modal = document.createElement('div'); modal.id = 'td-modal'; modal.className = 'modal-overlay';
+    modal.onclick = e => { if (e.target === modal) closeModal('td-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:720px;"><div class="modal-header"><div class="modal-title" id="td-modal-title"></div><button class="modal-close" onclick="closeModal(\'td-modal\')">×</button></div><div class="modal-body" id="td-modal-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+  document.getElementById('td-modal-title').textContent = r.title || 'Tender';
+  const row = (label, v) => v ? '<div style="margin-bottom:12px;"><div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">' + label + '</div><div style="font-size:13px;white-space:pre-wrap;word-break:break-word;">' + tdLinkify(v) + '</div></div>' : '';
+  const dl = d => d ? new Date(String(d).slice(0,10) + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : '';
+  window._plTenderId = r.id;
+  document.getElementById('td-modal-body').innerHTML =
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">' + tdFitChip(r.fit) + '<span style="font-size:12px;color:var(--text-muted);">' + tdEsc(r.fit_reason || '') + '</span></div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;font-weight:600;">' + (r.url ? '<a href="' + tdEsc(r.url) + '" target="_blank" rel="noopener">Open the notice ↗</a>' : '') + (r.docs_url ? '<a href="' + tdEsc(r.docs_url) + '" target="_blank" rel="noopener">Tender documents ↗</a>' : '') + '</div>'
+    + (tdQuestionsClosed(r) ? '<div class="alert alert-warning" style="margin-bottom:14px;font-size:13px;">The deadline for clarification questions passed on ' + dl(r.clarification_deadline) + ' — you can still bid, but can\'t ask questions.</div>' : '')
+    + '<div class="grid-2" style="gap:12px;">'
+    + '<div>' + row('Buyer', r.buyer) + row('Buyer contact', r.buyer_contact) + row('Location', r.location) + row('Value', r.value_text) + row('Procedure', r.procedure) + row('Reference', r.reference) + '</div>'
+    + '<div>' + row('Tender deadline', dl(r.deadline)) + row('Clarification questions by', dl(r.clarification_deadline)) + row('Award decision (est.)', dl(r.award_date)) + row('Start', r.start_date) + row('Duration', r.duration) + '</div></div>'
+    + row('What they want', r.summary) + row('How it\'s scored', r.award_criteria) + row('To bid you need', r.requirements) + row('How to bid', r.how_to_bid) + row('CPV codes', r.cpv)
+    + '<div class="form-group"><label>Notes</label><textarea rows="3" style="width:100%;" onchange="tdUpdate(\'' + tdEsc(r.id) + '\',\'notes\',this.value)">' + tdEsc(r.notes || '') + '</textarea></div>'
+    + plActivityBlock('tender', r, 0);
+  plRenderActivity();
+  modal.style.display = 'flex';
 }
 
 </script>
