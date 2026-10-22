@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.86 -->
+<!-- Livingstone v4.87 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.86</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.87</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -14714,8 +14714,16 @@ function renderTenders() {
   if (!el) return;
   if (!_td.loaded) { el.innerHTML = '<div style="color:var(--text-muted);padding:20px;">Loading…</div>'; tdLoad().then(renderTenders); return; }
   const showClosed = !!window._tdShowClosed;
-  const rows = _td.rows.filter(r => showClosed || TD_OPEN.includes(r.status) || r.status === 'Submitted')
-    .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+  let sortBy = 'deadline'; try { sortBy = localStorage.getItem('livingstoneTenderSort') || 'deadline'; } catch(e) {}
+  const fitRank = { Good: 0, Maybe: 1, Poor: 2 };
+  const sorters = {
+    deadline: (a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'),
+    value: (a, b) => (parseFloat(b.value_num) || -1) - (parseFloat(a.value_num) || -1),
+    fit: (a, b) => (fitRank[a.fit] ?? 3) - (fitRank[b.fit] ?? 3) || (a.deadline || '9999').localeCompare(b.deadline || '9999'),
+    newest: (a, b) => (b.created_at || '').localeCompare(a.created_at || '')
+  };
+  const sortLabel = { deadline: 'soonest deadline first', value: 'highest value first', fit: 'best fit first', newest: 'most recently added first' };
+  const rows = _td.rows.filter(r => showClosed || TD_OPEN.includes(r.status) || r.status === 'Submitted').sort(sorters[sortBy] || sorters.deadline);
   const closedCount = _td.rows.length - _td.rows.filter(r => TD_OPEN.includes(r.status) || r.status === 'Submitted').length;
   let h = '';
   if (_td.missing) h += '<div class="alert alert-warning" style="margin-bottom:12px;">Run the v4.85 SQL in Supabase to set up Tenders.</div>';
@@ -14726,7 +14734,10 @@ function renderTenders() {
     + '<div id="td-paste-wrap" style="display:none;margin-top:8px;"><textarea id="td-paste" rows="5" style="width:100%;font-size:12px;" placeholder="Paste the full text of the notice page here"></textarea>'
     + '<div style="text-align:right;margin-top:6px;"><button class="btn btn-sm btn-primary" onclick="tdAddFromPaste()">Extract details</button></div></div>'
     + '</div></div>';
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;color:var(--text-muted);"><span>' + rows.length + ' tender' + (rows.length === 1 ? '' : 's') + ' shown · soonest deadline first</span>'
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;color:var(--text-muted);gap:12px;flex-wrap:wrap;"><span style="display:flex;gap:8px;align-items:center;">' + rows.length + ' tender' + (rows.length === 1 ? '' : 's') + ' · Sort by '
+    + '<select onchange="try{localStorage.setItem(\'livingstoneTenderSort\',this.value)}catch(e){};renderTenders()" style="width:auto;padding:3px 8px;font-size:12px;">'
+    + [['deadline','Deadline'],['value','Value'],['fit','Fit'],['newest','Newest added']].map(([k, l]) => '<option value="' + k + '"' + (k === sortBy ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>'
+    + '<span>(' + sortLabel[sortBy] + ')</span></span>'
     + (closedCount ? '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0;"><input type="checkbox" style="width:auto;margin:0;"' + (showClosed ? ' checked' : '') + ' onchange="window._tdShowClosed=this.checked;renderTenders()"> Show won, lost and not bidding (' + closedCount + ')</label>' : '') + '</div>';
   h += '<div class="card"><div class="table-wrap"><table><thead><tr><th>Tender</th><th style="text-align:right;">Value</th><th>Deadline</th><th>Fit</th><th>Status</th><th>Who</th><th></th></tr></thead><tbody>';
   if (!rows.length) h += '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No tenders yet. Paste a link above.</td></tr>';
