@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.89 -->
+<!-- Livingstone v4.90 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.89</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.90</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -13585,23 +13585,23 @@ function renderMeetingNow() {
   const bizRows = (db.actionsQ1 || []).map((a, i) => ({ a, i, due: due(a.due), done: a.status === 'Completed' })).filter(x => !x.done || _mtg.doneObjs.has(x.a)).sort(byDue).sort(doneLast);
   const [bizSoon, bizLater] = splitSoon(bizRows);
   h += mtgSectionStart('Business actions', '', subSummary(bizSoon.filter(x => !x.done)) + (bizRows.some(x => x.done) ? ' · ' + bizRows.filter(x => x.done).length + ' done this meeting' : ''));
-  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Who</th><th>Due</th><th>Status</th><th style="width:30%;">Notes</th></tr></thead><tbody>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Who</th><th>Due</th><th>Status</th><th style="width:30%;">Notes</th><th></th></tr></thead><tbody>';
   const bizShown = _mtg.showLaterBiz ? bizRows : bizSoon;
-  if (!bizShown.length) h += '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">No open business actions.</td></tr>';
-  bizShown.forEach(x => { h += '<tr' + doneStyle(x.done) + '><td>' + doneText(x.a.desc, x.done) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'q1\',' + x.i + ',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetBizDue(' + x.i + ',this.value)', x.done) + '</td><td>' + statusSel('q1', x.i, x.a.status) + '</td><td>' + notesCell(x.a.notes, 'mtgSetActionNotes(\'q1\',' + x.i + ',this.value)') + '</td></tr>'; });
+  if (!bizShown.length) h += '<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:16px;">No open business actions.</td></tr>';
+  bizShown.forEach(x => { h += '<tr' + doneStyle(x.done) + '><td>' + doneText(x.a.desc, x.done) + '</td><td>' + whoCell(mtgOwnerName(x.a.owner) === '—' ? '' : mtgOwnerName(x.a.owner), 'mtgSetActionWho(\'q1\',' + x.i + ',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetBizDue(' + x.i + ',this.value)', x.done) + '</td><td>' + statusSel('q1', x.i, x.a.status) + '</td><td>' + notesCell(x.a.notes, 'mtgSetActionNotes(\'q1\',' + x.i + ',this.value)') + '</td><td>' + '<button onclick="mtgDeleteAction(' + x.i + ')" title="Delete action" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button>' + '</td></tr>'; });
   h += '</tbody></table></div>' + laterBtn('showLaterBiz', bizLater.length) + addForm('biz') + '</div></div>';
 
   // 1b. Job actions
   const jobRows = _mtg.todos.map(t => ({ t, due: due(t.due), done: !!t.done })).sort(byDue).sort(doneLast);
   const [jobSoon, jobLater] = splitSoon(jobRows);
   h += mtgSectionStart('Job actions', '', subSummary(jobSoon.filter(x => !x.done)) + (jobRows.some(x => x.done) ? ' · ' + jobRows.filter(x => x.done).length + ' done this meeting' : ''));
-  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Job</th><th>Who</th><th>Due</th><th>Status</th><th style="width:28%;">Notes</th></tr></thead><tbody>';
+  h += '<div class="table-wrap"><table><thead><tr><th>Action</th><th>Job</th><th>Who</th><th>Due</th><th>Status</th><th style="width:28%;">Notes</th><th></th></tr></thead><tbody>';
   const jobShown = _mtg.showLaterJob ? jobRows : jobSoon;
-  if (!jobShown.length) h += '<tr><td colspan="6" style="color:var(--text-muted);text-align:center;padding:16px;">No open job actions.</td></tr>';
+  if (!jobShown.length) h += '<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:16px;">No open job actions.</td></tr>';
   jobShown.forEach(x => {
     const t = x.t;
     h += '<tr' + doneStyle(x.done) + '><td>' + doneText(t.text, x.done) + '</td><td><a href="#" onclick="openJob(\'' + mtgEsc(t.jobRef) + '\');return false;">' + mtgEsc(t.jobRef) + '</a></td><td>' + whoCell(t.who || '', 'mtgSetTodoWho(\'' + t.id + '\',this.value)') + '</td><td>' + dueCell(x.due, 'mtgSetTodoDue(\'' + t.id + '\',this.value)', x.done) + '</td>' +
-      '<td><select style="width:auto;padding:4px 8px;font-size:12px;" onchange="mtgSetTodoStatus(\'' + t.id + '\',this.value)"><option' + (x.done ? '' : ' selected') + '>To Do</option><option' + (x.done ? ' selected' : '') + '>Completed</option></select></td><td>' + notesCell(t.notes, 'mtgSetTodoNotes(\'' + t.id + '\',this.value)') + '</td></tr>';
+      '<td><select style="width:auto;padding:4px 8px;font-size:12px;" onchange="mtgSetTodoStatus(\'' + t.id + '\',this.value)"><option' + (x.done ? '' : ' selected') + '>To Do</option><option' + (x.done ? ' selected' : '') + '>Completed</option></select></td><td>' + notesCell(t.notes, 'mtgSetTodoNotes(\'' + t.id + '\',this.value)') + '</td><td>' + '<button onclick="mtgDeleteTodo(\'' + t.id + '\')" title="Delete action" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button>' + '</td></tr>';
   });
   h += '</tbody></table></div>' + laterBtn('showLaterJob', jobLater.length) + addForm('job') + '</div></div>';
 
@@ -13841,6 +13841,25 @@ function mtgSetGoalField(idx, field, val) {
   saveData();
   if (a.id) supa.patch('actions', a.id, { [field === 'desc' ? 'description' : field]: val }).catch(() => alert('Couldn\'t save that — check your connection.'));
   if (field === 'priority') renderMeetingNow();
+}
+
+function mtgDeleteAction(idx) {
+  const a = db.actionsQ1[idx];
+  if (!a || !confirm('Delete the action "' + a.desc + '"? This removes it for both of you.')) return;
+  if (a.id) supa.delete('actions', a.id).catch(() => alert('Couldn\'t delete it from the shared list — check your connection.'));
+  db.actionsQ1.splice(idx, 1);
+  _mtg.doneObjs.delete(a);
+  saveData();
+  renderMeetingNow();
+}
+
+async function mtgDeleteTodo(id) {
+  const t = _mtg.todos.find(x => String(x.id) === String(id));
+  if (!t || !confirm('Delete the job action "' + t.text + '"? This removes it from the job too.')) return;
+  try { await supa.delete('job_todos', id); }
+  catch(e) { alert('Couldn\'t delete it — check your connection.'); return; }
+  _mtg.todos = _mtg.todos.filter(x => x !== t);
+  renderMeetingNow();
 }
 
 function mtgDeleteGoal(idx) {
