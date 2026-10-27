@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.90 -->
+<!-- Livingstone v4.91 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.90</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.91</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7100,7 +7100,7 @@ function plRenderActivity() {
 function plPersistActivity() {
   if (window._plKind === 'tender') {
     const t = _td.rows.find(x => String(x.id) === String(window._plTenderId));
-    if (t) { t.activity = window._plActivity.slice(); tdSave(t); }
+    if (t) { t.activity = window._plActivity.slice(); tdSave(t); if (typeof renderTenders === 'function') renderTenders(); }
     return;
   }
   const list = window._plKind === 'council' ? db.councilPipeline : db.pipeline;
@@ -14775,7 +14775,7 @@ function renderTenders() {
   if (!rows.length) h += '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No tenders yet. Paste a link above.</td></tr>';
   rows.forEach(r => {
     const id = tdEsc(r.id);
-    h += '<tr style="cursor:pointer;" onclick="tdOpen(\'' + id + '\')"><td><strong>' + tdEsc(r.title) + '</strong><div style="font-size:12px;color:var(--text-muted);">' + tdEsc(r.buyer || '') + (r.location ? ' · ' + tdEsc(r.location) : '') + '</div></td>'
+    h += '<tr style="cursor:pointer;" onclick="tdOpen(\'' + id + '\')"><td><strong>' + tdEsc(r.title) + '</strong><div style="font-size:12px;color:var(--text-muted);">' + tdEsc(r.buyer || '') + (r.location ? ' · ' + tdEsc(r.location) : '') + '</div>' + tdNotesPreview(r) + '</td>'
       + '<td style="text-align:right;font-size:12px;">' + tdEsc(r.value_text || (r.value_num ? finGBP(r.value_num) : '—')) + '</td>'
       + '<td>' + tdDeadlineCell(r) + '</td>'
       + '<td title="' + tdEsc(r.fit_reason || '') + '">' + tdFitChip(r.fit) + '</td>'
@@ -14785,6 +14785,17 @@ function renderTenders() {
   });
   h += '</tbody></table></div></div><datalist id="pla-who-list2"><option value="Adam"><option value="Tom"><option value="Both"></datalist>';
   el.innerHTML = h;
+}
+
+// Notes + latest activity shown under the tender in the list (v4.91)
+function tdNotesPreview(r) {
+  let h = '';
+  const n = (r.notes || '').trim();
+  if (n) h += '<div style="margin-top:6px;font-size:12px;color:var(--text);background:var(--cream,#F4F1EB);border-left:3px solid var(--copper,#B5DD3C);padding:4px 8px;border-radius:3px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;" title="' + tdEsc(n) + '">📝 ' + tdEsc(n) + '</div>';
+  const list = plSorted(r.activity);
+  const l = list[0];
+  if (l) h += '<div style="margin-top:4px;font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;" title="' + tdEsc(l.text) + '">🕑 ' + plFmt(l.date) + (l.who ? ' · ' + tdEsc(l.who) : '') + ' — ' + tdEsc(l.text) + (list.length > 1 ? ' <span style="opacity:.7;">(+' + (list.length - 1) + ' more)</span>' : '') + '</div>';
+  return h;
 }
 
 function tdOpen(id) {
@@ -14804,11 +14815,15 @@ function tdOpen(id) {
     '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">' + tdFitChip(r.fit) + '<span style="font-size:12px;color:var(--text-muted);">' + tdEsc(r.fit_reason || '') + '</span></div>'
     + '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;font-weight:600;">' + (r.url ? '<a href="' + tdEsc(r.url) + '" target="_blank" rel="noopener">Open the notice ↗</a>' : '') + (r.docs_url ? '<a href="' + tdEsc(r.docs_url) + '" target="_blank" rel="noopener">Tender documents ↗</a>' : '') + '</div>'
     + (tdQuestionsClosed(r) ? '<div class="alert alert-warning" style="margin-bottom:14px;font-size:13px;">The deadline for clarification questions passed on ' + dl(r.clarification_deadline) + ' — you can still bid, but can\'t ask questions.</div>' : '')
+    + '<div id="td-top-slot"></div>'
+    + '<div style="border-top:1px solid var(--border);margin:6px 0 14px;padding-top:14px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);">Tender details</div>'
     + '<div class="grid-2" style="gap:12px;">'
     + '<div>' + row('Buyer', r.buyer) + row('Buyer contact', r.buyer_contact) + row('Location', r.location) + row('Value', r.value_text) + row('Procedure', r.procedure) + row('Reference', r.reference) + '</div>'
     + '<div>' + row('Tender deadline', dl(r.deadline)) + row('Clarification questions by', dl(r.clarification_deadline)) + row('Award decision (est.)', dl(r.award_date)) + row('Start', r.start_date) + row('Duration', r.duration) + '</div></div>'
     + row('What they want', r.summary) + row('How it\'s scored', r.award_criteria) + row('To bid you need', r.requirements) + row('How to bid', r.how_to_bid) + row('CPV codes', r.cpv)
-    + '<div class="form-group"><label>Notes</label><textarea rows="3" style="width:100%;" onchange="tdUpdate(\'' + tdEsc(r.id) + '\',\'notes\',this.value)">' + tdEsc(r.notes || '') + '</textarea></div>'
+    ;
+  document.getElementById('td-top-slot').innerHTML =
+    '<div class="form-group"><label>Notes</label><textarea rows="3" style="width:100%;" onchange="tdUpdate(\'' + tdEsc(r.id) + '\',\'notes\',this.value)">' + tdEsc(r.notes || '') + '</textarea></div>'
     + plActivityBlock('tender', r, 0);
   plRenderActivity();
   modal.style.display = 'flex';
