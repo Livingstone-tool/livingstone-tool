@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.93 -->
+<!-- Livingstone v4.94 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.93</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.94</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -6986,12 +6986,14 @@ async function oppLoad() {
   try {
     const rows = await supa.get('opportunities', 'order=created_at.asc');
     _oppMissing = false;
+    const localOnly = (db.opps || []).filter(p => !p.id || String(p.id).startsWith('local_'));
     db.opps = (rows || []).map(p => ({
       id: p.id, name: p.name || '', type: p.type || 'Other', contact: p.contact || '', role: p.role || '',
       email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research', area: p.area || '',
       estValue: p.est_value || '', source: p.source || '', nextAction: p.next_action || '',
       lastContact: p.last_contact || '', notes: p.notes || '', activity: plParseActivity(p.activity)
     }));
+    localOnly.forEach(p => { db.opps.push(p); oppSync(p); });   // added before the table existed — push them up now
     saveOppData();
   } catch(e) { _oppMissing = true; }
 }
@@ -7317,9 +7319,11 @@ async function plWrite(table, p, payload) {
 function plActivityBlock(kind, entry, idx) {
   window._plActivity = (entry.activity || []).slice();
   window._plKind = kind; window._plIdx = idx; window._plId = idx >= 0 ? (entry.id || null) : null;
+  // Only one activity log may exist on the page — clear any left in other (hidden) pop-ups (v4.94)
+  document.querySelectorAll('.pla-block').forEach(e => e.remove());
   const me = (localStorage.getItem('livingstoneUser') || '').trim();
   const today = new Date(); const iso = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
-  return '<div class="form-group"><label>Activity log — what\'s been done</label>'
+  return '<div class="form-group pla-block"><label>Activity log — what\'s been done</label>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'
     + '<input type="date" id="pla-date" value="' + iso + '" style="width:auto;">'
     + '<input type="text" id="pla-who" list="pla-who-list" value="' + plEsc(me) + '" placeholder="Who" style="width:90px;"><datalist id="pla-who-list"><option value="Adam"><option value="Tom"></datalist>'
