@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.92 -->
+<!-- Livingstone v4.93 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.92</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.93</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -7160,7 +7160,8 @@ function oppShowModal(entry, idx) {
 }
 function oppSave() {
   const v = id => (document.getElementById(id).value || '').trim();
-  const idx = parseInt(document.getElementById('opp-idx').value);
+  const rawIdx = parseInt(document.getElementById('opp-idx').value);
+  const idx = rawIdx >= 0 ? plResolveIdx(db.opps, rawIdx) : rawIdx;
   const type = v('opp-type'), name = v('opp-name');
   if (!name) { alert('Enter a name.'); return; }
   const activity = (window._plActivity || []).slice();
@@ -7308,13 +7309,14 @@ async function plWrite(table, p, payload) {
     if (!/activity/i.test(String(e && e.message))) throw e;
     const { activity, ...rest } = payload;   // column not created yet — save everything else
     await send(rest);
+    if (!window._plActWarned) { window._plActWarned = true; alert('The activity log isn\'t saving to the shared database for ' + table + ' — run the v4.93 SQL in Supabase.'); }
     if (!_plColumnWarned) { _plColumnWarned = true; alert('Saved, but the activity log isn\'t shared yet. Run the v4.71 SQL in Supabase to add the activity column.'); }
   }
 }
 
 function plActivityBlock(kind, entry, idx) {
   window._plActivity = (entry.activity || []).slice();
-  window._plKind = kind; window._plIdx = idx;
+  window._plKind = kind; window._plIdx = idx; window._plId = idx >= 0 ? (entry.id || null) : null;
   const me = (localStorage.getItem('livingstoneUser') || '').trim();
   const today = new Date(); const iso = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
   return '<div class="form-group"><label>Activity log — what\'s been done</label>'
@@ -7340,6 +7342,12 @@ function plRenderActivity() {
 }
 
 // Logged entries save straight away on an existing prospect, so closing the box doesn't lose them
+// Find the open card's record by id (positions can change when lists reload) — v4.93
+function plResolveIdx(list, idx) {
+  const id = window._plId;
+  if (id) { const k = (list || []).findIndex(p => String(p.id) === String(id)); if (k >= 0) return k; }
+  return idx;
+}
 function plPersistActivity() {
   if (window._plKind === 'tender') {
     const t = _td.rows.find(x => String(x.id) === String(window._plTenderId));
@@ -7347,12 +7355,14 @@ function plPersistActivity() {
     return;
   }
   if (window._plKind === 'opp') {
-    const o = window._plIdx >= 0 ? db.opps[window._plIdx] : null;
+    const oi = window._plIdx >= 0 ? plResolveIdx(db.opps, window._plIdx) : -1;
+    const o = oi >= 0 ? db.opps[oi] : null;
     if (o) { o.activity = window._plActivity.slice(); o.lastContact = plLastContact(o.activity); saveOppData(); oppSync(o); pbRefreshIfVisible(); }
     return;
   }
   const list = window._plKind === 'council' ? db.councilPipeline : db.pipeline;
-  const rec = window._plIdx >= 0 ? list[window._plIdx] : null;
+  const ri = window._plIdx >= 0 ? plResolveIdx(list, window._plIdx) : -1;
+  const rec = ri >= 0 ? list[ri] : null;
   if (!rec) return;
   rec.activity = window._plActivity.slice();
   rec.lastContact = plLastContact(rec.activity);
@@ -7396,7 +7406,7 @@ function renderGrowthPipeline() {
   let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
   html += '<thead><tr><th>School</th><th>Type</th><th>Contact</th><th>Role</th><th>Stage</th><th>Est. Value</th><th>Next Action</th><th>Latest activity</th><th></th></tr></thead><tbody>';
 
-  db.pipeline.sort((a,b) => stages.indexOf(a.stage) - stages.indexOf(b.stage)).forEach((p, i) => {
+  db.pipeline.map((p, i) => ({ p, i })).sort((a,b) => stages.indexOf(a.p.stage) - stages.indexOf(b.p.stage)).forEach(({ p, i }) => {
     const col = stageColors[p.stage] || '#6b7e8e';
     html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="editPipelineEntry(' + i + ')">';
     html += '<td style="padding:8px 10px;font-weight:600;">' + (p.school||'') + '</td>';
@@ -7473,7 +7483,8 @@ function showPipelineModal(entry, idx) {
 }
 
 function savePipelineEntry() {
-  const idx = parseInt(document.getElementById('pl-idx').value);
+  const rawIdx = parseInt(document.getElementById('pl-idx').value);
+  const idx = rawIdx >= 0 ? plResolveIdx(db.pipeline, rawIdx) : rawIdx;
   const entry = {
     school: document.getElementById('pl-school').value,
     type: document.getElementById('pl-type').value,
@@ -7571,7 +7582,7 @@ function renderCouncilPipelineNow() {
   let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
   html += '<thead><tr><th>Council</th><th>Team</th><th>Contact</th><th>Role</th><th>Stage</th><th>Area</th><th>Next Action</th><th>Latest activity</th><th></th></tr></thead><tbody>';
 
-  db.councilPipeline.sort((a,b) => COUNCIL_STAGES.indexOf(a.stage) - COUNCIL_STAGES.indexOf(b.stage)).forEach((p, i) => {
+  db.councilPipeline.map((p, i) => ({ p, i })).sort((a,b) => COUNCIL_STAGES.indexOf(a.p.stage) - COUNCIL_STAGES.indexOf(b.p.stage)).forEach(({ p, i }) => {
     const col = stageColors[p.stage] || '#6b7e8e';
     html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="editCouncilEntry(' + i + ')">';
     html += '<td style="padding:8px 10px;font-weight:600;">' + (p.council||'') + '</td>';
@@ -7634,7 +7645,8 @@ function showCouncilModal(entry, idx) {
 }
 
 function saveCouncilEntry() {
-  const idx = parseInt(document.getElementById('cl-idx').value);
+  const rawIdx = parseInt(document.getElementById('cl-idx').value);
+  const idx = rawIdx >= 0 ? plResolveIdx(db.councilPipeline, rawIdx) : rawIdx;
   const entry = {
     council: document.getElementById('cl-council').value,
     team: document.getElementById('cl-team').value,
