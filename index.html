@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.91 -->
+<!-- Livingstone v4.92 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -672,7 +672,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.91</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.92</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1201,6 +1201,7 @@ window.onerror=function(m,s,l,c,e){
   <div id="page-growth" class="page content">
     <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;">
       <div class="tab active" onclick="switchGrowthTab('plan',this)">📋 Growth Plan</div>
+      <div class="tab" onclick="switchGrowthTab('board',this)">🗂 Pipeline board</div>
       <div class="tab" onclick="switchGrowthTab('pipeline',this)">🏫 Schools</div>
       <div class="tab" onclick="switchGrowthTab('assistant',this)">🤖 Schools Assistant</div>
       <div class="tab" onclick="switchGrowthTab('councils',this)">🏘 Councils</div>
@@ -1211,6 +1212,15 @@ window.onerror=function(m,s,l,c,e){
     <!-- PLAN TRACKER -->
     <div id="growth-tab-plan">
       <div id="growth-plan-content"></div>
+    </div>
+
+    <!-- PIPELINE BOARD -->
+    <div id="growth-tab-board" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:13px;color:var(--text-muted);">Every opportunity — schools, councils, housing associations, private and commercial.</div>
+        <button class="btn btn-sm btn-primary" onclick="oppAdd()">+ Add opportunity</button>
+      </div>
+      <div id="board-content"></div>
     </div>
 
     <!-- PIPELINE -->
@@ -2235,6 +2245,7 @@ async function syncJobToSupabase(ref) {
         console.log('New job inserted to Supabase:', ref);
       }
     }
+    if (job.id) { try { await supa.patch('jobs', job.id, { payment_method: job.paymentMethod || 'account' }); } catch(e) { console.warn('payment_method not saved — run v4.92 SQL', e); } }
   } catch(e) {
     // patchByRef failed (no matching row) — insert instead
     try {
@@ -2338,7 +2349,8 @@ async function loadFromSupabase() {
       endDate: j.end_date || '',
       notes: j.notes || '',
       address: j.address || '',
-      vatBasis: j.vat_basis || ''
+      vatBasis: j.vat_basis || '',
+      paymentMethod: j.payment_method || 'account'
     }));
     db.jobs = db.jobs.filter(j => j.ref && j.ref.trim() !== '');
     // Deduplicate: normalise refs (LP001 == LP-001), prefer hyphenated version
@@ -4940,8 +4952,12 @@ async function toggleJobPaymentMethod(ref, idx) {
   if (!job) return;
   job.paymentMethod = (job.paymentMethod || 'account') === 'account' ? 'cash' : 'account';
   saveData();
-  await syncJobToSupabase(ref);
   renderJobsTable();
+  await syncJobToSupabase(ref);
+  if (job.id) {
+    try { await supa.patch('jobs', job.id, { payment_method: job.paymentMethod }); }
+    catch(e) { alert('Cash / Account didn\'t save for Tom — run the v4.92 SQL in Supabase, then try again.'); }
+  }
 }
 
 // ============================================================
@@ -6933,16 +6949,243 @@ async function deletePipelineFromSupabase(p) {
 function switchGrowthTab(tab, el) {
   document.querySelectorAll('#page-growth .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['plan','pipeline','assistant','councils','cassistant','tenders'].forEach(t => {
+  ['plan','board','pipeline','assistant','councils','cassistant','tenders'].forEach(t => {
     const el2 = document.getElementById('growth-tab-' + t);
     if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
   if (tab === 'plan') renderGrowthPlan();
+  if (tab === 'board') renderPipelineBoard();
   if (tab === 'pipeline') renderGrowthPipeline();
   if (tab === 'councils') renderCouncilPipeline();
   if (tab === 'tenders') { _td.loaded = false; renderTenders(); }
   if (tab === 'cassistant') { loadCouncilFromSupabase().catch(()=>{}); asstRender('councils'); asstLoad('councils'); }
   if (tab === 'assistant') { asstRender('schools'); asstLoad('schools'); }
+}
+
+// ============================================================
+// PIPELINE BOARD (v4.92) — one kanban for every opportunity: schools (pipeline table),
+// councils (council_pipeline) and everything else (opportunities table — housing
+// associations, private clients, commercial…). Drag a card to change its stage.
+// Open tenders show as a strip above the board; they keep their own statuses.
+// ============================================================
+const PB_STAGES = ['Research','Contacted','Meeting Booked','Site Visit','On approved list','Quoting','Quoted','Won','Lost'];
+const PB_CLOSED = ['Won','Lost'];
+const PB_STAGE_COL = { Research:'#6b7e8e', Contacted:'#3498db', 'Meeting Booked':'#6B8A1F', 'Site Visit':'#8fb52a', 'On approved list':'#5d8aa8', Quoting:'#c8890a', Quoted:'#9b59b6', Won:'#2d7d4e', Lost:'#c0392b' };
+const OPP_TYPES = ['Housing association','Private client','Commercial','Developer','Other'];
+const PB_TYPE_COL = { School:'#3d6b8e', Council:'#6B8A1F', 'Housing association':'#9b59b6', 'Private client':'#c8890a', Commercial:'#2d7d4e', Developer:'#8e5b3d', Other:'#6b7e8e' };
+let _pb = { filter: 'All', showClosed: false, drag: null };
+try { const s = JSON.parse(localStorage.getItem('livingstoneBoard') || '{}'); if (s.filter) _pb.filter = s.filter; _pb.showClosed = !!s.showClosed; } catch(e) {}
+function pbSavePrefs() { try { localStorage.setItem('livingstoneBoard', JSON.stringify({ filter: _pb.filter, showClosed: _pb.showClosed })); } catch(e) {} }
+
+// --- other opportunities: storage ---
+if (!db.opps) db.opps = [];
+try { const o = JSON.parse(localStorage.getItem('livingstoneOpps')); if (Array.isArray(o)) db.opps = o; } catch(e) {}
+let _oppMissing = false;
+function saveOppData() { try { localStorage.setItem('livingstoneOpps', JSON.stringify(db.opps)); } catch(e) {} }
+async function oppLoad() {
+  try {
+    const rows = await supa.get('opportunities', 'order=created_at.asc');
+    _oppMissing = false;
+    db.opps = (rows || []).map(p => ({
+      id: p.id, name: p.name || '', type: p.type || 'Other', contact: p.contact || '', role: p.role || '',
+      email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research', area: p.area || '',
+      estValue: p.est_value || '', source: p.source || '', nextAction: p.next_action || '',
+      lastContact: p.last_contact || '', notes: p.notes || '', activity: plParseActivity(p.activity)
+    }));
+    saveOppData();
+  } catch(e) { _oppMissing = true; }
+}
+async function oppSync(p) {
+  const payload = { name: p.name || '', type: p.type || 'Other', contact: p.contact || '', role: p.role || '',
+    email: p.email || '', phone: p.phone || '', stage: p.stage || 'Research', area: p.area || '',
+    est_value: p.estValue || '', source: p.source || '', next_action: p.nextAction || '',
+    last_contact: p.lastContact || '', notes: p.notes || '', activity: JSON.stringify(p.activity || []) };
+  try { await plWrite('opportunities', p, payload); }
+  catch(e) { alert(_oppMissing ? 'Run the v4.92 SQL in Supabase first, so other opportunities are shared with Tom.' : 'Couldn\'t save that opportunity — check your connection.'); }
+}
+
+// --- stage mapping (councils used "Framework/Approved List") ---
+function pbToBoard(kind, s) {
+  if (s === 'Framework/Approved List') return 'On approved list';
+  return PB_STAGES.includes(s) ? s : 'Research';
+}
+function pbFromBoard(kind, s) { return kind === 'council' && s === 'On approved list' ? 'Framework/Approved List' : s; }
+function pbNum(v) { const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.]/g, '')); return isNaN(n) ? 0 : n; }
+
+function pbItems() {
+  const out = [];
+  (db.pipeline || []).forEach((p, i) => out.push({ kind: 'school', i, rec: p, name: p.school, type: 'School', sub: [p.type, p.contact].filter(Boolean).join(' · ') }));
+  (db.councilPipeline || []).forEach((p, i) => out.push({ kind: 'council', i, rec: p, name: p.council, type: 'Council', sub: [p.team, p.area].filter(Boolean).join(' · ') }));
+  (db.opps || []).forEach((p, i) => out.push({ kind: 'opp', i, rec: p, name: p.name, type: p.type || 'Other', sub: [p.contact, p.area].filter(Boolean).join(' · ') }));
+  out.forEach(x => { x.stage = pbToBoard(x.kind, x.rec.stage); x.value = pbNum(x.rec.estValue); });
+  return out;
+}
+function pbRec(kind, i) { return (kind === 'school' ? db.pipeline : kind === 'council' ? db.councilPipeline : db.opps)[i]; }
+function pbPersist(kind, rec) {
+  if (kind === 'school') { saveGrowthData(); syncPipelineToSupabase(rec); }
+  else if (kind === 'council') { saveCouncilData(); syncCouncilToSupabase(rec); }
+  else { saveOppData(); oppSync(rec); }
+}
+
+function renderPipelineBoard() {
+  const el = document.getElementById('board-content'); if (!el) return;
+  pbRenderNow();
+  Promise.all([
+    loadGrowthFromSupabase().catch(() => {}), loadCouncilFromSupabase().catch(() => {}),
+    oppLoad(), _td.loaded ? Promise.resolve() : tdLoad()
+  ]).then(pbRenderNow);
+}
+function pbRefreshIfVisible() {
+  const t = document.getElementById('growth-tab-board');
+  if (t && t.style.display !== 'none') pbRenderNow();
+}
+
+function pbRenderNow() {
+  const el = document.getElementById('board-content'); if (!el) return;
+  const all = pbItems();
+  const types = ['All', 'School', 'Council', ...OPP_TYPES.filter(t => all.some(x => x.type === t))];
+  if (!types.includes(_pb.filter)) _pb.filter = 'All';
+  const items = all.filter(x => _pb.filter === 'All' || x.type === _pb.filter);
+  const open = items.filter(x => !PB_CLOSED.includes(x.stage));
+  const stages = _pb.showClosed ? PB_STAGES : PB_STAGES.filter(s => !PB_CLOSED.includes(s));
+  const esc = tdEsc;
+  let h = '';
+
+  // Tenders strip
+  const tenders = (_td.rows || []).filter(t => ['Reviewing','Bidding','Submitted'].includes(t.status) && (tdDaysLeft(t.deadline) == null || tdDaysLeft(t.deadline) >= 0))
+    .sort((a, b) => String(a.deadline || '9999').localeCompare(String(b.deadline || '9999')));
+  if (tenders.length) {
+    h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;"><span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-right:4px;">Tenders due</span>';
+    tenders.forEach(t => {
+      const d = tdDaysLeft(t.deadline);
+      const urgent = d != null && d <= 7;
+      h += '<button onclick="pbOpenTender(\'' + esc(t.id) + '\')" style="border:1px solid ' + (urgent ? 'var(--danger)' : 'var(--border)') + ';background:var(--white);border-radius:16px;padding:4px 10px;font-size:12px;cursor:pointer;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(t.title) + '">'
+        + esc(t.title) + ' <span style="color:' + (urgent ? 'var(--danger)' : 'var(--text-muted)') + ';">· ' + (d == null ? 'no deadline' : d === 0 ? 'today' : d + 'd') + ' · ' + esc(t.status) + '</span></button>';
+    });
+    h += '</div>';
+  }
+
+  // Toolbar
+  h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">';
+  types.forEach(t => {
+    const n = all.filter(x => (t === 'All' || x.type === t) && !PB_CLOSED.includes(x.stage)).length;
+    const on = _pb.filter === t;
+    h += '<button onclick="_pb.filter=\'' + t + '\';pbSavePrefs();pbRenderNow()" style="border:1px solid ' + (on ? 'var(--text)' : 'var(--border)') + ';background:' + (on ? 'var(--text)' : 'var(--white)') + ';color:' + (on ? 'var(--white)' : 'var(--text)') + ';border-radius:16px;padding:4px 12px;font-size:12px;cursor:pointer;">' + t + ' <span style="opacity:.6;">' + n + '</span></button>';
+  });
+  h += '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0 0 0 auto;font-size:12px;"><input type="checkbox" style="width:auto;margin:0;"' + (_pb.showClosed ? ' checked' : '') + ' onchange="_pb.showClosed=this.checked;pbSavePrefs();pbRenderNow()"> Show won &amp; lost</label>';
+  h += '</div>';
+  h += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">' + open.length + ' open · ' + (open.reduce((s, x) => s + x.value, 0) ? finGBP(open.reduce((s, x) => s + x.value, 0)) + ' estimated' : 'no values entered') + ' · drag a card to move it. Amber dot = nothing logged for 14+ days.' + (_oppMissing ? ' <span style="color:var(--danger);">Run the v4.92 SQL so other opportunities are shared.</span>' : '') + '</div>';
+
+  // Columns
+  h += '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:10px;align-items:flex-start;">';
+  stages.forEach(s => {
+    const col = items.filter(x => x.stage === s);
+    const tot = col.reduce((a, x) => a + x.value, 0);
+    h += '<div class="pb-col" data-stage="' + esc(s) + '" ondragover="event.preventDefault();this.classList.add(\'pb-over\')" ondragleave="this.classList.remove(\'pb-over\')" ondrop="pbDrop(event,\'' + esc(s) + '\')" style="flex:1 1 0;min-width:175px;background:rgba(0,0,0,0.035);border-radius:8px;padding:8px;min-height:240px;">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 4px 8px;border-bottom:3px solid ' + PB_STAGE_COL[s] + ';margin-bottom:8px;"><strong style="font-size:12px;">' + esc(s) + ' <span style="color:var(--text-muted);font-weight:400;">' + col.length + '</span></strong><span style="font-size:11px;color:var(--text-muted);">' + (tot ? finGBP(tot) : '') + '</span></div>';
+    col.forEach(x => {
+      const last = plSorted(x.rec.activity)[0];
+      const lc = x.rec.lastContact || (last && last.date);
+      const stale = !PB_CLOSED.includes(s) && (!lc || (Date.now() - new Date(lc + 'T00:00:00')) > 14 * 86400000);
+      h += '<div class="pb-card" draggable="true" ondragstart="pbDragStart(event,\'' + x.kind + '\',' + x.i + ')" ondragend="document.querySelectorAll(\'.pb-over\').forEach(e=>e.classList.remove(\'pb-over\'))" onclick="pbOpen(\'' + x.kind + '\',' + x.i + ')" style="background:var(--white);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:8px;cursor:grab;font-size:12px;">'
+        + '<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;"><strong style="font-size:13px;line-height:1.3;">' + esc(x.name || '(no name)') + '</strong>' + (stale ? '<span title="Nothing logged for 14+ days" style="flex:none;width:8px;height:8px;border-radius:50%;background:#e0a100;margin-top:4px;"></span>' : '') + '</div>'
+        + '<div style="display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap;"><span style="font-size:10px;padding:1px 7px;border-radius:9px;background:' + (PB_TYPE_COL[x.type] || '#6b7e8e') + ';color:#fff;">' + esc(x.type) + '</span>' + (x.value ? '<span style="font-weight:600;">' + finGBP(x.value) + '</span>' : '') + '</div>'
+        + (x.sub ? '<div style="color:var(--text-muted);font-size:11px;">' + esc(x.sub) + '</div>' : '')
+        + (x.rec.nextAction ? '<div style="color:var(--copper-dark,#6B8A1F);margin-top:4px;">→ ' + esc(x.rec.nextAction) + '</div>' : '')
+        + (last ? '<div style="color:var(--text-muted);font-size:11px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(last.text) + '">🕑 ' + plFmt(last.date) + ' — ' + esc(last.text) + '</div>' : '')
+        + '</div>';
+    });
+    h += '</div>';
+  });
+  h += '</div><style>.pb-col.pb-over{outline:2px dashed var(--copper,#B5DD3C);outline-offset:-2px;}.pb-card:hover{border-color:var(--text-muted)!important;}</style>';
+  el.innerHTML = h;
+}
+
+function pbDragStart(e, kind, i) { _pb.drag = { kind, i }; try { e.dataTransfer.setData('text/plain', kind + ':' + i); e.dataTransfer.effectAllowed = 'move'; } catch(err) {} }
+function pbDrop(e, stage) {
+  e.preventDefault();
+  document.querySelectorAll('.pb-over').forEach(x => x.classList.remove('pb-over'));
+  const d = _pb.drag; _pb.drag = null; if (!d) return;
+  const rec = pbRec(d.kind, d.i); if (!rec) return;
+  const ns = pbFromBoard(d.kind, stage);
+  if (rec.stage === ns) return;
+  rec.stage = ns;
+  pbPersist(d.kind, rec);
+  pbRenderNow();
+}
+function pbOpen(kind, i) {
+  if (kind === 'school') editPipelineEntry(i);
+  else if (kind === 'council') editCouncilEntry(i);
+  else oppShowModal(db.opps[i], i);
+}
+function pbOpenTender(id) {
+  const tab = [...document.querySelectorAll('#page-growth .tab')].find(t => /Tenders/.test(t.textContent));
+  if (tab) switchGrowthTab('tenders', tab);
+  setTimeout(() => { if (_td.loaded) tdOpen(id); }, 50);
+}
+
+// --- add / edit other opportunity (also adds schools and councils) ---
+function oppAdd() {
+  oppShowModal({ name: '', type: _pb.filter !== 'All' ? _pb.filter : 'Housing association', contact: '', role: '', email: '', phone: '', stage: 'Research', area: '', estValue: '', source: '', nextAction: '', notes: '', activity: [] }, -1);
+}
+function oppShowModal(entry, idx) {
+  let modal = document.getElementById('opp-modal');
+  if (!modal) {
+    modal = document.createElement('div'); modal.id = 'opp-modal'; modal.className = 'modal-overlay';
+    modal.onclick = e => { if (e.target === modal) closeModal('opp-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:620px;"><div class="modal-header"><div class="modal-title" id="opp-modal-title"></div><button class="modal-close" onclick="closeModal(\'opp-modal\')">×</button></div><div class="modal-body" id="opp-modal-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+  const esc = tdEsc;
+  document.getElementById('opp-modal-title').textContent = idx < 0 ? 'Add opportunity' : 'Edit — ' + (entry.name || '');
+  const typeOpts = (idx < 0 ? ['School', 'Council'] : []).concat(OPP_TYPES);
+  const f = (id, label, val, ph) => '<div class="form-group"><label>' + label + '</label><input id="' + id + '" value="' + esc(val || '') + '" placeholder="' + (ph || '') + '"></div>';
+  document.getElementById('opp-modal-body').innerHTML =
+    '<input type="hidden" id="opp-idx" value="' + idx + '">'
+    + '<div class="grid-2" style="gap:12px;">'
+    + f('opp-name', 'Name', entry.name, 'e.g. Aspire Housing')
+    + '<div class="form-group"><label>Type</label><select id="opp-type">' + typeOpts.map(t => '<option' + (t === entry.type ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>'
+    + f('opp-contact', 'Contact', entry.contact) + f('opp-role', 'Role', entry.role)
+    + f('opp-email', 'Email', entry.email) + f('opp-phone', 'Phone', entry.phone)
+    + '<div class="form-group"><label>Stage</label><select id="opp-stage">' + PB_STAGES.map(s => '<option' + (s === pbToBoard('opp', entry.stage) ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></div>'
+    + f('opp-value', 'Est. value (£)', entry.estValue, 'e.g. 50000')
+    + f('opp-area', 'Area', entry.area, 'e.g. Newcastle-under-Lyme') + f('opp-source', 'Source', entry.source, 'e.g. Referral from…')
+    + '</div>'
+    + f('opp-next', 'Next action', entry.nextAction)
+    + '<div class="form-group"><label>Notes</label><textarea id="opp-notes" rows="3" style="width:100%;">' + esc(entry.notes || '') + '</textarea></div>'
+    + plActivityBlock('opp', entry, idx)
+    + '<div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;"><div>' + (idx >= 0 ? '<button class="btn btn-sm btn-danger" onclick="oppDelete(' + idx + ')">Delete</button>' : '') + '</div><div style="display:flex;gap:8px;"><button class="btn btn-secondary" onclick="closeModal(\'opp-modal\')">Cancel</button><button class="btn btn-primary" onclick="oppSave()">Save</button></div></div>';
+  plRenderActivity();
+  modal.style.display = 'flex';
+}
+function oppSave() {
+  const v = id => (document.getElementById(id).value || '').trim();
+  const idx = parseInt(document.getElementById('opp-idx').value);
+  const type = v('opp-type'), name = v('opp-name');
+  if (!name) { alert('Enter a name.'); return; }
+  const activity = (window._plActivity || []).slice();
+  const common = { contact: v('opp-contact'), role: v('opp-role'), email: v('opp-email'), phone: v('opp-phone'), estValue: v('opp-value'),
+    source: v('opp-source'), nextAction: v('opp-next'), notes: document.getElementById('opp-notes').value, activity, lastContact: plLastContact(activity) };
+  const stage = v('opp-stage');
+  if (idx < 0 && type === 'School') {
+    const e = { school: name, type: '', stage, ...common, id: 'local_' + Date.now() };
+    db.pipeline.push(e); saveGrowthData(); syncPipelineToSupabase(e);
+  } else if (idx < 0 && type === 'Council') {
+    const e = { council: name, team: '', area: v('opp-area'), stage: pbFromBoard('council', stage), ...common, id: 'local_' + Date.now() };
+    db.councilPipeline.push(e); saveCouncilData(); syncCouncilToSupabase(e);
+  } else {
+    const e = { name, type, stage, area: v('opp-area'), ...common, id: idx >= 0 ? db.opps[idx].id : ('local_' + Date.now()) };
+    if (idx >= 0) db.opps[idx] = e; else db.opps.push(e);
+    saveOppData(); oppSync(e);
+  }
+  closeModal('opp-modal');
+  pbRenderNow();
+}
+async function oppDelete(idx) {
+  const p = db.opps[idx]; if (!p || !confirm('Remove ' + (p.name || 'this opportunity') + '?')) return;
+  db.opps.splice(idx, 1); saveOppData();
+  closeModal('opp-modal'); pbRenderNow();
+  if (p.id && !String(p.id).startsWith('local_')) { try { await supa.delete('opportunities', p.id); } catch(e) {} }
 }
 
 function renderGrowthPage() {
@@ -7103,6 +7346,11 @@ function plPersistActivity() {
     if (t) { t.activity = window._plActivity.slice(); tdSave(t); if (typeof renderTenders === 'function') renderTenders(); }
     return;
   }
+  if (window._plKind === 'opp') {
+    const o = window._plIdx >= 0 ? db.opps[window._plIdx] : null;
+    if (o) { o.activity = window._plActivity.slice(); o.lastContact = plLastContact(o.activity); saveOppData(); oppSync(o); pbRefreshIfVisible(); }
+    return;
+  }
   const list = window._plKind === 'council' ? db.councilPipeline : db.pipeline;
   const rec = window._plIdx >= 0 ? list[window._plIdx] : null;
   if (!rec) return;
@@ -7133,10 +7381,11 @@ function plDeleteActivity(ts) {
 }
 
 function renderGrowthPipeline() {
+  if (typeof pbRefreshIfVisible === 'function') pbRefreshIfVisible();
   const el = document.getElementById('pipeline-content');
   if (!el) return;
 
-  const stages = ['Research','Contacted','Meeting Booked','Site Visit','Quoting','Quoted','Won','Lost'];
+  const stages = ['Research','Contacted','Meeting Booked','Site Visit','On approved list','Quoting','Quoted','Won','Lost'];
   const stageColors = { Research:'#6b7e8e', Contacted:'#3498db', 'Meeting Booked':'#6B8A1F', 'Site Visit':'#B5DD3C', Quoting:'#c8890a', Quoted:'#9b59b6', Won:'#2d7d4e', Lost:'#c0392b' };
 
   if (!db.pipeline.length) {
@@ -7196,7 +7445,7 @@ function showPipelineModal(entry, idx) {
   }
 
   document.getElementById('pl-modal-title').textContent = idx < 0 ? 'Add Prospect' : 'Edit — ' + (entry.school||'');
-  const stages = ['Research','Contacted','Meeting Booked','Site Visit','Quoting','Quoted','Won','Lost'];
+  const stages = ['Research','Contacted','Meeting Booked','Site Visit','On approved list','Quoting','Quoted','Won','Lost'];
   document.getElementById('pl-modal-body').innerHTML =
     '<input type="hidden" id="pl-idx" value="' + idx + '">'
     + '<div class="form-group"><label>School Name</label><input type="text" id="pl-school" value="' + (entry.school||'').replace(/"/g,'&quot;') + '"></div>'
@@ -7299,7 +7548,7 @@ async function deleteCouncilFromSupabase(p) {
   }
 }
 
-const COUNCIL_STAGES = ['Research','Contacted','Meeting Booked','Framework/Approved List','Quoting','Quoted','Won','Lost'];
+const COUNCIL_STAGES = ['Research','Contacted','Meeting Booked','Site Visit','Framework/Approved List','Quoting','Quoted','Won','Lost'];
 
 function renderCouncilPipeline() {
   const el = document.getElementById('council-pipeline-content');
@@ -7309,6 +7558,7 @@ function renderCouncilPipeline() {
 }
 
 function renderCouncilPipelineNow() {
+  if (typeof pbRefreshIfVisible === 'function') pbRefreshIfVisible();
   const el = document.getElementById('council-pipeline-content');
   if (!el) return;
   const stageColors = { Research:'#6b7e8e', Contacted:'#3498db', 'Meeting Booked':'#6B8A1F', 'Framework/Approved List':'#B5DD3C', Quoting:'#c8890a', Quoted:'#9b59b6', Won:'#2d7d4e', Lost:'#c0392b' };
@@ -13479,6 +13729,7 @@ function renderMeetingPage() {
     mtgLoadOpenTodos(),
     qtLoad(),
     tdLoad(),
+    oppLoad(),
     mtgLoadHistory()
   ]).then(() => renderMeetingNow());
 }
@@ -13725,6 +13976,7 @@ function renderMeetingNow() {
   const stale = d => { const x = mtgParse(d); return !x || (c.today - x) > 14 * 86400000; };
   const schools = (db.pipeline || []).filter(p => p.stage !== 'Won' && p.stage !== 'Lost');
   const councils = (db.councilPipeline || []).filter(p => p.stage !== 'Won' && p.stage !== 'Lost');
+  const others = (db.opps || []).filter(p => p.stage !== 'Won' && p.stage !== 'Lost');
   h += mtgSectionStart('Pipeline', '10 min', mtgGBP(c.pipelineValue) + ' in enquiries and quotes');
   h += '<div class="table-wrap"><table><thead><tr><th>Lead</th><th>Stage</th><th style="text-align:right;">Value</th><th>Next action</th><th>Last activity</th></tr></thead><tbody>';
   const pipeRows = [];
@@ -13732,6 +13984,7 @@ function renderMeetingNow() {
   _td.rows.filter(t => TD_OPEN.includes(t.status) && (tdDaysLeft(t.deadline) == null || tdDaysLeft(t.deadline) >= 0)).forEach(t => pipeRows.push('<tr><td>' + mtgEsc(t.title) + ' <span style="font-size:11px;color:var(--text-muted);">Tender · ' + mtgEsc(t.buyer || '') + '</span></td><td><span class="badge badge-enquiry">' + mtgEsc(t.status) + '</span></td><td style="text-align:right;font-size:12px;">' + mtgEsc(t.value_text || '—') + '</td><td style="font-size:12px;">' + (t.owner ? mtgEsc(t.owner) + ' · ' : '') + 'Decide bid / no-bid</td><td style="font-size:12px;">' + tdDeadlineCell(t) + '</td></tr>'));
   schools.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.school) + ' <span style="font-size:11px;color:var(--text-muted);">School</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
   councils.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.council) + ' <span style="font-size:11px;color:var(--text-muted);">Council</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
+  others.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.name) + ' <span style="font-size:11px;color:var(--text-muted);">' + mtgEsc(p.type || 'Other') + '</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
   h += pipeRows.length ? pipeRows.join('') : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:16px;">Pipeline is empty.</td></tr>';
   h += '</tbody></table></div>';
   h += '<div style="padding:10px 20px 16px;font-size:12px;color:var(--text-muted);">Change stages on the Pipeline and Growth pages. Amber = no contact in 14+ days.</div>';
