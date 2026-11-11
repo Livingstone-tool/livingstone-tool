@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.94 -->
+<!-- Livingstone v4.95 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -668,11 +668,12 @@ window.onerror=function(m,s,l,c,e){
       <div class="nav-item" onclick="showPage('finance')"><span class="icon">£</span> Finance &amp; P&amp;L</div>
     <div class="nav-item" onclick="showPage('costs')"><span class="icon">💰</span> Cost Tracker</div>
     <div class="nav-item" onclick="showPage('invoices')"><span class="icon">📄</span> Invoices</div>
+    <div class="nav-item" onclick="showPage('personal')"><span class="icon">🧾</span> Personal Expenses</div>
     </div>
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.94</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.95</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1301,6 +1302,11 @@ window.onerror=function(m,s,l,c,e){
   </div>
 
   <!-- FINANCE PAGE -->
+  <div id="page-personal" class="page content">
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;max-width:820px;">Anything either of you buys for yourselves through the business — lunch, clothes, shoes. Mark each one repaid or sorted with the accountant so nothing gets missed at year end.</div>
+    <div id="px-root" style="max-width:1300px;"></div>
+  </div>
+
   <div id="page-finance" class="page content">
     <div id="finance-root" style="max-width:1300px;"></div>
   </div>
@@ -3092,7 +3098,7 @@ const SEED = {
 // ============================================================
 // NAVIGATION
 // ============================================================
-const PAGE_TITLES = {
+const PAGE_TITLES = { personal:'Personal Expenses',
   dashboard:'Dashboard', pipeline:'Pipeline', jobs:'All Jobs',
   quotes:'Quote Builder', tasks:'Tasks', subs:'Subcontractors',
   products:'Products', othercosts:'Other Costs', actions:'Business Actions', finance:'Finance & P&L', planning:'Planning', costs:'Cost Tracker', invoices:'Invoices', growth:'Growth', braindump:'Brain Dump', meeting:'Weekly Meeting'
@@ -3144,6 +3150,7 @@ function renderPage(id) {
   else if(id==='invoices') { renderInvoicesPage(); loadInvoicesFromSupabase().then(renderInvoicesPage); }
   else if(id==='meeting') renderMeetingPage();
   else if(id==='finance') renderFinancePage();
+  else if(id==='personal') renderPersonalExpenses();
   else if(id==='growth') renderGrowthPage();
 }
 
@@ -6971,8 +6978,8 @@ function switchGrowthTab(tab, el) {
 const PB_STAGES = ['Research','Contacted','Meeting Booked','Site Visit','On approved list','Quoting','Quoted','Won','Lost'];
 const PB_CLOSED = ['Won','Lost'];
 const PB_STAGE_COL = { Research:'#6b7e8e', Contacted:'#3498db', 'Meeting Booked':'#6B8A1F', 'Site Visit':'#8fb52a', 'On approved list':'#5d8aa8', Quoting:'#c8890a', Quoted:'#9b59b6', Won:'#2d7d4e', Lost:'#c0392b' };
-const OPP_TYPES = ['Housing association','Private client','Commercial','Developer','Other'];
-const PB_TYPE_COL = { School:'#3d6b8e', Council:'#6B8A1F', 'Housing association':'#9b59b6', 'Private client':'#c8890a', Commercial:'#2d7d4e', Developer:'#8e5b3d', Other:'#6b7e8e' };
+const OPP_TYPES = ['Housing association','Architect','Private client','Commercial','Developer','Other'];
+const PB_TYPE_COL = { School:'#3d6b8e', Council:'#6B8A1F', 'Housing association':'#9b59b6', Architect:'#b5487a', 'Private client':'#c8890a', Commercial:'#2d7d4e', Developer:'#8e5b3d', Other:'#6b7e8e' };
 let _pb = { filter: 'All', showClosed: false, drag: null };
 try { const s = JSON.parse(localStorage.getItem('livingstoneBoard') || '{}'); if (s.filter) _pb.filter = s.filter; _pb.showClosed = !!s.showClosed; } catch(e) {}
 function pbSavePrefs() { try { localStorage.setItem('livingstoneBoard', JSON.stringify({ filter: _pb.filter, showClosed: _pb.showClosed })); } catch(e) {} }
@@ -7189,6 +7196,149 @@ async function oppDelete(idx) {
   db.opps.splice(idx, 1); saveOppData();
   closeModal('opp-modal'); pbRenderNow();
   if (p.id && !String(p.id).startsWith('local_')) { try { await supa.delete('opportunities', p.id); } catch(e) {} }
+}
+
+// ============================================================
+// PERSONAL EXPENSES (v4.95) — anything Adam or Tom buys for themselves through the business
+// (lunch, clothes, shoes…), so it can be repaid or sorted with the accountant.
+// Supabase table: personal_expenses (falls back to this device until the SQL is run).
+// ============================================================
+const PX_WHO = ['Adam', 'Tom'];
+const PX_CATS = ['Food & drink', 'Clothing & shoes', 'Travel & fuel', 'Phone & tech', 'Household', 'Other'];
+const PX_PAID = ['Virgin Money', 'Capital on Tap', 'Other'];
+const PX_STATUS = ['Not settled', 'Repaid to business', 'Sorted with accountant'];
+let _px = { rows: [], loaded: false, missing: false, who: 'All', showSettled: false };
+try { const r = JSON.parse(localStorage.getItem('livingstonePx') || '[]'); if (Array.isArray(r)) _px.rows = r; } catch(e) {}
+function pxSaveLocal() { try { localStorage.setItem('livingstonePx', JSON.stringify(_px.rows)); } catch(e) {} }
+function pxEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function pxGBP(n) { return '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function pxToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function pxPayload(r) { return { date: r.date || null, who: r.who || '', item: r.item || '', category: r.category || 'Other', amount: Number(r.amount) || 0, paid_with: r.paid_with || '', status: r.status || 'Not settled', notes: r.notes || '' }; }
+
+async function pxLoad() {
+  try {
+    const rows = await supa.get('personal_expenses', 'order=date.desc');
+    const localOnly = _px.rows.filter(r => !r.id || String(r.id).startsWith('local_'));
+    _px.rows = (rows || []).map(r => ({ ...r, amount: Number(r.amount) || 0 }));
+    _px.missing = false;
+    for (const r of localOnly) { _px.rows.push(r); await pxSync(r); }   // added before the table existed
+    pxSaveLocal();
+  } catch(e) { _px.missing = true; }
+  _px.loaded = true;
+}
+async function pxSync(r) {
+  pxSaveLocal();
+  try {
+    if (r.id && !String(r.id).startsWith('local_')) await supa.patch('personal_expenses', r.id, pxPayload(r));
+    else { const res = await supa.post('personal_expenses', pxPayload(r)); if (res && res[0] && res[0].id) { r.id = res[0].id; pxSaveLocal(); } }
+  } catch(e) { _px.missing = true; }
+}
+
+function renderPersonalExpenses() {
+  pxRenderNow();
+  pxLoad().then(pxRenderNow);
+}
+
+function pxRenderNow() {
+  const el = document.getElementById('px-root'); if (!el) return;
+  const all = _px.rows.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const open = r => (r.status || 'Not settled') === 'Not settled';
+  const month = pxToday().slice(0, 7);
+  let h = '';
+  if (_px.missing) h += '<div class="alert alert-warning" style="margin-bottom:14px;font-size:13px;">Only saved on this device for now. Run the v4.95 SQL in Supabase so Tom sees the same list.</div>';
+
+  // Summary per person
+  h += '<div class="grid-2" style="gap:14px;margin-bottom:18px;">';
+  PX_WHO.forEach(w => {
+    const mine = all.filter(r => r.who === w);
+    const owed = mine.filter(open).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const thisMonth = mine.filter(r => String(r.date || '').startsWith(month)).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const total = mine.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    h += '<div class="card" style="padding:16px 18px;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);">' + w + '</div>'
+      + '<div style="font-size:26px;font-weight:700;margin:4px 0;color:' + (owed ? 'var(--danger)' : 'var(--text)') + ';">' + pxGBP(owed) + '</div>'
+      + '<div style="font-size:12px;color:var(--text-muted);">not settled · ' + pxGBP(thisMonth) + ' this month · ' + pxGBP(total) + ' all time</div></div>';
+  });
+  h += '</div>';
+
+  // Add row
+  const sel = (id, opts, val) => '<select id="' + id + '" style="width:100%;">' + opts.map(o => '<option' + (o === val ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
+  h += '<div class="card" style="padding:14px 16px;margin-bottom:16px;"><div style="font-weight:600;margin-bottom:10px;">Add a purchase</div>'
+    + '<div style="display:grid;grid-template-columns:130px 100px 1fr 160px 110px 150px auto;gap:8px;align-items:end;" class="px-add">'
+    + '<div><label style="font-size:11px;">Date</label><input type="date" id="px-date" value="' + pxToday() + '" style="width:100%;"></div>'
+    + '<div><label style="font-size:11px;">Who</label>' + sel('px-who', PX_WHO, (typeof currentUser !== 'undefined' && /tom/i.test(String(currentUser))) ? 'Tom' : 'Adam') + '</div>'
+    + '<div><label style="font-size:11px;">What</label><input id="px-item" placeholder="e.g. Lunch at site, work boots" style="width:100%;" onkeydown="if(event.key===\'Enter\')pxAdd()"></div>'
+    + '<div><label style="font-size:11px;">Category</label>' + sel('px-cat', PX_CATS, 'Food & drink') + '</div>'
+    + '<div><label style="font-size:11px;">Amount (£)</label><input type="number" step="0.01" min="0" id="px-amount" style="width:100%;" onkeydown="if(event.key===\'Enter\')pxAdd()"></div>'
+    + '<div><label style="font-size:11px;">Paid with</label>' + sel('px-paid', PX_PAID, 'Virgin Money') + '</div>'
+    + '<button class="btn btn-primary" onclick="pxAdd()">Add</button></div></div>';
+
+  // Filters
+  h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">';
+  ['All'].concat(PX_WHO).forEach(w => {
+    const on = _px.who === w;
+    h += '<button onclick="_px.who=\'' + w + '\';pxRenderNow()" style="border:1px solid ' + (on ? 'var(--text)' : 'var(--border)') + ';background:' + (on ? 'var(--text)' : 'var(--white)') + ';color:' + (on ? 'var(--white)' : 'var(--text)') + ';border-radius:16px;padding:4px 12px;font-size:12px;cursor:pointer;">' + w + '</button>';
+  });
+  h += '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0 0 0 12px;font-size:12px;"><input type="checkbox" style="width:auto;margin:0;"' + (_px.showSettled ? ' checked' : '') + ' onchange="_px.showSettled=this.checked;pxRenderNow()"> Show settled</label>';
+  h += '<button class="btn btn-sm btn-secondary" style="margin-left:auto;" onclick="pxExport()">⬇ Download for accountant (CSV)</button></div>';
+
+  // Table
+  const list = all.filter(r => (_px.who === 'All' || r.who === _px.who) && (_px.showSettled || open(r)));
+  const tot = list.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  h += '<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;font-size:13px;"><thead><tr><th>Date</th><th>Who</th><th>What</th><th>Category</th><th style="text-align:right;">Amount</th><th>Paid with</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>';
+  if (!list.length) h += '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:20px;">' + (all.length ? 'Nothing outstanding — tick "Show settled" to see everything.' : 'Nothing recorded yet.') + '</td></tr>';
+  list.forEach(r => {
+    const id = pxEsc(r.id);
+    const f = (field, v) => 'pxSet(\'' + id + '\',\'' + field + '\',' + v + ')';
+    const s = (field, opts) => '<select onchange="' + f(field, 'this.value') + '" style="font-size:12px;padding:3px 4px;min-width:' + ({ who: 72, category: 130, paid_with: 120, status: 140 }[field] || 90) + 'px;">' + (opts.includes(r[field]) ? opts : opts.concat(r[field] ? [r[field]] : [])).map(o => '<option' + (o === r[field] ? ' selected' : '') + '>' + pxEsc(o) + '</option>').join('') + '</select>';
+    const settled = !open(r);
+    h += '<tr style="' + (settled ? 'opacity:.55;' : '') + '">'
+      + '<td><input type="date" value="' + pxEsc(r.date || '') + '" onchange="' + f('date', 'this.value') + '" style="font-size:12px;padding:3px 4px;width:128px;"></td>'
+      + '<td>' + s('who', PX_WHO) + '</td>'
+      + '<td><input value="' + pxEsc(r.item) + '" onchange="' + f('item', 'this.value') + '" style="font-size:12px;padding:3px 6px;min-width:160px;width:100%;"></td>'
+      + '<td>' + s('category', PX_CATS) + '</td>'
+      + '<td style="text-align:right;"><input type="number" step="0.01" value="' + (Number(r.amount) || 0).toFixed(2) + '" onchange="' + f('amount', 'this.value') + '" style="font-size:12px;padding:3px 6px;width:90px;text-align:right;"></td>'
+      + '<td>' + s('paid_with', PX_PAID) + '</td>'
+      + '<td>' + s('status', PX_STATUS) + '</td>'
+      + '<td><input value="' + pxEsc(r.notes || '') + '" placeholder="Notes" onchange="' + f('notes', 'this.value') + '" style="font-size:12px;padding:3px 6px;min-width:90px;width:100%;"></td>'
+      + '<td><button onclick="pxDelete(\'' + id + '\')" title="Delete" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button></td></tr>';
+  });
+  if (list.length) h += '<tr style="font-weight:700;"><td colspan="4">Total shown</td><td style="text-align:right;">' + pxGBP(tot) + '</td><td colspan="4"></td></tr>';
+  h += '</tbody></table></div>';
+  h += '<style>@media (max-width:900px){.px-add{grid-template-columns:1fr 1fr!important;}}</style>';
+  el.innerHTML = h;
+}
+
+function pxAdd() {
+  const v = id => (document.getElementById(id).value || '').trim();
+  const amount = parseFloat(v('px-amount'));
+  if (!v('px-item')) { alert('Say what was bought.'); return; }
+  if (!(amount > 0)) { alert('Enter the amount.'); return; }
+  const r = { id: 'local_' + Date.now(), date: v('px-date') || pxToday(), who: v('px-who'), item: v('px-item'), category: v('px-cat'), amount, paid_with: v('px-paid'), status: 'Not settled', notes: '' };
+  _px.rows.push(r);
+  pxRenderNow();
+  pxSync(r).then(pxRenderNow);
+  setTimeout(() => { const i = document.getElementById('px-item'); if (i) i.focus(); }, 0);
+}
+function pxSet(id, field, val) {
+  const r = _px.rows.find(x => String(x.id) === String(id)); if (!r) return;
+  r[field] = field === 'amount' ? (parseFloat(val) || 0) : val;
+  pxSync(r);
+  if (['status', 'who', 'amount', 'date'].includes(field)) pxRenderNow();
+}
+async function pxDelete(id) {
+  const r = _px.rows.find(x => String(x.id) === String(id)); if (!r) return;
+  if (!confirm('Delete "' + r.item + '" (' + pxGBP(r.amount) + ')?')) return;
+  _px.rows = _px.rows.filter(x => x !== r); pxSaveLocal(); pxRenderNow();
+  if (r.id && !String(r.id).startsWith('local_')) { try { await supa.delete('personal_expenses', r.id); } catch(e) { alert('Couldn\'t delete it from the shared list — check your connection.'); } }
+}
+function pxExport() {
+  const rows = _px.rows.filter(r => _px.who === 'All' || r.who === _px.who).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+  const csv = ['Date,Who,What,Category,Amount,Paid with,Status,Notes'].concat(rows.map(r => [r.date, r.who, r.item, r.category, (Number(r.amount) || 0).toFixed(2), r.paid_with, r.status, r.notes].map(q).join(','))).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'livingstone-personal-expenses-' + pxToday() + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 function renderGrowthPage() {
