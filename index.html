@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.96 -->
+<!-- Livingstone v4.97 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -673,7 +673,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.96</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.97</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1819,7 +1819,7 @@ window.onerror=function(m,s,l,c,e){
         <div class="form-group"><label>Client Email</label><input type="email" id="job-client-email"></div>
         <div class="form-group" style="grid-column:1/-1;"><label>Project Address</label><input type="text" id="job-address" placeholder="Site address"></div>
         <div class="form-group"><label>Job Scale (1-10)</label><input type="number" id="job-scale" min="1" max="10"></div>
-        <div class="form-group"><label>Estimate to Client (£)</label><input type="number" id="job-estimate" step="100" placeholder="Ballpark figure"></div>
+        <input type="hidden" id="job-estimate"><!-- ballpark estimate retired v4.97: kept hidden so old values aren't wiped, but no longer shown or used -->
         <div class="form-group"><label>Start Date</label><input type="date" id="job-start"></div>
         <div class="form-group"><label>End Date</label><input type="date" id="job-end"></div>
       </div>
@@ -3402,7 +3402,7 @@ function renderDashboard() {
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
   const activeStatuses = ['Initial Enquiry','Preparing Quote','Quoted','Confirmed','In Progress','On Hold','Snagging','Completed - Not Paid'];
   const activeJobs = db.jobs.filter(j => activeStatuses.includes(j.status));
-  const pipelineVal = activeJobs.reduce((s,j) => s + (j.quoteValue || j.estimate || 0), 0);
+  const pipelineVal = activeJobs.reduce((s,j) => s + (j.quoteValue || 0), 0);
   const totalCost = activeJobs.reduce((s,j) => s + (j.estCost || 0), 0);
   // Margin uses only jobs with actual quotes and est costs
   const marginJobs = activeJobs.filter(j => j.quoteValue && j.estCost);
@@ -3564,7 +3564,7 @@ function renderPipeline() {
     const colJobs = jobs.filter(j=>j.status===status);
     const total = colJobs.reduce((s,j)=>s+finJobValueNet(j),0);
     const cards = colJobs.map(j=>{
-      const valLabel = j.quoteValue ? finGBP(finJobValueNet(j)) : j.estimate ? '~' + finGBP(finJobValueNet(j)) : 'TBC';
+      const valLabel = j.quoteValue ? finGBP(finJobValueNet(j)) : 'TBC';
       return '<div class="pipeline-card" onclick="openJob(\'' + j.ref + '\')">'
         + '<div class="job-ref">' + j.ref + '</div>'
         + '<div class="job-name">' + j.name + '</div>'
@@ -3612,7 +3612,7 @@ function renderJobsTable() {
     var margin = pl.pct;
     var pctCol = function(p) { return p > 20 ? 'var(--success)' : p > 10 ? '#e67e22' : 'var(--danger)'; };
     // Show the price as quoted (what the client sees), with the VAT tag and the ex-VAT figure the margins use underneath
-    var asQuoted = quoteVal || parseFloat(j.estimate) || 0;
+    var asQuoted = quoteVal;
     var basisNow = asQuoted ? finVatBasis(j.ref) : '';
     var quoteDisplay = asQuoted
       ? (quoteVal ? '' : '<span style="color:var(--text-muted);">~</span>') + finGBP(asQuoted)
@@ -3637,7 +3637,7 @@ function renderJobsTable() {
       + '🏗 Lead: ' + leadName + ' · Scale: ' + (j.scale||'—') + '/10<br>'
       + '📋 ' + taskCount + ' task' + (taskCount!==1?'s':'')
       + (quoteVal ? ' · Quote: ' + finGBP(pl.quote) + ' ex VAT' : '')
-      + (!quoteVal && j.estimate ? ' · Estimate: ~' + finGBP(finJobValueNet(j)) + ' ex VAT' : '')
+
       + (j.notes ? '<br>📝 ' + j.notes.substring(0,80) + (j.notes.length>80?'...':'') : '')
       + '</div>';
     var row = '<tr class="clickable-row" data-ref="' + (j.ref||'') + '" onclick="openJob(this.dataset.ref)" style="cursor:pointer;">';
@@ -14148,7 +14148,7 @@ function renderMeetingNow() {
   h += mtgSectionStart('Pipeline', '10 min', mtgGBP(c.pipelineValue) + ' in enquiries and quotes');
   h += '<div class="table-wrap"><table><thead><tr><th>Lead</th><th>Stage</th><th style="text-align:right;">Value</th><th>Next action</th><th>Last activity</th></tr></thead><tbody>';
   const pipeRows = [];
-  c.pipeJobs.forEach(j => pipeRows.push('<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td><td>' + statusBadge(j.status) + '</td><td style="text-align:right;">' + ((j.quoteValue || j.estimate) ? mtgGBP(finJobValueNet(j)) : '—') + '</td><td style="font-size:12px;">' + (j.status === 'Quoted' ? 'Follow up on quote' : '') + '</td><td>—</td></tr>'));
+  c.pipeJobs.forEach(j => pipeRows.push('<tr><td><a href="#" onclick="openJob(\'' + mtgEsc(j.ref) + '\');return false;"><strong>' + mtgEsc(j.ref) + '</strong></a> ' + mtgEsc(j.name) + '</td><td>' + statusBadge(j.status) + '</td><td style="text-align:right;">' + (j.quoteValue ? mtgGBP(finJobValueNet(j)) : '—') + '</td><td style="font-size:12px;">' + (j.status === 'Quoted' ? 'Follow up on quote' : '') + '</td><td>—</td></tr>'));
   _td.rows.filter(t => TD_OPEN.includes(t.status) && (tdDaysLeft(t.deadline) == null || tdDaysLeft(t.deadline) >= 0)).forEach(t => pipeRows.push('<tr><td>' + mtgEsc(t.title) + ' <span style="font-size:11px;color:var(--text-muted);">Tender · ' + mtgEsc(t.buyer || '') + '</span></td><td><span class="badge badge-enquiry">' + mtgEsc(t.status) + '</span></td><td style="text-align:right;font-size:12px;">' + mtgEsc(t.value_text || '—') + '</td><td style="font-size:12px;">' + (t.owner ? mtgEsc(t.owner) + ' · ' : '') + 'Decide bid / no-bid</td><td style="font-size:12px;">' + tdDeadlineCell(t) + '</td></tr>'));
   schools.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.school) + ' <span style="font-size:11px;color:var(--text-muted);">School</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
   councils.forEach(p => pipeRows.push('<tr><td>' + mtgEsc(p.council) + ' <span style="font-size:11px;color:var(--text-muted);">Council</span></td><td><span class="badge badge-enquiry">' + mtgEsc(p.stage) + '</span></td><td style="text-align:right;">' + (p.estValue ? mtgEsc(p.estValue) : '—') + '</td><td style="font-size:12px;">' + mtgEsc(p.nextAction) + '</td><td style="font-size:12px;max-width:280px;color:' + (stale(p.lastContact) ? 'var(--warning)' : 'inherit') + ';">' + (p.lastContact ? mtgEsc(plFmt(p.lastContact)) : 'Never') + (plSorted(p.activity)[0] ? '<div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mtgEsc(plSorted(p.activity)[0].text) + '</div>' : '') + '</td></tr>'));
@@ -14646,7 +14646,7 @@ function finGateStatuses(ref) {
 }
 function finGateStatus(g) { const s = finGateStatuses(g.jobRef).find(x => x.gate === g); return s ? s.status : (g.status || 'Pending'); }
 
-// Job value for management views: quote (or rough estimate if no quote yet), ex VAT
+// Job value for management views: quote, ex VAT (ballpark estimates retired v4.97)
 const FIN_VAT_LABEL = { inc: 'inc VAT', plus: '+ VAT', none: 'no VAT' };
 function finVatSource(j) { return ['inc','plus','none'].includes(j.vatBasis) ? 'set' : finInvLines(j.ref).length ? 'invoices' : 'assumed'; }
 async function setJobVat(ref, val) {
@@ -14668,7 +14668,7 @@ function finVatChip(j) {
     + ['inc','plus','none'].map(v => '<option value="' + v + '"' + (v === b ? ' selected' : '') + '>' + FIN_VAT_LABEL[v] + (v === b && src === 'assumed' ? ' ?' : '') + '</option>').join('') + '</select>';
 }
 
-function finJobValueNet(j) { return finToNet(j.quoteValue || j.estimate || 0, finVatBasis(j.ref)); }
+function finJobValueNet(j) { return finToNet(j.quoteValue || 0, finVatBasis(j.ref)); }
 function finPlanned(j) {   // the margin the quote was built with, ex VAT
   const b = finVatBasis(j.ref), q = finToNet(j.quoteValue || 0, b), c = finToNet(j.estCost || 0, b);
   return { quote: q, cost: c, margin: q && c ? q - c : null, pct: q && c ? Math.round((q - c) / q * 100) : null };
@@ -14911,7 +14911,7 @@ function renderFinancePage() {
     h += '<div class="card" style="margin-bottom:20px;"><div class="card-header"><div class="card-title">Didn\'t go ahead</div></div><div class="table-wrap"><table><thead><tr><th>Job</th><th style="text-align:right;">Quote</th><th>Why</th></tr></thead><tbody>';
     lost.forEach(j => {
       const why = ((j.notes || '').match(/Didn't go ahead \([^)]*\):?\s*([^\n]*)/) || [])[1] || '';
-      h += '<tr><td><a href="#" onclick="openJob(\'' + esc(j.ref) + '\');return false;" style="color:var(--copper-dark);text-decoration:none;"><strong>' + esc(j.ref) + '</strong></a> ' + esc(j.name) + '</td><td style="text-align:right;">' + ((j.quoteValue || j.estimate) ? finGBP(j.quoteValue || j.estimate) : '—') + '</td><td style="font-size:12px;color:var(--text-muted);">' + esc(why) + '</td></tr>';
+      h += '<tr><td><a href="#" onclick="openJob(\'' + esc(j.ref) + '\');return false;" style="color:var(--copper-dark);text-decoration:none;"><strong>' + esc(j.ref) + '</strong></a> ' + esc(j.name) + '</td><td style="text-align:right;">' + (j.quoteValue ? finGBP(j.quoteValue) : '—') + '</td><td style="font-size:12px;color:var(--text-muted);">' + esc(why) + '</td></tr>';
     });
     h += '</tbody></table></div></div>';
   }
