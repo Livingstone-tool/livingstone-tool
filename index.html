@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.98 -->
+<!-- Livingstone v4.99 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -673,7 +673,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.98</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.99</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -2427,8 +2427,8 @@ async function loadFromSupabase() {
       client: q.client_name || '',
       date: q.quote_date || '',
       validDays: q.valid_days || 30,
-      labourMargin: q.labour_margin || 10,
-      matMargin: q.mat_margin || 10,
+      labourMargin: qbPct(q.labour_margin),
+      matMargin: qbPct(q.mat_margin),
       margin: q.labour_margin || 10,
       description: (q.description||'').replace(/^NUM:[^|]*\|/,''),
       rooms: typeof q.rooms === 'string' ? JSON.parse(q.rooms || '[]') : (q.rooms || []),
@@ -3963,7 +3963,7 @@ function renderQuotesTable() {
       <td>${q.client}</td>
       <td>${q.date}</td>
       <td><strong>£${q.total.toLocaleString()}</strong></td>
-      <td>${q.labourMargin||q.margin||10}%</td>
+      <td>${qbPct(q.labourMargin ?? q.margin)}%</td>
       <td><span class="badge badge-quoted">Quoted</span></td>
       <td>
         <button class="btn btn-sm btn-secondary" onclick="viewQuote(${db.quotes.indexOf(q)})">View</button>
@@ -4124,8 +4124,8 @@ function qrLoadIntoBuilder(q) {
   document.getElementById('qb-client').value = q.client;
   document.getElementById('qb-address').value = q.address || '';
   document.getElementById('qb-payment').value = '25% at 4 stages';
-  document.getElementById('qb-labour-margin').value = q.labourMargin||q.margin||10;
-  document.getElementById('qb-mat-margin').value = q.matMargin||q.margin||10;
+  document.getElementById('qb-labour-margin').value = qbPct(q.labourMargin ?? q.margin);
+  document.getElementById('qb-mat-margin').value = qbPct(q.matMargin ?? q.margin);
   document.getElementById('qb-payment').value = q.paymentTerms||'25% at 4 stages';
   document.getElementById('qb-pm-fee').value = q.pmFee||q.pm_fee||0;
   document.getElementById('qb-bonus').value = q.bonus;
@@ -4139,8 +4139,8 @@ function qrLoadIntoBuilder(q) {
   // Migrate legacy "Skip Hire" type to "Waste Disposal"
   window._activeQuoteRooms.forEach(r => (r.lines||[]).forEach(l => { if(l.type==='Skip Hire') l.type='Waste Disposal'; }));
   // Recalculate withMargin on all lines in case it wasn't stored
-  const lMargin = (q.labourMargin||q.margin||10)/100;
-  const mMargin = (q.matMargin||q.margin||10)/100;
+  const lMargin = (qbPct(q.labourMargin ?? q.margin))/100;
+  const mMargin = (qbPct(q.matMargin ?? q.margin))/100;
   window._activeQuoteRooms.forEach(r => {
     (r.lines||[]).forEach(l => {
       if(!l.withMargin && (l.qty||l.rate)) {
@@ -4376,9 +4376,11 @@ function renderQBRooms() {
   setTimeout(initQBDrag, 30);
 }
 
+// Margin value where 0 is valid (v4.99) — only blank/invalid falls back to 10%
+function qbPct(v) { const n = parseFloat(v); return isNaN(n) ? 10 : n; }
 function recalcAllLines() {
-  const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
-  const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
+  const labourMargin = qbPct(document.getElementById('qb-labour-margin').value);
+  const matMargin = qbPct(document.getElementById('qb-mat-margin').value);
   (window._activeQuoteRooms||[]).forEach(r => {
     (r.lines||[]).forEach(l => {
       const isLabour = !l.type || l.type==='Labour';
@@ -4418,8 +4420,8 @@ function updateLine(ri, li, field, val) {
     }
     if (sub || prod || other) {
       // Recalc with new rate/type, then full re-render to update dropdowns
-      const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
-      const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
+      const labourMargin = qbPct(document.getElementById('qb-labour-margin').value);
+      const matMargin = qbPct(document.getElementById('qb-mat-margin').value);
       const margin = (line.type==='Labour') ? labourMargin : matMargin;
       line.subtotal = (line.qty||0)*(line.rate||0);
       line.withMargin = line.subtotal * (1 + margin/100);
@@ -4429,8 +4431,8 @@ function updateLine(ri, li, field, val) {
     }
   }
   if(field==='qty'||field==='rate'||field==='supplier'||field==='type') {
-    const labourMargin = parseFloat(document.getElementById('qb-labour-margin').value)||10;
-    const matMargin = parseFloat(document.getElementById('qb-mat-margin').value)||10;
+    const labourMargin = qbPct(document.getElementById('qb-labour-margin').value);
+    const matMargin = qbPct(document.getElementById('qb-mat-margin').value);
     const margin = (line.type==='Labour') ? labourMargin : matMargin;
     line.subtotal = (line.qty||0)*(line.rate||0);
     line.withMargin = line.subtotal * (1 + margin/100);
@@ -4709,8 +4711,8 @@ async function syncQuotesToSupabase() {
         client_name: q.client||q.clientName||q.client_name||'',
         quote_date: q.date||q.quote_date||new Date().toISOString().split('T')[0],
         valid_days: q.validDays||30,
-        labour_margin: parseFloat(q.labourMargin||q.margin||10),
-        mat_margin: parseFloat(q.matMargin||q.margin||10),
+        labour_margin: qbPct(q.labourMargin ?? q.margin),
+        mat_margin: qbPct(q.matMargin ?? q.margin),
         description: 'NUM:'+(q.number||'')+'|'+(q.description||q.desc||''),
         rooms: JSON.stringify(q.rooms||[]),
         total: parseFloat(q.total)||0,
@@ -4757,8 +4759,8 @@ function saveQuote() {
     rooms: saveRooms,
     pmFee, bonus, subtotal,
     total: subtotal + pmFee + bonus,
-    labourMargin: parseFloat(document.getElementById('qb-labour-margin')?.value)||10,
-    matMargin: parseFloat(document.getElementById('qb-mat-margin')?.value)||10,
+    labourMargin: qbPct(document.getElementById('qb-labour-margin')?.value),
+    matMargin: qbPct(document.getElementById('qb-mat-margin')?.value),
     paymentTerms: document.getElementById('qb-payment')?.value || '25% at 4 stages',
     mode: mode,
     byTypeData: mode === 'bytype' ? JSON.parse(JSON.stringify(window._byTypeData||{})) : null
@@ -4780,8 +4782,8 @@ function saveQuote() {
     total: q.total||0,
     status: 'Quoted',
     description: 'NUM:'+(q.number||'')+'|'+(document.getElementById('qb-desc')?.value||''),
-    labour_margin: parseFloat(document.getElementById('qb-labour-margin')?.value)||10,
-    mat_margin: parseFloat(document.getElementById('qb-mat-margin')?.value)||10,
+    labour_margin: qbPct(document.getElementById('qb-labour-margin')?.value),
+    mat_margin: qbPct(document.getElementById('qb-mat-margin')?.value),
     valid_days: parseInt(document.getElementById('qb-valid-days')?.value)||30,
     pm_fee: parseFloat(document.getElementById('qb-pm-fee')?.value)||0,
     payment_terms: document.getElementById('qb-payment')?.value || '25% at 4 stages'
@@ -12632,8 +12634,8 @@ function importData(input) {
                 client_name: q.client||q.clientName||q.client_name||'',
                 quote_date: q.date||q.quote_date||new Date().toISOString().split('T')[0],
                 valid_days: q.validDays||30,
-                labour_margin: parseFloat(q.labourMargin||q.margin||10),
-                mat_margin: parseFloat(q.matMargin||q.margin||10),
+                labour_margin: qbPct(q.labourMargin ?? q.margin),
+                mat_margin: qbPct(q.matMargin ?? q.margin),
                 description: 'NUM:'+(q.number||'')+'|'+(q.description||q.desc||''),
                 rooms: roomsStr,
                 total: parseFloat(q.total)||0,
