@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.97 -->
+<!-- Livingstone v4.98 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -673,7 +673,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.97</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.98</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -867,6 +867,7 @@ window.onerror=function(m,s,l,c,e){
           <div style="display:flex;gap:8px;">
             <button class="btn btn-sm btn-secondary" onclick="closeQuoteBuilder()">Close</button>
             <button class="btn btn-sm btn-slate" onclick="saveQuote()">Save Quote</button>
+            <button class="btn btn-sm btn-secondary" id="qb-revisions-btn" onclick="qrShow()" title="Earlier versions of this quote" style="display:none;">🕘 Revisions</button>
             <button class="btn btn-sm btn-secondary" onclick="duplicateQuote()" title="Duplicate this quote to another job">📋 Duplicate</button>
             <button class="btn btn-sm btn-secondary" onclick="addToShoppingList()" title="Add materials from this quote to the shopping list">🛒 Shopping List</button>
             <button class="btn btn-sm btn-secondary" onclick="openInflationAdjuster()" title="Apply inflation % to costs">📈 Inflation</button>
@@ -874,6 +875,7 @@ window.onerror=function(m,s,l,c,e){
           </div>
         </div>
         <div class="card-body">
+          <div id="qb-rev-banner" class="alert alert-warning" style="display:none;font-size:13px;margin-bottom:16px;"></div>
           <!-- Quote Header -->
           <div class="grid-2" style="gap:16px;margin-bottom:20px;">
             <div>
@@ -3969,8 +3971,154 @@ function renderQuotesTable() {
     </tr>`).join('');
 }
 
+// ============================================================
+// QUOTE REVISIONS (v4.98) — amending a saved quote keeps the previous version.
+// The first save with changes after opening a quote stores the version you opened
+// as Rev A, B, C… (one revision per editing session, not per click of Save).
+// Supabase table: quote_revisions (falls back to this device until the SQL is run).
+// ============================================================
+let _qr = { rows: [], ref: null, missing: false };
+function qrNorm(r) { return String(r || '').replace(/-/g, '').toUpperCase(); }
+function qrLetter(n) { let s = ''; n = n + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+function qrLocal() { try { return JSON.parse(localStorage.getItem('livingstoneQuoteRevs') || '[]'); } catch(e) { return []; } }
+function qrSaveLocal(all) { try { localStorage.setItem('livingstoneQuoteRevs', JSON.stringify(all)); } catch(e) {} }
+function qrKey(q) { if (!q) return ''; return JSON.stringify([q.rooms || [], +q.pmFee || 0, +q.bonus || 0, +q.total || 0, +q.labourMargin || 0, +q.matMargin || 0, q.paymentTerms || '', q.mode || 'detailed', q.mode === 'bytype' ? (q.byTypeData || null) : null]); }
+
+async function qrLoad(ref) {
+  _qr.ref = ref;
+  const n = qrNorm(ref);
+  let rows = qrLocal().filter(r => qrNorm(r.job_ref) === n);
+  try {
+    const remote = await supa.get('quote_revisions', 'order=rev.asc');
+    _qr.missing = false;
+    const mine = (remote || []).filter(r => qrNorm(r.job_ref) === n);
+    const localOnly = rows.filter(r => String(r.id || '').startsWith('local_'));
+    rows = mine.concat(localOnly);
+    for (const r of localOnly) qrPush(r);   // made before the table existed
+  } catch(e) { _qr.missing = true; }
+  _qr.rows = rows.sort((a, b) => (a.rev || 0) - (b.rev || 0));
+  qrButton();
+  return _qr.rows;
+}
+async function qrPush(r) {
+  try {
+    const res = await supa.post('quote_revisions', { job_ref: r.job_ref, rev: r.rev, label: r.label || '', total: r.total || 0, saved_by: r.saved_by || '', snapshot: r.snapshot });
+    if (res && res[0] && res[0].id) {
+      const all = qrLocal().filter(x => x.id !== r.id); qrSaveLocal(all);
+      r.id = res[0].id;
+    }
+    _qr.missing = false;
+  } catch(e) { _qr.missing = true; }
+}
+async function qrPatch(r, fields) {
+  Object.assign(r, fields);
+  if (String(r.id || '').startsWith('local_')) { const all = qrLocal().map(x => x.id === r.id ? r : x); qrSaveLocal(all); return; }
+  try { await supa.patch('quote_revisions', r.id, fields); } catch(e) { alert('Couldn\'t save that — check your connection.'); }
+}
+
+// Called by viewQuote / revision open: remember what the quote looked like when opened
+function qrStartSession(currentQuote, ref) {
+  window._qrBaseline = currentQuote ? JSON.parse(JSON.stringify(currentQuote)) : null;
+  window._qrBaselineRef = ref;
+  window._qrDone = false;
+  qrLoad(ref);
+}
+
+// Called from saveQuote before the stored quote is overwritten
+async function qrBeforeSave(oldQ, newQ) {
+  if (!oldQ) return;
+  const ref = newQ.number || newQ.jobRef;
+  const base = (window._qrBaseline && qrNorm(window._qrBaselineRef) === qrNorm(ref)) ? window._qrBaseline : oldQ;
+  if (window._qrDone && qrNorm(window._qrBaselineRef) === qrNorm(ref)) return;   // this editing session already kept its revision
+  if (qrKey(base) === qrKey(newQ)) return;                                         // nothing changed
+  if (qrNorm(_qr.ref) !== qrNorm(ref)) await qrLoad(ref);
+  const rev = (_qr.rows.reduce((m, r) => Math.max(m, r.rev || 0), 0)) + 1;
+  const note = prompt('Saved. The previous version is kept as Rev ' + qrLetter(rev - 1) + '.\n\nWhat changed? (optional — e.g. "Removed acoustic panels")', '') || '';
+  const snap = JSON.parse(JSON.stringify(base)); delete snap.id;
+  const r = { id: 'local_' + Date.now(), job_ref: ref, rev, label: note.trim(), total: base.total || 0, saved_by: localStorage.getItem('livingstoneUser') || '', snapshot: JSON.stringify(snap), created_at: new Date().toISOString() };
+  _qr.rows.push(r);
+  const all = qrLocal(); all.push(r); qrSaveLocal(all);
+  window._qrDone = true;
+  window._qrBaselineRef = ref;
+  window._qrViewingRev = null; qrBanner();
+  qrButton();
+  await qrPush(r);
+}
+
+function qrButton() {
+  const b = document.getElementById('qb-revisions-btn'); if (!b) return;
+  const n = _qr.rows.length;
+  b.textContent = '🕘 Revisions' + (n ? ' (' + n + ')' : '');
+  b.style.display = window._activeQuoteRef || document.getElementById('qb-number')?.value ? '' : 'none';
+}
+function qrBanner() {
+  const el = document.getElementById('qb-rev-banner'); if (!el) return;
+  const v = window._qrViewingRev;
+  el.style.display = v ? 'block' : 'none';
+  if (v) el.innerHTML = '<strong>Viewing Rev ' + qrLetter(v.rev - 1) + '</strong> (saved ' + new Date(v.created_at || Date.now()).toLocaleDateString('en-GB') + '). Export PDF to send this version, or press <strong>Save Quote</strong> to make it the current quote again — the current one will be kept as a revision. <a href="#" onclick="qrBackToCurrent();return false;">Back to current</a>';
+}
+
+async function qrShow() {
+  const ref = window._activeQuoteRef || document.getElementById('qb-number')?.value;
+  if (!ref) { alert('Pick a job first.'); return; }
+  await qrLoad(ref);
+  let modal = document.getElementById('qr-modal');
+  if (!modal) {
+    modal = document.createElement('div'); modal.id = 'qr-modal'; modal.className = 'modal-overlay';
+    modal.onclick = e => { if (e.target === modal) closeModal('qr-modal'); };
+    modal.innerHTML = '<div class="modal" style="max-width:720px;"><div class="modal-header"><div class="modal-title" id="qr-title"></div><button class="modal-close" onclick="closeModal(\'qr-modal\')">×</button></div><div class="modal-body" id="qr-body"></div></div>';
+    document.body.appendChild(modal);
+  }
+  const cur = db.quotes.find(q => qrNorm(q.number || q.jobRef) === qrNorm(ref));
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const gbp = n => '£' + (Number(n) || 0).toLocaleString('en-GB', { maximumFractionDigits: 0 });
+  document.getElementById('qr-title').textContent = 'Quote revisions — ' + ref;
+  let h = '';
+  if (_qr.missing) h += '<div class="alert alert-warning" style="font-size:13px;margin-bottom:12px;">Revisions are only on this device until the v4.98 SQL is run in Supabase.</div>';
+  h += '<table style="width:100%;font-size:13px;"><thead><tr><th>Version</th><th>Quote date</th><th style="text-align:right;">Total</th><th>Replaced</th><th>What changed</th><th></th></tr></thead><tbody>';
+  if (cur) h += '<tr style="font-weight:600;"><td>Current (Rev ' + qrLetter(_qr.rows.length) + ')</td><td>' + esc(cur.date || '') + '</td><td style="text-align:right;">' + gbp(cur.total) + '</td><td>—</td><td></td><td><button class="btn btn-sm btn-secondary" onclick="qrBackToCurrent();closeModal(\'qr-modal\')">Open</button></td></tr>';
+  _qr.rows.slice().reverse().forEach(r => {
+    let snap = {}; try { snap = JSON.parse(r.snapshot || '{}'); } catch(e) {}
+    h += '<tr><td>Rev ' + qrLetter(r.rev - 1) + '</td><td>' + esc(snap.date || '') + '</td><td style="text-align:right;">' + gbp(r.total) + '</td>'
+      + '<td style="font-size:12px;color:var(--text-muted);">' + new Date(r.created_at || Date.now()).toLocaleDateString('en-GB') + (r.saved_by ? ' · ' + esc(r.saved_by) : '') + '</td>'
+      + '<td><input value="' + esc(r.label || '') + '" placeholder="Add a note" onchange="qrPatch(_qr.rows.find(x=>String(x.id)===\'' + esc(r.id) + '\'),{label:this.value})" style="font-size:12px;padding:3px 6px;width:100%;min-width:160px;"></td>'
+      + '<td><button class="btn btn-sm btn-secondary" onclick="qrOpen(\'' + esc(r.id) + '\')">Open</button></td></tr>';
+  });
+  if (!_qr.rows.length) h += '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px;">No earlier versions yet. Next time this quote is amended and saved, the version before the change is kept here.</td></tr>';
+  h += '</tbody></table>';
+  document.getElementById('qr-body').innerHTML = h;
+  modal.style.display = 'flex';
+}
+
+function qrOpen(id) {
+  const r = _qr.rows.find(x => String(x.id) === String(id)); if (!r) return;
+  let snap; try { snap = JSON.parse(r.snapshot); } catch(e) { alert('That revision couldn\'t be read.'); return; }
+  const ref = r.job_ref;
+  const cur = db.quotes.find(q => qrNorm(q.number || q.jobRef) === qrNorm(ref));
+  qrLoadIntoBuilder(snap);
+  // Baseline = the current quote, so saving this old version keeps the current one as a revision
+  window._qrBaseline = cur ? JSON.parse(JSON.stringify(cur)) : null;
+  window._qrBaselineRef = ref; window._qrDone = false;
+  window._qrViewingRev = r; qrBanner();
+  closeModal('qr-modal');
+}
+function qrBackToCurrent() {
+  const ref = window._qrBaselineRef || window._activeQuoteRef;
+  const idx = db.quotes.findIndex(q => qrNorm(q.number || q.jobRef) === qrNorm(ref));
+  window._qrViewingRev = null; qrBanner();
+  if (idx >= 0) viewQuote(idx);
+}
+
 function viewQuote(idx) {
   const q = db.quotes[idx];
+  if (!q) return;
+  window._qrViewingRev = null; if (typeof qrBanner === 'function') qrBanner();
+  qrLoadIntoBuilder(q);
+  window._activeQuoteRef = q.number || q.jobRef;
+  qrStartSession(q, q.number || q.jobRef);
+}
+
+function qrLoadIntoBuilder(q) {
   // Load into quote builder
   populateQuoteJobDropdown(q.number||q.jobRef||'');
   document.getElementById('qb-client').value = q.client;
@@ -4061,6 +4209,7 @@ function quoteJobSelected(ref) {
     document.getElementById('qb-subtitle').textContent = job.client?.name||'';
   }
   loadQuoteDocAttachments(ref);
+  qrLoad(ref);
 }
 
 
@@ -4075,6 +4224,8 @@ function syncQuoteDescToJob() {
 }
 
 function newQuoteModal() {
+  window._qrBaseline = null; window._qrBaselineRef = null; window._qrDone = false; window._qrViewingRev = null; _qr.rows = [];
+  if (typeof qrBanner === 'function') { qrBanner(); }
   populateQuoteJobDropdown('');
   document.getElementById('qb-client').value = '';
   document.getElementById('qb-address').value = '';
@@ -4088,6 +4239,7 @@ function newQuoteModal() {
   setQuoteMode('detailed');
   document.getElementById('quote-builder-area').style.display='block';
   document.getElementById('active-quote-card').scrollIntoView({behavior:'smooth'});
+  qrButton();
 }
 
 function closeQuoteBuilder() {
@@ -4615,7 +4767,7 @@ function saveQuote() {
   // Normalise for matching: LP-003 == LP003
   const norm = r => (r||'').replace('-','').toUpperCase();
   const existIdx = db.quotes.findIndex(x => norm(x.number) === norm(q.number) || norm(x.jobRef) === norm(q.number));
-  if(existIdx>=0) { q.id = db.quotes[existIdx].id; db.quotes[existIdx]=q; }
+  if(existIdx>=0) { qrBeforeSave(db.quotes[existIdx], q); q.id = db.quotes[existIdx].id; db.quotes[existIdx]=q; }
   else db.quotes.push(q);
   saveData();
 
