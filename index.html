@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v4.99 -->
+<!-- Livingstone v5.00 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -673,7 +673,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v4.99</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.00</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -4486,9 +4486,12 @@ function setQuoteMode(mode) {
         else other += (l.withMargin||0);
       });
     });
-    // Only overwrite if all zeros (i.e. first time switching)
+    // Line items are the source of truth (v5.00): whenever the quote has priced lines, the
+    // by-type figures are recalculated from them, so changing a line's type shows up here.
+    // Only a quote built purely in By Cost Type (no lines) keeps its typed-in figures.
     const d = window._byTypeData || {};
-    if(!d.labour && !d.materials && !d.other) {
+    const hasLines = rooms.some(r => (r.lines||[]).some(l => (l.qty||0) && (l.rate||0)));
+    if(hasLines || (!d.labour && !d.materials && !d.other)) {
       window._byTypeData = {
         labour: Math.round(labour*100)/100,
         materials: Math.round(materials*100)/100,
