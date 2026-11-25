@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v5.05 -->
+<!-- Livingstone v5.07 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -674,7 +674,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.05</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.07</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -830,7 +830,7 @@ window.onerror=function(m,s,l,c,e){
             <tr>
               <th>Ref</th><th>Job Name</th><th>Client</th><th>Status</th>
               <th>Lead</th><th>Type</th><th style="text-align:right;">Quote<div style="font-weight:400;font-size:10px;">as quoted</div></th><th style="text-align:right;">Est. cost<div style="font-weight:400;font-size:10px;">ex VAT</div></th><th style="text-align:right;">Planned margin<div style="font-weight:400;font-size:10px;">ex VAT</div></th>
-              <th style="text-align:right;">Actual</th><th>Start</th><th></th>
+              <th style="text-align:right;">Actual</th><th>Start → End</th><th></th>
             </tr>
           </thead>
           <tbody id="jobs-table-body"></tbody>
@@ -3663,7 +3663,9 @@ function renderJobsTable() {
     row += '<td style="text-align:right;white-space:nowrap;">' + estCostDisplay + '</td>';
     row += '<td style="text-align:right;white-space:nowrap;">' + marginValDisplay + '</td>';
     row += '<td style="text-align:right;">' + actualDisplay + '</td>';
-    row += '<td>' + (j.startDate||'--') + '</td>';
+    var _sd = function(d) { return d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'; };
+    var _needEnd = !j.endDate && FIN_LIVE.includes(j.status);
+    row += '<td style="white-space:nowrap;font-size:12px;">' + _sd(j.startDate) + ' → ' + (_needEnd ? '<span style="color:var(--warning);" title="Set an end date — the cash forecast uses it">no end</span>' : _sd(j.endDate)) + '</td>';
     row += '<td><button class="btn btn-sm btn-secondary" data-ref="' + (j.ref||'') + '" data-idx="' + i + '" onclick="event.stopPropagation();editJobByRef(this.dataset.ref,parseInt(this.dataset.idx))">Edit</button></td>';
     row += '</tr>';
     return row;
@@ -3829,7 +3831,14 @@ async function saveJob() {
       jobData.sort_order = db.jobs[idx].sort_order;
       jobData.quoteValue = db.jobs[idx].quoteValue || 0;
       jobData.estCost = db.jobs[idx].estCost || 0;
-      db.jobs[idx] = jobData;
+      // v5.07: moving the start date without touching the end date shifts the end date too (keeps the job's length)
+      const old = db.jobs[idx];
+      if (old.startDate && old.endDate && jobData.startDate && jobData.startDate !== old.startDate && jobData.endDate === old.endDate) {
+        const shift = Math.round((new Date(jobData.startDate) - new Date(old.startDate)) / 86400000);
+        const e = new Date(old.endDate); e.setDate(e.getDate() + shift); jobData.endDate = e.toISOString().split('T')[0];
+      }
+      // keep fields the form doesn't show (VAT basis, archive flag…) instead of dropping them
+      db.jobs[idx] = Object.assign({}, old, jobData);
     }
   } else {
     // New job — check for duplicate ref
@@ -3843,6 +3852,7 @@ async function saveJob() {
   renderJobsTable();
   renderPipeline();
   renderDashboard();
+  { const fmp = document.getElementById('page-finmeeting'); if (fmp && fmp.classList.contains('active') && typeof fmRender === 'function') fmRender(); }
 
   // Sync to Supabase
   try {
@@ -15221,7 +15231,7 @@ function fmRender() {
     const endD = mtgParse(j.endDate);
     const i = endD ? wk(mtgAddDays(endD, 14)) : null;
     if (i != null) { weeks[i].inn += gross; weeks[i].inItems.push({ t: (j.name || j.ref) + ' (balance on completion)', a: gross }); }
-    else undated.push({ j, gross });
+    else undated.push({ j, gross, later: !!endD });
   });
   // Card payment is NOT an outflow here: the outlook starts from net cash (bank minus the whole card balance),
   // so paying the card moves money from bank to card and leaves net cash unchanged (fixed v5.04 — was double-counted).
@@ -15236,7 +15246,9 @@ function fmRender() {
   });
   h += '</tbody></table></div>';
   if (low) h += '<div style="margin-top:8px;font-size:13px;' + (low.v < 0 ? 'color:var(--danger);font-weight:600;' : '') + '">Lowest point: ' + gbp(low.v) + ' in the week of ' + mtgShort(low.w) + '.</div>';
-  if (undated.length) h += '<div style="margin-top:6px;font-size:12px;color:var(--warning);">Not in the outlook — no end date set: ' + undated.map(x => esc(x.j.name || x.j.ref) + ' (' + gbp(x.gross) + ')').join(', ') + '. Add end dates in Planning to include them.</div>';
+  const noDate = undated.filter(x => !x.later), later = undated.filter(x => x.later);
+  if (noDate.length) h += '<div style="margin-top:6px;font-size:12px;color:var(--warning);">Not in the outlook — no end date set: ' + noDate.map(x => esc(x.j.name || x.j.ref) + ' (' + gbp(x.gross) + ')').join(', ') + '. Set end dates on the job (Jobs list → Edit).</div>';
+  if (later.length) h += '<div style="margin-top:6px;font-size:12px;color:var(--text-muted);">Due after the 12-week window: ' + later.map(x => esc(x.j.name || x.j.ref) + ' (' + gbp(x.gross) + ', ends ' + mtgShort(mtgParse(x.j.endDate)) + ')').join(', ') + '.</div>';
   h += '<div style="margin-top:14px;font-weight:600;font-size:13px;">Payments going out (VAT, wages, supplier bills, loan…)</div>';
   h += tbl(['What', 'right:Amount (£)', 'Date', '']);
   (d.out || []).forEach((o, i) => { h += '<tr><td><input value="' + esc(o.label || '') + '" onchange="_fm.d.out[' + i + '].label=this.value;fmSet(\'out\',_fm.d.out);fmRender()" style="width:100%;padding:4px 6px;"></td><td style="text-align:right;"><input type="number" step="0.01" value="' + (o.amount ?? '') + '" onchange="_fm.d.out[' + i + '].amount=fmNum(this.value);fmSet(\'out\',_fm.d.out);fmRender()" style="width:110px;padding:4px 6px;text-align:right;"></td><td><input type="date" value="' + esc(o.date || '') + '" onchange="_fm.d.out[' + i + '].date=this.value;fmSet(\'out\',_fm.d.out);fmRender()" style="width:150px;padding:4px 6px;"></td><td><button onclick="_fm.d.out.splice(' + i + ',1);fmSet(\'out\',_fm.d.out);fmRender()" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--danger);opacity:.5;">✕</button></td></tr>'; });
@@ -15263,7 +15275,7 @@ function fmRender() {
   const un = finUninvoiced();
   h += sec(4, 'Work not yet invoiced', gbp(un.total) + ' ex VAT left to invoice on live jobs');
   if (!un.rows.length) h += '<div style="color:var(--text-muted);font-size:13px;">Nothing left to invoice on live jobs.</div>';
-  else { h += tbl(['Job', 'Status', 'right:Quote (ex VAT)', 'right:Invoiced', 'right:Left to invoice', 'Expected end']); un.rows.sort((a, b) => b.leftNet - a.leftNet).forEach(f => { h += '<tr><td>' + esc(f.job.name || f.ref) + '</td><td>' + esc(f.job.status) + '</td>' + R(gbp(f.contractNet)) + R(gbp(f.billedNet)) + R('<strong>' + gbp(f.leftNet) + '</strong>') + '<td>' + (f.job.endDate ? mtgShort(mtgParse(f.job.endDate)) : '<span style="color:var(--warning);">not set</span>') + '</td></tr>'; }); h += '</tbody></table></div>'; }
+  else { h += tbl(['Job', 'Status', 'right:Quote (ex VAT)', 'right:Invoiced', 'right:Left to invoice', 'Expected end']); un.rows.sort((a, b) => b.leftNet - a.leftNet).forEach(f => { h += '<tr><td>' + esc(f.job.name || f.ref) + '</td><td>' + esc(f.job.status) + '</td>' + R(gbp(f.contractNet)) + R(gbp(f.billedNet)) + R('<strong>' + gbp(f.leftNet) + '</strong>') + '<td>' + (f.job.endDate ? mtgShort(mtgParse(f.job.endDate)) : '<span style="color:var(--warning);">not set</span>') + ' <a href="#" onclick="editJobByRef(\'' + esc(f.ref) + '\');return false;" style="font-size:11px;">edit job</a></td></tr>'; }); h += '</tbody></table></div>'; }
   if (un.noQuote.length) h += '<div style="margin-top:6px;font-size:12px;color:var(--warning);">No quote in the tool, so not counted: ' + un.noQuote.map(f => esc(f.job.name || f.ref)).join(', ') + '.</div>';
   h += end('uninvoiced');
 
@@ -15364,6 +15376,16 @@ function fmRender() {
   root.innerHTML = h;
   root.querySelectorAll('textarea.mtg-notes').forEach(t => mtgGrow(t));
   _fm.lastCalc = { net, low, rec, overdue, un, C, lastM, ohTot };
+}
+
+// Change a live job's end date from the meeting — same field as Edit Job / Planning, so it updates everywhere
+function fmSetJobEnd(ref, val) {
+  const job = db.jobs.find(j => j.ref === ref); if (!job) return;
+  if (val && job.startDate && val < job.startDate) { alert('End date is before the start date (' + job.startDate + ').'); fmRender(); return; }
+  job.endDate = val || '';
+  saveData();
+  if (typeof syncJobToSupabase === 'function') syncJobToSupabase(ref);
+  fmRender();
 }
 
 function fmAddOut() {
