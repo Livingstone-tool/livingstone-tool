@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v5.03 -->
+<!-- Livingstone v5.04 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -674,7 +674,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.03</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.04</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -15204,7 +15204,7 @@ function fmRender() {
   // 1. Cash now
   const net = (d.bank || 0) - (d.card || 0);
   h += sec(1, 'Cash now', 'Prefilled from the latest weekly meeting — overwrite with today\'s figures');
-  h += row + stat('Bank (Virgin Money)', '£ ' + numIn('bank', d.bank, 130, true)) + stat('Card (Capital on Tap)', '£ ' + numIn('card', d.card, 130, true), 'Next payment £ ' + numIn('cardPay', d.cardPay, 90) + ' due <input type="date" value="' + esc(d.cardDue || '') + '" onchange="fmSet(\'cardDue\',this.value)" style="width:140px;padding:3px 4px;">')
+  h += row + stat('Bank (Virgin Money)', '£ ' + numIn('bank', d.bank, 130, true)) + stat('Card (Capital on Tap)', '£ ' + numIn('card', d.card, 130, true), 'Next payment £ ' + numIn('cardPay', d.cardPay, 90) + ' due <input type="date" value="' + esc(d.cardDue || '') + '" onchange="fmSet(\'cardDue\',this.value)" style="width:140px;padding:3px 4px;"><br><span style="font-size:11px;">Check the bank covers it on the day — already counted in net cash</span>')
     + stat('Net cash', d.bank == null ? '—' : gbp(net), 'bank minus card', net < 0 ? 'var(--danger)' : '') + '</div>';
   h += end('cash');
 
@@ -15223,11 +15223,12 @@ function fmRender() {
     if (i != null) { weeks[i].inn += gross; weeks[i].inItems.push((j.name || j.ref) + ' (balance on completion)'); }
     else undated.push({ j, gross });
   });
-  if (d.cardPay && d.cardDue) { const i = wk(mtgParse(d.cardDue)); if (i != null) { weeks[i].out += d.cardPay; weeks[i].outItems.push('Capital on Tap'); } }
+  // Card payment is NOT an outflow here: the outlook starts from net cash (bank minus the whole card balance),
+  // so paying the card moves money from bank to card and leaves net cash unchanged (fixed v5.04 — was double-counted).
   weeks.forEach(w => { const first = new Date(w.start.getFullYear(), w.start.getMonth() + (w.start.getDate() === 1 ? 0 : 1), 1); if (first < mtgAddDays(w.start, 7) && first >= w.start) { const ym = fmISO(first).slice(0, 7); const t = finOverheads([ym]).total[ym] || 0; if (t) { w.out += t; w.outItems.push('Overheads ' + fmMonthName(ym).split(' ')[0]); } } });
   (d.out || []).forEach(o => { const i = wk(mtgParse(o.date)); if (i != null && o.amount) { weeks[i].out += +o.amount; weeks[i].outItems.push(o.label || 'Payment'); } });
   let bal = d.bank == null ? null : net, low = null;
-  h += sec(2, 'Cash outlook — next 12 weeks', 'In: unpaid invoices by due date, plus live jobs\' unbilled balance 14 days after their end date. Out: card, overheads, and payments listed below.');
+  h += sec(2, 'Cash outlook — next 12 weeks', 'Starts from net cash (card already deducted). In: unpaid invoices by due date, plus live jobs\' unbilled balance 14 days after their end date. Out: overheads and payments listed below.');
   h += tbl(['Week of', 'right:In', 'right:Out', 'right:Balance', 'What']);
   weeks.forEach(w => {
     if (bal != null) { bal += w.inn - w.out; if (low == null || bal < low.v) low = { v: bal, w: w.start }; }
