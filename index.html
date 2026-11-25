@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v5.04 -->
+<!-- Livingstone v5.05 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -674,7 +674,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.04</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.05</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -15213,26 +15213,26 @@ function fmRender() {
   const weeks = Array.from({ length: 12 }, (_, i) => ({ start: mtgAddDays(mon, i * 7), inn: 0, out: 0, inItems: [], outItems: [] }));
   const wk = dt => { if (!dt) return null; if (dt < weeks[0].start) return 0; const i = Math.floor((dt - weeks[0].start) / (7 * 86400000)); return i < 12 ? i : null; };
   const rec = finReceivables();
-  rec.invoices.forEach(inv => { const due = mtgInvoiceDue(inv), i = wk(due); if (i != null) { weeks[i].inn += inv.total || 0; weeks[i].inItems.push(inv.number + ' ' + (inv.client || '') + (due && due < today ? ' (overdue — assumed this week)' : '')); } });
+  rec.invoices.forEach(inv => { const due = mtgInvoiceDue(inv), i = wk(due); if (i != null) { weeks[i].inn += inv.total || 0; weeks[i].inItems.push({ t: inv.number + ' ' + (inv.client || '') + (due && due < today ? ' (overdue — assumed this week)' : ''), a: inv.total || 0 }); } });
   const undated = [];
   db.jobs.filter(j => FIN_LIVE.includes(j.status)).forEach(j => {
     const f = finJob(j.ref); if (!(f.leftNet > 0.5)) return;
     const gross = f.leftNet * (f.basis === 'none' ? 1 : 1.2);
     const endD = mtgParse(j.endDate);
     const i = endD ? wk(mtgAddDays(endD, 14)) : null;
-    if (i != null) { weeks[i].inn += gross; weeks[i].inItems.push((j.name || j.ref) + ' (balance on completion)'); }
+    if (i != null) { weeks[i].inn += gross; weeks[i].inItems.push({ t: (j.name || j.ref) + ' (balance on completion)', a: gross }); }
     else undated.push({ j, gross });
   });
   // Card payment is NOT an outflow here: the outlook starts from net cash (bank minus the whole card balance),
   // so paying the card moves money from bank to card and leaves net cash unchanged (fixed v5.04 — was double-counted).
-  weeks.forEach(w => { const first = new Date(w.start.getFullYear(), w.start.getMonth() + (w.start.getDate() === 1 ? 0 : 1), 1); if (first < mtgAddDays(w.start, 7) && first >= w.start) { const ym = fmISO(first).slice(0, 7); const t = finOverheads([ym]).total[ym] || 0; if (t) { w.out += t; w.outItems.push('Overheads ' + fmMonthName(ym).split(' ')[0]); } } });
-  (d.out || []).forEach(o => { const i = wk(mtgParse(o.date)); if (i != null && o.amount) { weeks[i].out += +o.amount; weeks[i].outItems.push(o.label || 'Payment'); } });
+  weeks.forEach(w => { const first = new Date(w.start.getFullYear(), w.start.getMonth() + (w.start.getDate() === 1 ? 0 : 1), 1); if (first < mtgAddDays(w.start, 7) && first >= w.start) { const ym = fmISO(first).slice(0, 7); const t = finOverheads([ym]).total[ym] || 0; if (t) { w.out += t; w.outItems.push({ t: 'Overheads ' + fmMonthName(ym).split(' ')[0], a: t }); } } });
+  (d.out || []).forEach(o => { const i = wk(mtgParse(o.date)); if (i != null && o.amount) { weeks[i].out += +o.amount; weeks[i].outItems.push({ t: o.label || 'Payment', a: +o.amount }); } });
   let bal = d.bank == null ? null : net, low = null;
   h += sec(2, 'Cash outlook — next 12 weeks', 'Starts from net cash (card already deducted). In: unpaid invoices by due date, plus live jobs\' unbilled balance 14 days after their end date. Out: overheads and payments listed below.');
   h += tbl(['Week of', 'right:In', 'right:Out', 'right:Balance', 'What']);
   weeks.forEach(w => {
     if (bal != null) { bal += w.inn - w.out; if (low == null || bal < low.v) low = { v: bal, w: w.start }; }
-    h += '<tr><td>' + mtgShort(w.start) + '</td>' + R(w.inn ? gbp(w.inn) : '') + R(w.out ? '−' + gbp(w.out) : '') + '<td style="text-align:right;font-weight:600;' + (bal != null && bal < 0 ? 'color:var(--danger);' : '') + '">' + (bal == null ? '—' : gbp(bal)) + '</td><td style="font-size:11px;color:var(--text-muted);max-width:360px;">' + esc(w.inItems.concat(w.outItems.map(x => '−' + x)).join(' · ')) + '</td></tr>';
+    h += '<tr><td>' + mtgShort(w.start) + '</td>' + R(w.inn ? gbp(w.inn) : '') + R(w.out ? '−' + gbp(w.out) : '') + '<td style="text-align:right;font-weight:600;' + (bal != null && bal < 0 ? 'color:var(--danger);' : '') + '">' + (bal == null ? '—' : gbp(bal)) + '</td><td style="font-size:12px;">' + w.inItems.map(x => '<div style="display:flex;gap:10px;"><span style="min-width:78px;text-align:right;color:var(--success);">+' + gbp(x.a) + '</span><span>' + esc(x.t) + '</span></div>').concat(w.outItems.map(x => '<div style="display:flex;gap:10px;"><span style="min-width:78px;text-align:right;color:var(--danger);">−' + gbp(x.a) + '</span><span>' + esc(x.t) + '</span></div>')).join('') + '</td></tr>';
   });
   h += '</tbody></table></div>';
   if (low) h += '<div style="margin-top:8px;font-size:13px;' + (low.v < 0 ? 'color:var(--danger);font-weight:600;' : '') + '">Lowest point: ' + gbp(low.v) + ' in the week of ' + mtgShort(low.w) + '.</div>';
