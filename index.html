@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v5.02 -->
+<!-- Livingstone v5.03 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -674,7 +674,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.02</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.03</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -1664,8 +1664,9 @@ window.onerror=function(m,s,l,c,e){
     <button class="btn btn-primary" onclick="openInvoiceModal()">+ Create Invoice</button>
   </div>
   <div class="card">
-    <div class="card-header">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
       <div class="card-title">Invoice Log</div>
+      <div id="inv-toolbar" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"></div>
     </div>
     <div class="table-wrap">
       <table>
@@ -9827,15 +9828,50 @@ function nextInvoiceNum(jobRef) {
   return 'LP-INV-' + String((Math.max(0,...nums) + 1)).padStart(3, '0');
 }
 
+// Invoice log (v5.03): Unpaid / Paid (archive) / All views, search, year filter, quick "Mark paid".
+// Paid invoices are never deleted — they feed the P&L and VAT. Only drafts can be deleted.
+let _invView = { show: 'Unpaid', q: '', year: 'All' };
+try { const v = JSON.parse(localStorage.getItem('livingstoneInvView') || '{}'); Object.assign(_invView, v, { q: '' }); } catch(e) {}
+function invSetView(k, v) { _invView[k] = v; try { localStorage.setItem('livingstoneInvView', JSON.stringify({ show: _invView.show, year: _invView.year })); } catch(e) {} renderInvoicesPage(); }
+function invMarkPaid(number) {
+  const inv = db.invoices.find(x => x.number === number); if (!inv) return;
+  const d = prompt('Date ' + number + ' was paid (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+  if (d === null) return;
+  inv.status = 'Paid'; inv.paidDate = /^\d{4}-\d{2}-\d{2}$/.test(d.trim()) ? d.trim() : new Date().toISOString().slice(0, 10);
+  saveInvoices(); renderInvoicesPage();
+}
 function renderInvoicesPage() {
   const tbody = document.getElementById('invoice-log-body');
   if (!tbody) return;
+  const all = db.invoices.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const unpaid = all.filter(i => i.status !== 'Paid'), paid = all.filter(i => i.status === 'Paid');
+  const years = [...new Set(all.map(i => (i.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  const tb = document.getElementById('inv-toolbar');
+  if (tb) {
+    const chip = (v, n) => { const on = _invView.show === v; return '<button onclick="invSetView(\'show\',\'' + v + '\')" style="border:1px solid ' + (on ? 'var(--text)' : 'var(--border)') + ';background:' + (on ? 'var(--text)' : 'var(--white)') + ';color:' + (on ? 'var(--white)' : 'var(--text)') + ';border-radius:16px;padding:4px 12px;font-size:12px;cursor:pointer;">' + (v === 'Paid' ? 'Paid (archive)' : v) + ' <span style="opacity:.6;">' + n + '</span></button>'; };
+    tb.innerHTML = chip('Unpaid', unpaid.length) + chip('Paid', paid.length) + chip('All', all.length)
+      + '<select onchange="invSetView(\'year\',this.value)" style="width:auto;padding:4px 6px;font-size:12px;"><option value="All">All years</option>' + years.map(y => '<option' + (_invView.year === y ? ' selected' : '') + '>' + y + '</option>').join('') + '</select>'
+      + '<input id="inv-search" value="' + (_invView.q || '').replace(/"/g, '&quot;') + '" placeholder="Search client, number, job…" oninput="_invView.q=this.value;renderInvoicesPage();const e=document.getElementById(\'inv-search\');e.focus();e.setSelectionRange(e.value.length,e.value.length);" style="width:200px;padding:4px 8px;font-size:12px;">';
+  }
   if (!db.invoices.length) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:24px;">No invoices yet. Click "+ Create Invoice" to start.</td></tr>';
     return;
   }
-  tbody.innerHTML = db.invoices.sort((a,b) => (b.date||'').localeCompare(a.date||'')).map((inv, i) => {
+  const q = (_invView.q || '').toLowerCase().trim();
+  const list = (_invView.show === 'Paid' ? paid : _invView.show === 'All' ? all : unpaid)
+    .filter(i => _invView.year === 'All' || (i.date || '').startsWith(_invView.year))
+    .filter(i => !q || [i.number, i.client, (i.jobRefs || []).join(' '), (i.lines || []).map(l => l.desc).join(' ')].join(' ').toLowerCase().includes(q));
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:24px;">' + (_invView.show === 'Unpaid' && !q ? 'Nothing unpaid — every invoice has been paid. Paid invoices are under "Paid (archive)".' : 'No invoices match.') + '</td></tr>';
+    return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const sum = k => list.reduce((s, i) => s + (i[k] || 0), 0);
+  tbody.innerHTML = list.map(inv => {
+    const i = db.invoices.indexOf(inv);
     const statusCol = inv.status==='Paid'?'badge-confirmed':inv.status==='Sent'?'badge-quoted':'badge-preparing';
+    const due = inv.status === 'Sent' && typeof mtgInvoiceDue === 'function' ? mtgInvoiceDue(inv) : null;
+    const overdue = due && due.toISOString().slice(0, 10) < today;
     return `<tr>
       <td style="font-weight:600;">${inv.number}</td>
       <td>${inv.date||''}</td>
@@ -9845,16 +9881,17 @@ function renderInvoicesPage() {
       <td style="text-align:right;">£${(inv.subtotal||0).toFixed(2)}</td>
       <td style="text-align:right;">${inv.vatAmount ? '£'+inv.vatAmount.toFixed(2) : '—'}</td>
       <td style="text-align:right;font-weight:700;">£${(inv.total||0).toFixed(2)}</td>
-      <td><span class="badge ${statusCol}">${inv.status||'Draft'}</span></td>
+      <td><span class="badge ${statusCol}">${inv.status||'Draft'}</span>${overdue ? '<div style="font-size:11px;color:var(--danger);margin-top:2px;">Overdue</div>' : ''}${inv.status==='Paid' && inv.paidDate ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + inv.paidDate + '</div>' : ''}</td>
       <td>
         <div style="display:flex;gap:4px;">
-          <button class="btn btn-sm btn-secondary" onclick="editInvoice(${i})">Edit</button>
+          ${inv.status==='Sent' ? `<button class="btn btn-sm btn-primary" onclick="invMarkPaid('${inv.number}')">Mark paid</button>` : ''}
+          <button class="btn btn-sm btn-secondary" onclick="editInvoice(${i})">${inv.status==='Paid' ? 'View' : 'Edit'}</button>
           <button class="btn btn-sm btn-secondary" onclick="viewInvoicePDF(${i})">PDF</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteInvoice(${i})">✕</button>
+          ${(inv.status||'Draft')==='Draft' ? `<button class="btn btn-sm btn-danger" onclick="deleteInvoice(${i})">✕</button>` : ''}
         </div>
       </td>
     </tr>`;
-  }).join('');
+  }).join('') + `<tr style="font-weight:700;border-top:2px solid var(--border);"><td colspan="5">${list.length} invoice${list.length===1?'':'s'} shown</td><td style="text-align:right;">£${sum('subtotal').toFixed(2)}</td><td style="text-align:right;">£${sum('vatAmount').toFixed(2)}</td><td style="text-align:right;">£${sum('total').toFixed(2)}</td><td colspan="2"></td></tr>`;
 }
 
 function openInvoiceModal(preselectedRef) {
@@ -10139,6 +10176,8 @@ function saveInvoice() {
     notes: document.getElementById('inv-notes').value,
     status: document.getElementById('inv-status').value || 'Draft'
   };
+  if (idx >= 0 && db.invoices[idx] && db.invoices[idx].paidDate) inv.paidDate = db.invoices[idx].paidDate;
+  if (inv.status === 'Paid' && !inv.paidDate) inv.paidDate = new Date().toISOString().slice(0, 10);
   if (idx >= 0) {
     db.invoices[idx] = inv;
   } else {
