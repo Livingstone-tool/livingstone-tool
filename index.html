@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Livingstone v5.08 -->
+<!-- Livingstone v5.09 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -674,7 +674,7 @@ window.onerror=function(m,s,l,c,e){
   </div>
   <div class="sidebar-footer">
     <div style="margin-bottom:8px;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;" onclick="openWishlist()" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.5)'">💡 Feature Wishlist</div>
-    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.08</div>
+    <div style="display:inline-block;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);font-size:10px;padding:2px 8px;border-radius:10px;" id="app-version">v5.09</div>
     Adam Hemming · Tom<br>© 2026 Livingstone Projects
   </div>
 </nav>
@@ -3801,6 +3801,7 @@ function editJobByRef(ref) {
 
 async function saveJob() {
   const editRef = document.getElementById('job-edit-ref').value;
+  const _oldJobStatus = editRef ? ((db.jobs.find(j => j.ref === editRef) || {}).status || '') : '';
   const ref = document.getElementById('job-ref').value.trim();
   if (!ref) { alert('Job reference is required.'); return; }
   const jobData = {
@@ -3853,6 +3854,7 @@ async function saveJob() {
   renderPipeline();
   renderDashboard();
   { const fmp = document.getElementById('page-finmeeting'); if (fmp && fmp.classList.contains('active') && typeof fmRender === 'function') fmRender(); }
+  if (jobData.status === 'Completed - Paid' && _oldJobStatus !== 'Completed - Paid') linkJobPaidToInvoices(jobData.ref);
 
   // Sync to Supabase
   try {
@@ -9838,6 +9840,45 @@ function nextInvoiceNum(jobRef) {
   return 'LP-INV-' + String((Math.max(0,...nums) + 1)).padStart(3, '0');
 }
 
+// ---- Job ↔ invoice payment link (v5.09) ----
+// Money in follows invoices; the job status follows the money. Each side offers to update the other — never silently.
+async function linkJobPaidToInvoices(ref) {
+  try { await loadInvoicesFromSupabase(); } catch(e) {}   // make sure we're looking at the latest invoices, not this device's copy
+  const seen = new Set(), unpaid = [], drafts = [];
+  finInvLines(ref).forEach(({ inv }) => {
+    if (seen.has(inv)) return; seen.add(inv);
+    if (inv.status === 'Sent') unpaid.push(inv); else if ((inv.status || 'Draft') === 'Draft') drafts.push(inv);
+  });
+  if (drafts.length) alert(ref + ' has ' + drafts.length + ' draft invoice' + (drafts.length === 1 ? '' : 's') + ' (' + drafts.map(i => i.number).join(', ') + ') that ' + (drafts.length === 1 ? 'was' : 'were') + ' never sent — check whether ' + (drafts.length === 1 ? 'it needs' : 'they need') + ' sending or deleting.');
+  if (!unpaid.length) return;
+  const other = unpaid.filter(inv => (inv.lines || []).some(l => l.jobRef && !finSameJob(l.jobRef, ref)));
+  const total = unpaid.reduce((s, i) => s + (i.total || 0), 0);
+  const msg = ref + ' is marked Completed – Paid, but ' + (unpaid.length === 1 ? 'this invoice is' : 'these ' + unpaid.length + ' invoices are') + ' still unpaid:\n\n'
+    + unpaid.map(i => '• ' + i.number + ' — ' + finGBP(i.total) + (other.includes(i) ? ' (also covers other jobs)' : '')).join('\n')
+    + '\n\nMark ' + (unpaid.length === 1 ? 'it' : 'them') + ' as paid too (' + finGBP(total) + ')?';
+  if (!confirm(msg)) return;
+  const d = prompt('Date paid (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+  if (d === null) return;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(d.trim()) ? d.trim() : new Date().toISOString().slice(0, 10);
+  unpaid.forEach(inv => { inv.status = 'Paid'; inv.paidDate = date; });
+  saveInvoices();
+  if (typeof renderInvoicesPage === 'function') renderInvoicesPage();
+}
+async function linkInvoicePaidToJobs(inv) {
+  const refs = [...new Set((inv.lines || []).map(l => l.jobRef).concat(inv.jobRefs || []).filter(Boolean).map(r => (db.jobs.find(j => finSameJob(j.ref, r)) || {}).ref).filter(Boolean))];
+  refs.forEach(ref => {
+    const job = db.jobs.find(j => j.ref === ref);
+    if (!job || ['Completed - Paid', 'Completed', FIN_LOST].includes(job.status)) return;
+    const f = finJob(ref);
+    if (!f.quote || f.leftNet > 0.5 || f.outstandingGross > 0.5) return;   // still more to invoice or collect
+    if (!confirm(job.name + ' (' + ref + ') is now fully invoiced and paid.\n\nMove it to Completed – Paid?')) return;
+    job.status = 'Completed - Paid';
+    saveData();
+    if (typeof syncJobToSupabase === 'function') syncJobToSupabase(ref);
+    if (typeof renderJobsTable === 'function') renderJobsTable();
+  });
+}
+
 // Invoice log (v5.03): Unpaid / Paid (archive) / All views, search, year filter, quick "Mark paid".
 // Paid invoices are never deleted — they feed the P&L and VAT. Only drafts can be deleted.
 let _invView = { show: 'Unpaid', q: '', year: 'All' };
@@ -9849,6 +9890,7 @@ function invMarkPaid(number) {
   if (d === null) return;
   inv.status = 'Paid'; inv.paidDate = /^\d{4}-\d{2}-\d{2}$/.test(d.trim()) ? d.trim() : new Date().toISOString().slice(0, 10);
   saveInvoices(); renderInvoicesPage();
+  linkInvoicePaidToJobs(inv);
 }
 function renderInvoicesPage() {
   const tbody = document.getElementById('invoice-log-body');
@@ -10186,6 +10228,7 @@ function saveInvoice() {
     notes: document.getElementById('inv-notes').value,
     status: document.getElementById('inv-status').value || 'Draft'
   };
+  const _wasPaid = idx >= 0 && db.invoices[idx] && db.invoices[idx].status === 'Paid';
   if (idx >= 0 && db.invoices[idx] && db.invoices[idx].paidDate) inv.paidDate = db.invoices[idx].paidDate;
   if (inv.status === 'Paid' && !inv.paidDate) inv.paidDate = new Date().toISOString().slice(0, 10);
   if (idx >= 0) {
@@ -10196,6 +10239,7 @@ function saveInvoice() {
   saveInvoices();
   closeModal('invoice-modal');
   renderInvoicesPage();
+  if (inv.status === 'Paid' && !_wasPaid) linkInvoicePaidToJobs(inv);
 }
 
 function viewInvoicePDF(idx) {
